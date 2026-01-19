@@ -96,7 +96,7 @@ export async function GET() {
           previousValue: previous?.value ?? null,
           date: latest?.date?.toISOString?.() ?? new Date().toISOString(),
           lastUpdate: latest?.updatedAt?.toISOString?.() ?? new Date().toISOString(),
-          history: (history ?? [])?.reverse?.()?.map?.((h) => ({
+          history: (history ?? [])?.reverse?.()?.map?.((h: any) => ({
             date: h?.date?.toISOString?.() ?? '',
             value: h?.value ?? 0,
           })) ?? [],
