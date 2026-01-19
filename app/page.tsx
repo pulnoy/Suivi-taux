@@ -16,7 +16,6 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-slate-800">Taux Financiers</h1>
-                <p className="text-sm text-slate-500">Tableau de bord professionnel</p>
               </div>
             </div>
           </div>
@@ -36,7 +35,7 @@ export default function Home() {
       <footer className="bg-white border-t border-slate-200 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <p className="text-center text-sm text-slate-500">
-            © 2026 Taux Financiers - Données à titre indicatif uniquement
+            v20260119 - gillian.noesen - Données à titre indicatif uniquement
           </p>
         </div>
       </footer>
