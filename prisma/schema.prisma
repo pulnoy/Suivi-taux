@@ -1,0 +1,33 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/taux_financiers/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model FinancialRate {
+  id          String   @id @default(cuid())
+  type        String   // ESTR, OAT10, CAC40, SCI
+  value       Float
+  date        DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([type, date])
+  @@index([type])
+  @@index([date])
+}
+
+model RateMetadata {
+  id          String   @id @default(cuid())
+  type        String   @unique
+  lastUpdate  DateTime
+  description String?
+  source      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
