@@ -3,11 +3,12 @@ name: Maj quotidienne des taux
 
 on:
   schedule:
-    - cron: '5 4 * * *'   # 04:05 UTC chaque jour
+    - cron: '0 5 * * *'   # 06:00 heure de Paris (05:00 UTC)
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   update:
@@ -30,7 +31,8 @@ jobs:
 
       - name: Met à jour route.ts
         env:
-          SOURCE_URL: ${{ secrets.SOURCE_URL }}   # optionnel
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
         run: node scripts/update-taux.mjs
         
 # ...
