@@ -1,0 +1,38 @@
+
+name: Maj quotidienne des taux
+
+on:
+  schedule:
+    - cron: '5 4 * * *'   # Tous les jours à 04:05 UTC (~ 05:05 Paris en hiver). Adapter si besoin.
+  workflow_dispatch:       # Lancement manuel possible
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Met à jour route.ts
+        env:
+          SOURCE_URL: ${{ secrets.SOURCE_URL }} # Optionnel : renseigner si tu veux une URL différente
+        run: |
+          node -v
+          node scripts/update-taux.mjs
+
+      - name: Commit et push si modifications
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git add -A
+            git commit -m "chore: maj taux $(date -u +'%Y-%m-%d')"
+            git push
+          else
+            echo "Pas de changement à committer."
+          fi
