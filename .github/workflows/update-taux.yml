@@ -3,10 +3,9 @@ name: Maj quotidienne des taux
 
 on:
   schedule:
-    - cron: '5 4 * * *'   # 04:05 UTC tous les jours
+    - cron: '5 4 * * *'   # 04:05 UTC chaque jour
   workflow_dispatch:
 
-# Autoriser le job à pousser des commits
 permissions:
   contents: write
 
@@ -17,13 +16,12 @@ jobs:
       - name: Checkout (branche de prod)
         uses: actions/checkout@v4
         with:
-          ref: main            # ← adapte si ta branche = master
-          fetch-depth: 0       # pour pouvoir re-écrire/pousser proprement
+          ref: main
+          fetch-depth: 0
           persist-credentials: true
 
-      - name: Basculer sur la branche (évite detached HEAD)
-        run: |
-          git checkout -B main   # ← adapte si ta branche ≠ main
+      - name: Basculer sur la branche de prod
+        run: git checkout -B main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -32,7 +30,7 @@ jobs:
 
       - name: Met à jour route.ts
         env:
-          SOURCE_URL: ${{ secrets.SOURCE_URL }} # optionnel
+          SOURCE_URL: ${{ secrets.SOURCE_URL }}   # optionnel
         run: node scripts/update-taux.mjs
 
       - name: Commit et push si modifications
@@ -42,7 +40,7 @@ jobs:
           if [[ -n "$(git status --porcelain)" ]]; then
             git add -A
             git commit -m "chore: maj taux $(date -u +'%Y-%m-%d')"
-            git push origin main   # ← adapte la branche si besoin
+            git push origin main
           else
             echo "Pas de changement à committer."
           fi
