@@ -32,15 +32,34 @@ jobs:
         env:
           SOURCE_URL: ${{ secrets.SOURCE_URL }}   # optionnel
         run: node scripts/update-taux.mjs
-
-      - name: Commit et push si modifications
+        
+# ...
+      - name: Commit si modifications
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [[ -n "$(git status --porcelain)" ]]; then
+            git checkout -B bot/maj-taux
             git add -A
             git commit -m "chore: maj taux $(date -u +'%Y-%m-%d')"
-            git push origin main
           else
             echo "Pas de changement à committer."
           fi
+
+      - name: Push branche bot si modifications
+        if: always()
+        run: |
+          if git rev-parse --verify bot/maj-taux >/dev/null 2>&1; then
+            git push -f origin bot/maj-taux
+          fi
+
+      - name: Ouvrir/mettre à jour la PR
+        if: always()
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: bot/maj-taux
+          title: "Maj quotidienne des taux"
+          body: "Mise à jour automatisée des taux."
+          base: main
+          labels: "automatisation"
+          commit-message: "chore: maj taux"
