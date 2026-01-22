@@ -4,7 +4,7 @@
 
 export async function GET() {
   const data = {
-    "asof": "22/01/2026",
+    "asof": "21/01/2026",
     "estr": 1.93,
     "oat10": 3.56,
     "cac5": 8.4,
