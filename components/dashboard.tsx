@@ -4,10 +4,10 @@
 import React from 'react';
 
 type TauxData = {
-  estr: number;
-  oat10: number;
-  cac5: number;
-  scpi5: number;
+  estr: number | null;
+  oat10: number | null;
+  cac5: number | null;
+  scpi5: number | null;
   asof: string;
 };
 
@@ -26,12 +26,13 @@ export default function Dashboard({ data }: DashboardProps) {
   );
 }
 
-function Card({ title, value, date }: { title: string; value: number; date: string }) {
+function Card({ title, value, date }: { title: string; value: number | null; date: string }) {
+  const displayValue = typeof value === 'number' ? `${value.toFixed(2)} %` : '—';
   return (
     <div className="bg-white rounded-lg shadow p-6 border border-slate-200">
       <h2 className="text-lg font-semibold text-slate-700">{title}</h2>
-      <p className="text-3xl font-bold text-blue-600 mt-2">{value.toFixed(2)} %</p>
-      <p className="text-sm text-slate-500 mt-1">Mise à jour : {date}</p>
+      <p className="text-3xl font-bold text-blue-600 mt-2">{displayValue}</p>
+      <p className="text-sm text-slate-500 mt-1">Mise à jour : {date || '—'}</p>
     </div>
   );
 }
