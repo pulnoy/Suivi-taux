@@ -1,10 +1,15 @@
+
+// app/page.tsx
 import { Suspense } from 'react';
 import Dashboard from '@/components/dashboard';
 import { TrendingUp } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
-export default function Home() {
+export default async function Home() {
+  const res = await fetch('https://suivi-taux.vercel.app/api/taux', { cache: 'no-store' });
+  const data = await res.json();
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 shadow-sm">
@@ -28,7 +33,7 @@ export default function Home() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
         }>
-          <Dashboard />
+          <Dashboard data={data} />
         </Suspense>
       </div>
 
