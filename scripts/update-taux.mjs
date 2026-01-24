@@ -29,10 +29,13 @@ async function fetchFredData(seriesId, extraParams = '') {
 // Calcule le CAGR (Croissance annuelle moyenne) sur 5 ans
 async function calculateCAGR(ticker) {
   try {
-    // On passe en '1wk' (hebdo) pour avoir plus de fiabilité que '1mo' sur les indices exotiques
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1wk&range=5y`;
+    // Utilisation de query2.finance.yahoo.com souvent plus stable
+    // Intervalle 1mo (mensuel) pour lisser les données
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1mo&range=5y`;
     const response = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' }
+        headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' 
+        }
     });
     
     if (!response.ok) throw new Error(`HTTP error ${response.status}`);
@@ -42,10 +45,9 @@ async function calculateCAGR(ticker) {
     const prices = result?.indicators?.quote?.[0]?.close;
 
     if (prices && prices.length > 0) {
-      // Filtrer les valeurs nulles (fréquent sur Yahoo)
       const cleanPrices = prices.filter(p => p != null && p > 0);
 
-      if (cleanPrices.length > 10) { // On s'assure d'avoir assez de données
+      if (cleanPrices.length > 10) {
         const currentPrice = cleanPrices[cleanPrices.length - 1]; // Dernier prix
         const startPrice = cleanPrices[0]; // Premier prix (il y a 5 ans)
 
@@ -53,7 +55,7 @@ async function calculateCAGR(ticker) {
         const n = 5; 
         const cagr = (Math.pow(currentPrice / startPrice, 1 / n) - 1) * 100;
         
-        console.log(`Succès ${ticker}: Début=${startPrice}, Fin=${currentPrice}, CAGR=${cagr.toFixed(2)}%`);
+        console.log(`Succès ${ticker}: Début=${startPrice.toFixed(2)}, Fin=${currentPrice.toFixed(2)}, CAGR=${cagr.toFixed(2)}%`);
         return parseFloat(cagr.toFixed(2));
       }
     }
@@ -63,16 +65,23 @@ async function calculateCAGR(ticker) {
   return null;
 }
 
-// Fonction principale pour le CAC qui gère le fallback
+// Fonction principale pour le CAC avec stratégie "ETF Capitalisant"
 async function fetchCac40Strategy() {
-  // 1. Tentative avec Dividendes Réinvestis (Gross Return)
-  console.log("Tentative récupération CAC 40 GR (Dividendes réinvestis)...");
-  let cac = await calculateCAGR('%5EPX1GR'); // ^PX1GR
+  // 1. Tentative avec l'ETF Lyxor CAC 40 Acc (LKK.PA)
+  // Cet ETF réinvestit les dividendes, son prix reflète le Gross Return.
+  console.log("Tentative récupération via ETF Capitalisant (LKK.PA)...");
+  let cac = await calculateCAGR('LKK.PA'); 
   
-  // 2. Si échec, repli sur le CAC 40 Standard
+  // 2. Si échec, tentative sur l'indice Gross Return officiel (^PX1GR)
   if (cac === null) {
-    console.log("Échec CAC 40 GR, tentative sur CAC 40 Standard...");
-    cac = await calculateCAGR('%5EFCHI'); // ^FCHI
+     console.log("Échec ETF, tentative sur indice ^PX1GR...");
+     cac = await calculateCAGR('%5EPX1GR');
+  }
+
+  // 3. Si tout échoue, repli sur le CAC 40 Standard
+  if (cac === null) {
+    console.log("Échec total Gross Return, repli sur CAC 40 Standard...");
+    cac = await calculateCAGR('%5EFCHI');
   }
   
   return cac;
@@ -86,14 +95,13 @@ async function main() {
   // 1. OAT 10 ans France
   const oat10 = await fetchFredData('IRLTLT01FRM156N');
   
-  // 2. Inflation France (Variation sur 1 an glissant => units=pc1)
-  // Cela correspond à la définition : variation de l'IPC sur 12 mois
+  // 2. Inflation France (Variation 1 an glissant)
   const inflation = await fetchFredData('FRACPIALLMINMEI', '&units=pc1');
   
   // 3. €STR
   const estr = await fetchFredData('ECBESTRVOLWGTTRMDMNRT');
   
-  // 4. CAC 40 (Perf annuelle 5 ans)
+  // 4. CAC 40 (Perf annuelle 5 ans Dividendes Réinvestis)
   const cac40 = await fetchCac40Strategy();
 
   // Création de l'objet
