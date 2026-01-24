@@ -13,9 +13,10 @@ const InteractiveChart = ({ data, themeColor }: { data: DataPoint[], themeColor:
 
   if (!data || data.length === 0) return <div className="text-gray-400 text-sm py-8 text-center">Pas d'historique disponible</div>;
 
+  // On garde les dimensions internes fixes pour le calcul, l'affichage sera étiré
   const height = 250;
-  const width = 800;
-  const paddingY = 30;
+  const width = 1000; // Augmenté pour plus de précision interne
+  const paddingY = 20; // Réduit pour maximiser l'espace vertical
 
   const values = data.map(d => d.value);
   const min = Math.min(...values);
@@ -41,32 +42,47 @@ const InteractiveChart = ({ data, themeColor }: { data: DataPoint[], themeColor:
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left; // Position X de la souris dans le SVG
-    // Convertir X en index de données
-    const relativeX = (x / rect.width) * width;
-    let index = Math.round((relativeX / width) * (data.length - 1));
-    // Bornes
+    
+    // Le ratio X doit être calculé par rapport à la largeur REELLE affichée (rect.width)
+    const x = e.clientX - rect.left; 
+    
+    // On ramène cette position à notre échelle interne (0 -> 1000)
+    // Comme preserveAspectRatio="none" est activé, la conversion est linéaire
+    const indexFloat = (x / rect.width) * (data.length - 1);
+    let index = Math.round(indexFloat);
+
+    // Bornes de sécurité
     if (index < 0) index = 0;
     if (index >= data.length) index = data.length - 1;
+    
     setHoverIndex(index);
   };
 
   const activeData = hoverIndex !== null ? data[hoverIndex] : null;
 
   return (
-    <div className="w-full mt-6 relative">
+    <div className="w-full mt-6 relative select-none"> {/* select-none évite de surligner du texte en bougeant */}
       <div className="flex justify-between text-sm font-medium text-slate-500 mb-2 px-2">
          <div className="bg-slate-100 px-3 py-1 rounded-full text-xs">Min: {min.toFixed(2)}</div>
          <div className="bg-slate-100 px-3 py-1 rounded-full text-xs">Max: {max.toFixed(2)}</div>
       </div>
 
-      <div className="relative">
+      <div className="relative w-full h-64"> {/* Conteneur fixe en hauteur */}
         <svg 
           ref={svgRef}
           viewBox={`0 0 ${width} ${height}`} 
-          className="w-full h-64 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden cursor-crosshair"
+          preserveAspectRatio="none" 
+          className="w-full h-full bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden cursor-crosshair block"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoverIndex(null)}
+          onTouchMove={(e) => {
+             // Support basique tactile pour mobile
+             const touch = e.touches[0];
+             const rect = e.currentTarget.getBoundingClientRect();
+             const x = touch.clientX - rect.left;
+             const index = Math.round((x / rect.width) * (data.length - 1));
+             if(index >=0 && index < data.length) setHoverIndex(index);
+          }}
         >
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -75,8 +91,9 @@ const InteractiveChart = ({ data, themeColor }: { data: DataPoint[], themeColor:
             </linearGradient>
           </defs>
 
-          <line x1="0" y1={getY(min)} x2={width} y2={getY(min)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4"/>
-          <line x1="0" y1={getY(max)} x2={width} y2={getY(max)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4"/>
+          {/* Grille légère */}
+          <line x1="0" y1={getY(min)} x2={width} y2={getY(min)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/>
+          <line x1="0" y1={getY(max)} x2={width} y2={getY(max)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/>
           
           <polygon points={areaPoints} fill={`url(#${gradientId})`} stroke="none" />
           <polyline points={linePoints} fill="none" className={theme.stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
@@ -84,29 +101,33 @@ const InteractiveChart = ({ data, themeColor }: { data: DataPoint[], themeColor:
           {/* Curseur Interactif */}
           {activeData && hoverIndex !== null && (
             <>
-              {/* Ligne verticale */}
+              {/* Ligne verticale : vectorEffect garantit qu'elle reste fine même étirée */}
               <line 
                 x1={getX(hoverIndex)} y1="0" 
                 x2={getX(hoverIndex)} y2={height} 
-                stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" 
+                stroke="#64748b" strokeWidth="1" strokeDasharray="4 4" 
+                vectorEffect="non-scaling-stroke"
               />
               {/* Point sur la courbe */}
               <circle 
                 cx={getX(hoverIndex)} cy={getY(activeData.value)} r="6" 
                 className={`stroke-white stroke-2 ${theme.fill}`} 
+                vectorEffect="non-scaling-stroke" // Garde le cercle rond même si le graph est étiré !
               />
             </>
           )}
         </svg>
 
-        {/* TOOLTIP FLOTTANT (HTML au-dessus du SVG) */}
+        {/* TOOLTIP FLOTTANT */}
         {activeData && hoverIndex !== null && (
             <div 
-              className="absolute top-4 bg-slate-800 text-white text-xs rounded-lg py-2 px-3 shadow-xl pointer-events-none transform -translate-x-1/2 transition-none z-10"
+              className="absolute top-4 bg-slate-800/90 backdrop-blur text-white text-xs rounded-lg py-2 px-3 shadow-xl pointer-events-none transform -translate-x-1/2 transition-none z-10 border border-slate-700"
               style={{ left: `${(hoverIndex / (data.length - 1)) * 100}%` }}
             >
-              <div className="font-bold whitespace-nowrap">{new Date(activeData.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
-              <div className="text-center text-lg font-bold text-emerald-300">{activeData.value}</div>
+              <div className="font-bold whitespace-nowrap mb-0.5">{new Date(activeData.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+              <div className={`text-center text-lg font-bold ${theme.text.replace('text-', 'text-emerald-300 ')}`}>
+                {activeData.value}
+              </div>
             </div>
         )}
       </div>
@@ -136,7 +157,6 @@ export default function Dashboard() {
     const prev = historique[historique.length - 2].value;
     const inverted = ['oat', 'inflation'].includes(key);
     
-    // SCPI est toujours vert/bleu car c'est du rendement
     if (key === 'scpi') return { color: 'blue', icon: '★', label: 'Rendement' };
 
     if (last > prev) return { color: inverted ? 'red' : 'emerald', icon: '↗', label: 'Hausse' };
@@ -189,7 +209,7 @@ export default function Dashboard() {
         </div>
 
         {/* GRAPHIQUE */}
-        <div className={`transition-all duration-500 ${selectedKey ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 h-0 overflow-hidden'}`}>
+        <div className={`transition-all duration-500 ease-out ${selectedKey ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 h-0 overflow-hidden'}`}>
           {selectedKey && (
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-slate-100">
               <h2 className="text-2xl font-bold text-slate-900 mb-1">{data.indices[selectedKey].titre}</h2>
