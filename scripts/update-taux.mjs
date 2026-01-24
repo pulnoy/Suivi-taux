@@ -7,15 +7,14 @@ const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
 // --- FONCTIONS UTILITAIRES ---
 
-// Récupère l'historique FRED sur 1 an
-async function fetchFredHistory(seriesId, extraParams = '') {
+// Récupère l'historique FRED (paramètre rangeInYears pour la durée)
+async function fetchFredHistory(seriesId, rangeInYears = 1, extraParams = '') {
   if (!FRED_API_KEY) return [];
   
-  // Date d'il y a 1 an
   const today = new Date();
-  const oneYearAgo = new Date();
-  oneYearAgo.setFullYear(today.getFullYear() - 1);
-  const dateStr = oneYearAgo.toISOString().split('T')[0];
+  const startDate = new Date();
+  startDate.setFullYear(today.getFullYear() - rangeInYears);
+  const dateStr = startDate.toISOString().split('T')[0];
 
   try {
     const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&observation_start=${dateStr}${extraParams}`;
@@ -25,7 +24,7 @@ async function fetchFredHistory(seriesId, extraParams = '') {
     if (data.observations) {
       return data.observations.map(obs => ({
         date: obs.date,
-        value: parseFloat(obs.value)
+        value: parseFloat(parseFloat(obs.value).toFixed(2))
       })).filter(item => !isNaN(item.value));
     }
   } catch (error) {
@@ -34,7 +33,6 @@ async function fetchFredHistory(seriesId, extraParams = '') {
   return [];
 }
 
-// Récupère l'historique Yahoo sur 1 an (Journalier)
 async function fetchYahooHistory(ticker) {
   try {
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
@@ -45,7 +43,6 @@ async function fetchYahooHistory(ticker) {
     if (result && result.timestamp && result.indicators.quote[0].close) {
       const dates = result.timestamp;
       const prices = result.indicators.quote[0].close;
-
       const history = [];
       for (let i = 0; i < dates.length; i++) {
         if (prices[i] != null) {
@@ -57,15 +54,23 @@ async function fetchYahooHistory(ticker) {
       }
       return history;
     }
-  } catch (error) {
-    console.error(`Erreur historique Yahoo (${ticker}):`, error.message);
-  }
+  } catch (error) { console.error(`Erreur Yahoo (${ticker}):`, error.message); }
   return [];
 }
 
-// Recalcule le CAC 40 Perf 5 ans (méthode exacte timestamp)
-// Note: Pour le graphique, on affichera l'évolution du PRIX du CAC, 
-// mais la valeur "Dernier Taux" restera ta perf 5 ans.
+// Fonction spéciale pour les SCPI (Données ASPIM Annuelles)
+function getScpiHistory() {
+  // Il n'y a pas d'API pour ça, on met les chiffres officiels du Taux de Distribution Moyen
+  // Source : ASPIM / France SCPI
+  return [
+    { date: "2020-01-01", value: 4.18 },
+    { date: "2021-01-01", value: 4.49 },
+    { date: "2022-01-01", value: 4.53 },
+    { date: "2023-01-01", value: 4.52 },
+    { date: "2024-01-01", value: 4.52 }, // Estimation stable en attendant 2024 consolidé
+  ];
+}
+
 async function fetchCac40Perf5Ans() {
   const ticker = '%5EFCHI'; 
   const now = new Date();
@@ -97,22 +102,21 @@ async function fetchCac40Perf5Ans() {
 // --- MAIN ---
 
 async function main() {
-  console.log("Début de la mise à jour complète (Valeurs + Historiques)...");
+  console.log("Début de la mise à jour...");
 
-  // 1. Récupération des historiques (pour les graphiques)
-  const historyOat = await fetchFredHistory('IRLTLT01FRM156N');
-  const historyInflation = await fetchFredHistory('FRACPIALLMINMEI', '&units=pc1');
-  const historyEstr = await fetchFredHistory('ECBESTRVOLWGTTRMDMNRT');
-  const historyCacPrice = await fetchYahooHistory('%5EFCHI'); // Historique du prix pour le graph
+  // 1. Récupérations
+  const historyOat = await fetchFredHistory('IRLTLT01FRM156N', 1); // OAT 1 an
+  const historyInflation = await fetchFredHistory('FRACPIALLMINMEI', 5, '&units=pc1'); // Inflation 5 ans !
+  const historyEstr = await fetchFredHistory('ECBESTRVOLWGTTRMDMNRT', 1); // ESTR 1 an
+  const historyCacPrice = await fetchYahooHistory('%5EFCHI'); // Graphique CAC 1 an
+  const historyScpi = getScpiHistory(); // SCPI 5 ans (Fixe)
 
-  // 2. Récupération des valeurs "Phare" (Dernière valeur connue ou calculée)
-  // Pour FRED, on prend la dernière valeur de l'historique
+  // 2. Valeurs actuelles
   const valOat = historyOat.length ? historyOat[historyOat.length - 1].value : null;
   const valInflation = historyInflation.length ? historyInflation[historyInflation.length - 1].value : null;
   const valEstr = historyEstr.length ? historyEstr[historyEstr.length - 1].value : null;
-  
-  // Pour le CAC, on garde ton calcul spécifique 5 ans
   const valCacPerf = await fetchCac40Perf5Ans();
+  const valScpi = historyScpi[historyScpi.length - 1].value;
 
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
@@ -124,7 +128,7 @@ async function main() {
         historique: historyOat
       },
       inflation: {
-        titre: "Inflation (1 an)",
+        titre: "Inflation (5 ans)",
         valeur: valInflation,
         suffixe: "%",
         historique: historyInflation
@@ -136,22 +140,24 @@ async function main() {
         historique: historyEstr
       },
       cac40: {
-        titre: "CAC 40 (Perf 5 ans/an)",
-        valeur: valCacPerf, // Ta valeur calculée (ex: 9.76)
+        titre: "CAC 40 (Moy. 5 ans)",
+        valeur: valCacPerf,
         suffixe: "%",
-        historique: historyCacPrice // L'évolution du prix de l'indice pour le graph
+        historique: historyCacPrice
+      },
+      scpi: {
+        titre: "Moyenne SCPI (5 ans)",
+        valeur: valScpi,
+        suffixe: "%",
+        historique: historyScpi
       }
     }
   };
 
-  console.log("Données générées avec historiques.");
-
   const dir = path.dirname(FILE_PATH);
-  if (!fs.existsSync(dir)){
-      fs.mkdirSync(dir, { recursive: true });
-  }
-
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(FILE_PATH, JSON.stringify(nouvellesDonnees, null, 2));
+  console.log("Mise à jour terminée.");
 }
 
 main();
