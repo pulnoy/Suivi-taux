@@ -65,3 +65,30 @@ jobs:
           base: main
           labels: "automatisation"
           commit-message: "chore: maj taux"
+
+          
+      - name: Ouvrir/mettre à jour la PR
+        id: cpr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: bot/maj-taux
+          title: "Maj quotidienne des taux"
+          body: "Mise à jour automatisée des taux."
+          base: main
+          labels: "automatisation"
+          commit-message: "chore: maj taux"
+
+      - name: Activer l’auto-merge
+        if: steps.cpr.outputs.pull-request-number != ''
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
+          merge-method: squash
+
+      - name: Lancer l’auto-merge
+        if: steps.cpr.outputs.pull-request-number != ''
+        run: gh pr merge --auto --squash ${{ steps.cpr.outputs.pull-request-number }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
