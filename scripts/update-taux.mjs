@@ -7,7 +7,6 @@ const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
 // --- FONCTIONS UTILITAIRES ---
 
-// Récupère une donnée FRED
 async function fetchFredData(seriesId, extraParams = '') {
   if (!FRED_API_KEY) {
     console.error("ERREUR: Clé API FRED manquante.");
@@ -26,41 +25,40 @@ async function fetchFredData(seriesId, extraParams = '') {
   return null;
 }
 
-// Calcule le CAGR (Croissance annuelle moyenne) sur 5 ans pour le CAC 40 Standard
-async function fetchCac40Standard() {
-  const ticker = '%5EFCHI'; // ^FCHI en encodé URL
+// Calcul basé sur la performance totale divisée par 5 (Moyenne arithmétique)
+async function fetchCac40SimpleAverage() {
+  const ticker = '%5EFCHI'; // ^FCHI
   try {
-    // On utilise interval=1mo pour lisser et range=5y
+    // On demande 5 ans
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1mo&range=5y`;
     
     const response = await fetch(url, {
         headers: { 
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' 
+            'User-Agent': 'Mozilla/5.0' 
         }
     });
     
-    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-    
     const data = await response.json();
     const result = data.chart?.result?.[0];
-
-    // On prend le prix de clôture standard (close)
     const prices = result?.indicators?.quote?.[0]?.close;
 
     if (prices && prices.length > 0) {
-      // Nettoyage des données nulles
       const validPrices = prices.filter(p => p != null && p > 0);
 
-      if (validPrices.length > 12) { 
-        const currentPrice = validPrices[validPrices.length - 1]; // Dernier prix
+      if (validPrices.length > 1) { 
+        const currentPrice = validPrices[validPrices.length - 1]; // Prix actuel
         const startPrice = validPrices[0]; // Prix d'il y a 5 ans
 
-        // Calcul du CAGR : ((Fin / Début)^(1/5) - 1) * 100
-        const n = 5; 
-        const cagr = (Math.pow(currentPrice / startPrice, 1 / n) - 1) * 100;
+        // Calcul de la performance totale en %
+        const totalPerf = ((currentPrice - startPrice) / startPrice) * 100;
         
-        console.log(`Succès CAC 40 Standard: Début=${startPrice.toFixed(2)}, Fin=${currentPrice.toFixed(2)}, CAGR=${cagr.toFixed(2)}%`);
-        return parseFloat(cagr.toFixed(2));
+        // Calcul annuel lissé (Total / 5)
+        const annualSimple = totalPerf / 5;
+
+        console.log(`CAC 40 : Prix Début=${startPrice.toFixed(2)}, Prix Fin=${currentPrice.toFixed(2)}`);
+        console.log(`Performance Totale=${totalPerf.toFixed(2)}%, Annuelle=${annualSimple.toFixed(2)}%`);
+        
+        return parseFloat(annualSimple.toFixed(2));
       }
     }
   } catch (error) {
@@ -77,14 +75,14 @@ async function main() {
   // 1. OAT 10 ans France
   const oat10 = await fetchFredData('IRLTLT01FRM156N');
   
-  // 2. Inflation France (Variation 1 an glissant)
+  // 2. Inflation France
   const inflation = await fetchFredData('FRACPIALLMINMEI', '&units=pc1');
   
   // 3. €STR
   const estr = await fetchFredData('ECBESTRVOLWGTTRMDMNRT');
   
-  // 4. CAC 40 Standard (CAGR 5 ans)
-  const cac40 = await fetchCac40Standard();
+  // 4. CAC 40 Standard (Moyenne Simple sur 5 ans)
+  const cac40 = await fetchCac40SimpleAverage();
 
   // Création de l'objet
   const nouvellesDonnees = {
