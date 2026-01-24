@@ -25,17 +25,16 @@ async function fetchFredData(seriesId, extraParams = '') {
   return null;
 }
 
-// Calcul basé sur la performance totale divisée par 5 (Moyenne arithmétique)
-async function fetchCac40SimpleAverage() {
+// Calcul précis jour par jour sur 5 ans
+async function fetchCac40Precise() {
   const ticker = '%5EFCHI'; // ^FCHI
   try {
-    // On demande 5 ans
-    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1mo&range=5y`;
+    // Changement ici : interval=1d (Journalier) au lieu de 1mo (Mensuel)
+    // Cela permet de prendre le prix EXACT d'il y a 5 ans jour pour jour
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
     
     const response = await fetch(url, {
-        headers: { 
-            'User-Agent': 'Mozilla/5.0' 
-        }
+        headers: { 'User-Agent': 'Mozilla/5.0' }
     });
     
     const data = await response.json();
@@ -43,20 +42,21 @@ async function fetchCac40SimpleAverage() {
     const prices = result?.indicators?.quote?.[0]?.close;
 
     if (prices && prices.length > 0) {
+      // On nettoie les valeurs nulles
       const validPrices = prices.filter(p => p != null && p > 0);
 
-      if (validPrices.length > 1) { 
-        const currentPrice = validPrices[validPrices.length - 1]; // Prix actuel
-        const startPrice = validPrices[0]; // Prix d'il y a 5 ans
+      if (validPrices.length > 0) {
+        const currentPrice = validPrices[validPrices.length - 1]; // Prix de clôture d'hier
+        const startPrice = validPrices[0]; // Prix d'ouverture de la plage (il y a 5 ans exactement)
 
-        // Calcul de la performance totale en %
+        // Calcul de la performance totale
         const totalPerf = ((currentPrice - startPrice) / startPrice) * 100;
         
-        // Calcul annuel lissé (Total / 5)
+        // Division simple par 5 (Moyenne arithmétique)
         const annualSimple = totalPerf / 5;
 
-        console.log(`CAC 40 : Prix Début=${startPrice.toFixed(2)}, Prix Fin=${currentPrice.toFixed(2)}`);
-        console.log(`Performance Totale=${totalPerf.toFixed(2)}%, Annuelle=${annualSimple.toFixed(2)}%`);
+        console.log(`CAC 40 (Précision jour) : Début=${startPrice.toFixed(2)}, Fin=${currentPrice.toFixed(2)}`);
+        console.log(`Perf Totale=${totalPerf.toFixed(2)}%, Annuelle=${annualSimple.toFixed(2)}%`);
         
         return parseFloat(annualSimple.toFixed(2));
       }
@@ -72,19 +72,13 @@ async function fetchCac40SimpleAverage() {
 async function main() {
   console.log("Début de la mise à jour des taux...");
 
-  // 1. OAT 10 ans France
   const oat10 = await fetchFredData('IRLTLT01FRM156N');
-  
-  // 2. Inflation France
   const inflation = await fetchFredData('FRACPIALLMINMEI', '&units=pc1');
-  
-  // 3. €STR
   const estr = await fetchFredData('ECBESTRVOLWGTTRMDMNRT');
   
-  // 4. CAC 40 Standard (Moyenne Simple sur 5 ans)
-  const cac40 = await fetchCac40SimpleAverage();
+  // Appel de la nouvelle fonction précise
+  const cac40 = await fetchCac40Precise();
 
-  // Création de l'objet
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
     donnees: {
@@ -97,7 +91,6 @@ async function main() {
 
   console.log("Données finales :", nouvellesDonnees);
 
-  // Sauvegarde
   const dir = path.dirname(FILE_PATH);
   if (!fs.existsSync(dir)){
       fs.mkdirSync(dir, { recursive: true });
