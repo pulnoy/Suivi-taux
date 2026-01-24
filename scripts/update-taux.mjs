@@ -22,20 +22,22 @@ function fetchJson(url) {
 }
 
 
+
 function formatDateFRParis() {
-  // Date du jour en fuseau Europe/Paris
+  // Date du jour en fuseau Europe/Paris (format JJ/MM/AAAA)
   const now = new Date();
   const fmt = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris' });
-  return fmt.format(now); // JJ/MM/AAAA
+  return fmt.format(now);
 }
 
-// -- nouvelle fonction pour un horodatage lisible :
+// Horodatage lisible en fuseau Europe/Paris (YYYY-MM-DDTHH:mm:ss)
 function isoParisTimestamp() {
-  return new Date().toLocaleString('sv-SE', { // "YYYY-MM-DD HH:mm:ss"
+  return new Date().toLocaleString('sv-SE', {
     timeZone: 'Europe/Paris',
     hour12: false
-  }).replace(' ', 'T'); // "YYYY-MM-DDTHH:mm:ss"
+  }).replace(' ', 'T');
 }
+
 
 
 // Récupère €STR depuis l'API BCE
