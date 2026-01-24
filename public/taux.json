@@ -1,9 +1,9 @@
 {
-  "date_mise_a_jour": "2026-01-24T15:08:29.522Z",
+  "date_mise_a_jour": "2026-01-24T15:22:10.582Z",
   "donnees": {
     "oat_10_ans": 3.56,
-    "inflation": 120.38,
-    "estr": 1.933,
-    "cac_40": 8143.05
+    "inflation": 0.76,
+    "estr": 1.93,
+    "cac_40_perf_5ans": null
   }
 }
