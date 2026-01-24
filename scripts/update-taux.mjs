@@ -7,113 +7,144 @@ const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
 // --- FONCTIONS UTILITAIRES ---
 
-async function fetchFredData(seriesId, extraParams = '') {
-  if (!FRED_API_KEY) {
-    console.error("ERREUR: Clé API FRED manquante.");
-    return null;
-  }
+// Récupère l'historique FRED sur 1 an
+async function fetchFredHistory(seriesId, extraParams = '') {
+  if (!FRED_API_KEY) return [];
+  
+  // Date d'il y a 1 an
+  const today = new Date();
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(today.getFullYear() - 1);
+  const dateStr = oneYearAgo.toISOString().split('T')[0];
+
   try {
-    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=1${extraParams}`;
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&observation_start=${dateStr}${extraParams}`;
     const response = await fetch(url);
     const data = await response.json();
-    if (data.observations && data.observations.length > 0) {
-      return parseFloat(parseFloat(data.observations[0].value).toFixed(2));
+    
+    if (data.observations) {
+      return data.observations.map(obs => ({
+        date: obs.date,
+        value: parseFloat(obs.value)
+      })).filter(item => !isNaN(item.value));
     }
   } catch (error) {
-    console.error(`Erreur récupération FRED (${seriesId}):`, error.message);
+    console.error(`Erreur historique FRED (${seriesId}):`, error.message);
   }
-  return null;
+  return [];
 }
 
-// Calcul CAC 40 avec DATES EXACTES (Timestamps)
-async function fetchCac40ExactTimestamp() {
+// Récupère l'historique Yahoo sur 1 an (Journalier)
+async function fetchYahooHistory(ticker) {
+  try {
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const data = await response.json();
+    const result = data.chart?.result?.[0];
+
+    if (result && result.timestamp && result.indicators.quote[0].close) {
+      const dates = result.timestamp;
+      const prices = result.indicators.quote[0].close;
+
+      const history = [];
+      for (let i = 0; i < dates.length; i++) {
+        if (prices[i] != null) {
+          history.push({
+            date: new Date(dates[i] * 1000).toISOString().split('T')[0],
+            value: parseFloat(prices[i].toFixed(2))
+          });
+        }
+      }
+      return history;
+    }
+  } catch (error) {
+    console.error(`Erreur historique Yahoo (${ticker}):`, error.message);
+  }
+  return [];
+}
+
+// Recalcule le CAC 40 Perf 5 ans (méthode exacte timestamp)
+// Note: Pour le graphique, on affichera l'évolution du PRIX du CAC, 
+// mais la valeur "Dernier Taux" restera ta perf 5 ans.
+async function fetchCac40Perf5Ans() {
   const ticker = '%5EFCHI'; 
-  
-  // 1. Calcul des Timestamps exacts
   const now = new Date();
-  const endDate = Math.floor(now.getTime() / 1000); // Aujourd'hui en secondes
-  
-  // Date exacte il y a 5 ans
+  const endDate = Math.floor(now.getTime() / 1000); 
   const fiveYearsAgo = new Date();
   fiveYearsAgo.setFullYear(now.getFullYear() - 5);
-  const startDate = Math.floor(fiveYearsAgo.getTime() / 1000); // Il y a 5 ans en secondes
-
-  console.log(`Période demandée : du ${fiveYearsAgo.toISOString().split('T')[0]} au ${now.toISOString().split('T')[0]}`);
+  const startDate = Math.floor(fiveYearsAgo.getTime() / 1000); 
 
   try {
-    // Utilisation de period1 et period2 pour forcer la plage exacte
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${startDate}&period2=${endDate}&interval=1d`;
-    
     const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     const data = await response.json();
     const result = data.chart?.result?.[0];
     const prices = result?.indicators?.quote?.[0]?.close;
-    const timestamps = result?.timestamp;
 
     if (prices && prices.length > 0) {
-      // Trouver le premier prix NON NULL
-      let startPrice = null;
-      let startIndex = 0;
-      
-      for (let i = 0; i < prices.length; i++) {
-        if (prices[i] != null && prices[i] > 0) {
-          startPrice = prices[i];
-          startIndex = i;
-          break;
-        }
-      }
-      
-      // Trouver le dernier prix NON NULL
-      let currentPrice = null;
-      for (let i = prices.length - 1; i >= 0; i--) {
-        if (prices[i] != null && prices[i] > 0) {
-          currentPrice = prices[i];
-          break;
-        }
-      }
-
-      if (startPrice && currentPrice) {
-        // Date réelle des prix trouvés (pour vérification dans les logs)
-        const dateDebutReelle = new Date(timestamps[startIndex] * 1000).toISOString().split('T')[0];
-        
-        console.log(`Données trouvées -> Début (${dateDebutReelle}): ${startPrice.toFixed(2)}, Fin: ${currentPrice.toFixed(2)}`);
-
-        // Calcul Performance
+      const validPrices = prices.filter(p => p != null && p > 0);
+      if (validPrices.length > 0) {
+        const currentPrice = validPrices[validPrices.length - 1];
+        const startPrice = validPrices[0];
         const totalPerf = ((currentPrice - startPrice) / startPrice) * 100;
-        const annualSimple = totalPerf / 5;
-
-        console.log(`Résultat : Total=${totalPerf.toFixed(2)}% -> Annuel=${annualSimple.toFixed(2)}%`);
-        
-        return parseFloat(annualSimple.toFixed(2));
+        return parseFloat((totalPerf / 5).toFixed(2));
       }
     }
-  } catch (error) {
-    console.error(`Erreur calcul CAC 40:`, error.message);
-  }
+  } catch (error) { return null; }
   return null;
 }
 
 // --- MAIN ---
 
 async function main() {
-  console.log("Début de la mise à jour...");
+  console.log("Début de la mise à jour complète (Valeurs + Historiques)...");
 
-  const oat10 = await fetchFredData('IRLTLT01FRM156N');
-  const inflation = await fetchFredData('FRACPIALLMINMEI', '&units=pc1');
-  const estr = await fetchFredData('ECBESTRVOLWGTTRMDMNRT');
+  // 1. Récupération des historiques (pour les graphiques)
+  const historyOat = await fetchFredHistory('IRLTLT01FRM156N');
+  const historyInflation = await fetchFredHistory('FRACPIALLMINMEI', '&units=pc1');
+  const historyEstr = await fetchFredHistory('ECBESTRVOLWGTTRMDMNRT');
+  const historyCacPrice = await fetchYahooHistory('%5EFCHI'); // Historique du prix pour le graph
+
+  // 2. Récupération des valeurs "Phare" (Dernière valeur connue ou calculée)
+  // Pour FRED, on prend la dernière valeur de l'historique
+  const valOat = historyOat.length ? historyOat[historyOat.length - 1].value : null;
+  const valInflation = historyInflation.length ? historyInflation[historyInflation.length - 1].value : null;
+  const valEstr = historyEstr.length ? historyEstr[historyEstr.length - 1].value : null;
   
-  // Appel de la fonction "Timestamps Exacts"
-  const cac40 = await fetchCac40ExactTimestamp();
+  // Pour le CAC, on garde ton calcul spécifique 5 ans
+  const valCacPerf = await fetchCac40Perf5Ans();
 
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
-    donnees: {
-      oat_10_ans: oat10,
-      inflation: inflation,
-      estr: estr,
-      cac_40_perf_5ans: cac40
+    indices: {
+      oat: {
+        titre: "OAT 10 ans",
+        valeur: valOat,
+        suffixe: "%",
+        historique: historyOat
+      },
+      inflation: {
+        titre: "Inflation (1 an)",
+        valeur: valInflation,
+        suffixe: "%",
+        historique: historyInflation
+      },
+      estr: {
+        titre: "€STR",
+        valeur: valEstr,
+        suffixe: "%",
+        historique: historyEstr
+      },
+      cac40: {
+        titre: "CAC 40 (Perf 5 ans/an)",
+        valeur: valCacPerf, // Ta valeur calculée (ex: 9.76)
+        suffixe: "%",
+        historique: historyCacPrice // L'évolution du prix de l'indice pour le graph
+      }
     }
   };
+
+  console.log("Données générées avec historiques.");
 
   const dir = path.dirname(FILE_PATH);
   if (!fs.existsSync(dir)){
