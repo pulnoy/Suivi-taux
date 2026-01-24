@@ -25,38 +25,64 @@ async function fetchFredData(seriesId, extraParams = '') {
   return null;
 }
 
-// Calcul précis jour par jour sur 5 ans
-async function fetchCac40Precise() {
-  const ticker = '%5EFCHI'; // ^FCHI
+// Calcul CAC 40 avec DATES EXACTES (Timestamps)
+async function fetchCac40ExactTimestamp() {
+  const ticker = '%5EFCHI'; 
+  
+  // 1. Calcul des Timestamps exacts
+  const now = new Date();
+  const endDate = Math.floor(now.getTime() / 1000); // Aujourd'hui en secondes
+  
+  // Date exacte il y a 5 ans
+  const fiveYearsAgo = new Date();
+  fiveYearsAgo.setFullYear(now.getFullYear() - 5);
+  const startDate = Math.floor(fiveYearsAgo.getTime() / 1000); // Il y a 5 ans en secondes
+
+  console.log(`Période demandée : du ${fiveYearsAgo.toISOString().split('T')[0]} au ${now.toISOString().split('T')[0]}`);
+
   try {
-    // Changement ici : interval=1d (Journalier) au lieu de 1mo (Mensuel)
-    // Cela permet de prendre le prix EXACT d'il y a 5 ans jour pour jour
-    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
+    // Utilisation de period1 et period2 pour forcer la plage exacte
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${startDate}&period2=${endDate}&interval=1d`;
     
-    const response = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     const data = await response.json();
     const result = data.chart?.result?.[0];
     const prices = result?.indicators?.quote?.[0]?.close;
+    const timestamps = result?.timestamp;
 
     if (prices && prices.length > 0) {
-      // On nettoie les valeurs nulles
-      const validPrices = prices.filter(p => p != null && p > 0);
+      // Trouver le premier prix NON NULL
+      let startPrice = null;
+      let startIndex = 0;
+      
+      for (let i = 0; i < prices.length; i++) {
+        if (prices[i] != null && prices[i] > 0) {
+          startPrice = prices[i];
+          startIndex = i;
+          break;
+        }
+      }
+      
+      // Trouver le dernier prix NON NULL
+      let currentPrice = null;
+      for (let i = prices.length - 1; i >= 0; i--) {
+        if (prices[i] != null && prices[i] > 0) {
+          currentPrice = prices[i];
+          break;
+        }
+      }
 
-      if (validPrices.length > 0) {
-        const currentPrice = validPrices[validPrices.length - 1]; // Prix de clôture d'hier
-        const startPrice = validPrices[0]; // Prix d'ouverture de la plage (il y a 5 ans exactement)
-
-        // Calcul de la performance totale
-        const totalPerf = ((currentPrice - startPrice) / startPrice) * 100;
+      if (startPrice && currentPrice) {
+        // Date réelle des prix trouvés (pour vérification dans les logs)
+        const dateDebutReelle = new Date(timestamps[startIndex] * 1000).toISOString().split('T')[0];
         
-        // Division simple par 5 (Moyenne arithmétique)
+        console.log(`Données trouvées -> Début (${dateDebutReelle}): ${startPrice.toFixed(2)}, Fin: ${currentPrice.toFixed(2)}`);
+
+        // Calcul Performance
+        const totalPerf = ((currentPrice - startPrice) / startPrice) * 100;
         const annualSimple = totalPerf / 5;
 
-        console.log(`CAC 40 (Précision jour) : Début=${startPrice.toFixed(2)}, Fin=${currentPrice.toFixed(2)}`);
-        console.log(`Perf Totale=${totalPerf.toFixed(2)}%, Annuelle=${annualSimple.toFixed(2)}%`);
+        console.log(`Résultat : Total=${totalPerf.toFixed(2)}% -> Annuel=${annualSimple.toFixed(2)}%`);
         
         return parseFloat(annualSimple.toFixed(2));
       }
@@ -70,14 +96,14 @@ async function fetchCac40Precise() {
 // --- MAIN ---
 
 async function main() {
-  console.log("Début de la mise à jour des taux...");
+  console.log("Début de la mise à jour...");
 
   const oat10 = await fetchFredData('IRLTLT01FRM156N');
   const inflation = await fetchFredData('FRACPIALLMINMEI', '&units=pc1');
   const estr = await fetchFredData('ECBESTRVOLWGTTRMDMNRT');
   
-  // Appel de la nouvelle fonction précise
-  const cac40 = await fetchCac40Precise();
+  // Appel de la fonction "Timestamps Exacts"
+  const cac40 = await fetchCac40ExactTimestamp();
 
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
@@ -88,8 +114,6 @@ async function main() {
       cac_40_perf_5ans: cac40
     }
   };
-
-  console.log("Données finales :", nouvellesDonnees);
 
   const dir = path.dirname(FILE_PATH);
   if (!fs.existsSync(dir)){
