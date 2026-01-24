@@ -7,6 +7,7 @@ const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
 // --- FONCTIONS UTILITAIRES ---
 
+// Récupère une donnée FRED
 async function fetchFredData(seriesId, extraParams = '') {
   if (!FRED_API_KEY) {
     console.error("ERREUR: Clé API FRED manquante.");
@@ -25,13 +26,16 @@ async function fetchFredData(seriesId, extraParams = '') {
   return null;
 }
 
-async function calculateTotalReturnCAGR(ticker) {
+// Calcule le CAGR (Croissance annuelle moyenne) sur 5 ans pour le CAC 40 Standard
+async function fetchCac40Standard() {
+  const ticker = '%5EFCHI'; // ^FCHI en encodé URL
   try {
     // On utilise interval=1mo pour lisser et range=5y
-    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1mo&range=5y&events=div|split`;
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1mo&range=5y`;
+    
     const response = await fetch(url, {
         headers: { 
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' 
         }
     });
     
@@ -40,27 +44,27 @@ async function calculateTotalReturnCAGR(ticker) {
     const data = await response.json();
     const result = data.chart?.result?.[0];
 
-    // C'EST ICI LA CLÉ : On cherche 'adjclose' (Prix ajusté des dividendes) et non 'close' (Prix pur)
-    const adjClose = result?.indicators?.adjclose?.[0]?.adjclose;
+    // On prend le prix de clôture standard (close)
+    const prices = result?.indicators?.quote?.[0]?.close;
 
-    if (adjClose && adjClose.length > 0) {
+    if (prices && prices.length > 0) {
       // Nettoyage des données nulles
-      const validPrices = adjClose.filter(p => p != null && p > 0);
+      const validPrices = prices.filter(p => p != null && p > 0);
 
-      if (validPrices.length > 12) { // Au moins 1 an de données
-        const currentPrice = validPrices[validPrices.length - 1]; // Prix ajusté actuel
-        const startPrice = validPrices[0]; // Prix ajusté d'il y a 5 ans
+      if (validPrices.length > 12) { 
+        const currentPrice = validPrices[validPrices.length - 1]; // Dernier prix
+        const startPrice = validPrices[0]; // Prix d'il y a 5 ans
 
-        // Calcul du CAGR
+        // Calcul du CAGR : ((Fin / Début)^(1/5) - 1) * 100
         const n = 5; 
         const cagr = (Math.pow(currentPrice / startPrice, 1 / n) - 1) * 100;
         
-        console.log(`Calcul CAGR pour ${ticker} (basé sur AdjClose): Début=${startPrice.toFixed(2)}, Fin=${currentPrice.toFixed(2)}, Taux=${cagr.toFixed(2)}%`);
+        console.log(`Succès CAC 40 Standard: Début=${startPrice.toFixed(2)}, Fin=${currentPrice.toFixed(2)}, CAGR=${cagr.toFixed(2)}%`);
         return parseFloat(cagr.toFixed(2));
       }
     }
   } catch (error) {
-    console.error(`Erreur calcul CAGR pour ${ticker}:`, error.message);
+    console.error(`Erreur calcul CAC 40:`, error.message);
   }
   return null;
 }
@@ -79,17 +83,10 @@ async function main() {
   // 3. €STR
   const estr = await fetchFredData('ECBESTRVOLWGTTRMDMNRT');
   
-  // 4. CAC 40 (Dividendes Réinvestis)
-  // On utilise C40.PA (Amundi CAC 40) en mode "Adjusted Close" qui intègre les dividendes.
-  // C'est la méthode la plus fiable sur Yahoo pour simuler le "Gross Return".
-  let cac40 = await calculateTotalReturnCAGR('C40.PA');
+  // 4. CAC 40 Standard (CAGR 5 ans)
+  const cac40 = await fetchCac40Standard();
 
-  // Fallback si C40.PA échoue : on tente l'indice Gross Return officiel
-  if (cac40 === null) {
-      console.log("Fallback sur ^PX1GR...");
-      cac40 = await calculateTotalReturnCAGR('%5EPX1GR');
-  }
-
+  // Création de l'objet
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
     donnees: {
