@@ -1,217 +1,91 @@
-// scripts/update-taux.mjs
-// Récupère les taux depuis les APIs sources et met à jour route.ts
+import fs from 'fs';
+import path from 'path';
 
-import fs from 'node:fs';
-import path from 'node:path';
-import https from 'node:https';
+// --- CONFIGURATION ---
+const FRED_API_KEY = process.env.FRED_API_KEY;
+// Note: Alpha Vantage est souvent limité, on utilise Yahoo (gratuit/rapide) pour le CAC40
+// et la FED (FRED) pour les données économiques officielles.
 
-const FRED_API_KEY = process.env.FRED_API_KEY || '';
-const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY || '';
+const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
-// Fonction générique pour fetch HTTPS
-function fetchJson(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
-      let data = '';
-      res.on('data', (chunk) => (data += chunk));
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
-      });
-    }).on('error', reject);
-  });
-}
+// --- FONCTIONS UTILITAIRES ---
 
-
-
-function formatDateFRParis() {
-  // Date du jour en fuseau Europe/Paris (format JJ/MM/AAAA)
-  const now = new Date();
-  const fmt = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris' });
-  return fmt.format(now);
-}
-
-// Horodatage lisible en fuseau Europe/Paris (YYYY-MM-DDTHH:mm:ss)
-function isoParisTimestamp() {
-  return new Date().toLocaleString('sv-SE', {
-    timeZone: 'Europe/Paris',
-    hour12: false
-  }).replace(' ', 'T');
-}
-
-
-
-// Récupère €STR depuis l'API BCE
-async function fetchESTR() {
-  try {
-    const data = await fetchJson('https://api.estr.dev/latest');
-    console.log('€STR brut:', data);
-    return data?.rate ?? data?.value ?? 1.93;
-  } catch (e) {
-    console.error('Erreur €STR:', e.message);
-    return 1.93;
-  }
-}
-
-// Récupère OAT 10 ans depuis FRED API
-async function fetchOAT10() {
+async function fetchFredData(seriesId) {
   if (!FRED_API_KEY) {
-    console.warn('FRED_API_KEY non configurée, utilisation valeur par défaut OAT10');
-    return 3.54;
+    console.error("ERREUR: Clé API FRED manquante.");
+    return null;
   }
   try {
-    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=IRLTLT01FRM156N&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=1`;
-    const data = await fetchJson(url);
-    const obs = data?.observations?.[0];
-    console.log('OAT10 brut:', obs);
-    if (obs && obs.value !== '.') {
-      return parseFloat(obs.value);
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=1`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data.observations && data.observations.length > 0) {
+      return parseFloat(data.observations[0].value);
     }
-  } catch (e) {
-    console.error('Erreur OAT10:', e.message);
+  } catch (error) {
+    console.error(`Erreur récupération FRED (${seriesId}):`, error.message);
   }
-  return 3.54;
+  return null;
 }
 
-// Récupère l'inflation française depuis FRED API
-async function fetchInflation() {
-  if (!FRED_API_KEY) {
-    console.warn('FRED_API_KEY non configurée, utilisation valeur par défaut Inflation');
-    return 2.0;
-  }
+async function fetchYahooData(ticker) {
   try {
-    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=FPCPITOTLZGFRA&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=1`;
-    const data = await fetchJson(url);
-    const obs = data?.observations?.[0];
-    console.log('Inflation brut:', obs);
-    if (obs && obs.value !== '.') {
-      return parseFloat(obs.value);
+    // Yahoo Finance API non-officielle (souvent plus fiable que Alpha Vantage gratuit)
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`;
+    const response = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' } // Important pour ne pas être bloqué
+    });
+    const data = await response.json();
+    const result = data.chart?.result?.[0];
+    if (result?.meta?.regularMarketPrice) {
+      return result.meta.regularMarketPrice;
     }
-  } catch (e) {
-    console.error('Erreur Inflation:', e.message);
+  } catch (error) {
+    console.error(`Erreur récupération Yahoo (${ticker}):`, error.message);
   }
-  return 2.0;
+  return null;
 }
 
-// Récupère CAC40 annualisé 5 ans via Alpha Vantage
-async function fetchCAC5() {
-  if (!ALPHA_VANTAGE_API_KEY) {
-    console.warn('ALPHA_VANTAGE_API_KEY non configurée, utilisation valeur par défaut CAC5');
-    return 7.92;
+// --- MAIN ---
+
+async function main() {
+  console.log("Début de la mise à jour des taux...");
+
+  // 1. Récupération des données
+  // OAT 10 ans France (Série FRED: IRLTLT01FRM156N - Taux long terme)
+  const oat10 = await fetchFredData('IRLTLT01FRM156N');
+  
+  // Inflation France (Série FRED: FRACPIALLMINMEI - CPI)
+  const inflation = await fetchFredData('FRACPIALLMINMEI');
+  
+  // €STR (Série FRED: ECBESTRVOLWGTTRMDMNRT - Taux court terme Euro)
+  const estr = await fetchFredData('ECBESTRVOLWGTTRMDMNRT');
+  
+  // CAC 40 (Yahoo Ticker: ^FCHI)
+  const cac40 = await fetchYahooData('%5EFCHI');
+
+  // 2. Création de l'objet de données
+  const nouvellesDonnees = {
+    date_mise_a_jour: new Date().toISOString(),
+    donnees: {
+      oat_10_ans: oat10 || "Non disponible",
+      inflation: inflation || "Non disponible",
+      estr: estr || "Non disponible",
+      cac_40: cac40 || "Non disponible"
+    }
+  };
+
+  console.log("Données récupérées :", nouvellesDonnees);
+
+  // 3. Sauvegarde dans le fichier public/taux.json
+  // On s'assure que le dossier 'public' existe (requis pour Next.js/Vercel)
+  const dir = path.dirname(FILE_PATH);
+  if (!fs.existsSync(dir)){
+      fs.mkdirSync(dir, { recursive: true });
   }
-  try {
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_MONTHLY&symbol=CAC.PAR&apikey=${ALPHA_VANTAGE_API_KEY}`;
-    const data = await fetchJson(url);
-    const timeSeries = data?.['Monthly Time Series'];
-    
-    if (timeSeries) {
-      const dates = Object.keys(timeSeries).sort().reverse();
-      
-      // Valeur actuelle (dernier mois disponible)
-      const latestDate = dates[0];
-      const latestClose = parseFloat(timeSeries[latestDate]?.['4. close'] ?? '0');
-      
-      // Valeur il y a 5 ans (60 mois)
-      // Chercher la date la plus proche de 5 ans en arrière
-      const fiveYearsAgo = new Date();
-      fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
-      const targetDate = fiveYearsAgo.toISOString().slice(0, 7); // YYYY-MM
-      
-      // Trouver la date la plus proche dans les données
-      let oldDate = dates.find(d => d.startsWith(targetDate)) || dates.find(d => d < targetDate);
-      if (!oldDate) oldDate = dates[dates.length - 1];
-      
-      const oldClose = parseFloat(timeSeries[oldDate]?.['4. close'] ?? '0');
-      
-      console.log(`CAC40: ${oldDate} (${oldClose}) -> ${latestDate} (${latestClose})`);
-      
-      if (latestClose > 0 && oldClose > 0) {
-        // Calcul du rendement annualisé: ((valeur finale / valeur initiale)^(1/n)) - 1
-        const totalReturn = latestClose / oldClose;
-        const years = 5;
-        const annualized = (Math.pow(totalReturn, 1 / years) - 1) * 100;
-        console.log(`CAC40 annualisé 5 ans: ${annualized.toFixed(2)}%`);
-        return Math.round(annualized * 100) / 100;
-      }
-    }
-  } catch (e) {
-    console.error('Erreur CAC40:', e.message);
-  }
-  return 7.92;
+
+  fs.writeFileSync(FILE_PATH, JSON.stringify(nouvellesDonnees, null, 2));
+  console.log(`Fichier sauvegardé avec succès : ${FILE_PATH}`);
 }
 
-// SCPI moyenne 5 ans (données ASPIM-IEIF - pas d'API disponible)
-function getSCPI5() {
-  // Taux de distribution moyen des SCPI 2020-2024 (source: ASPIM-IEIF)
-  const rates = [4.18, 4.45, 4.53, 4.52, 4.72];
-  const avg = rates.reduce((a, b) => a + b, 0) / rates.length;
-  return Math.round(avg * 100) / 100;
-}
-
-// Template pour route.ts (pour le site Vercel)
-
-const template = (payload) => `// app/api/taux/route.ts
-// Mis à jour automatiquement par GitHub Actions
-// Dernière mise à jour (Europe/Paris): ${payload.asof} - ${isoParisTimestamp()}
-
-export async function GET() {
-  const data = ${JSON.stringify(payload, null, 4)};
-
-  return new Response(JSON.stringify(data), {
-    status: 200,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      "Access-Control-Allow-Origin": "*"
-    }
-  });
-}
-
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type"
-    }
-  });
-}
-`;
-
-
-(async () => {
-  console.log('🔄 Récupération des taux depuis les APIs...');
-  console.log('FRED_API_KEY:', FRED_API_KEY ? '✓ configurée' : '✗ manquante');
-  console.log('ALPHA_VANTAGE_API_KEY:', ALPHA_VANTAGE_API_KEY ? '✓ configurée' : '✗ manquante');
-
-  const [estr, oat10, inflation, cac5] = await Promise.all([
-    fetchESTR(),
-    fetchOAT10(),
-    fetchInflation(),
-    fetchCAC5(),
-  ]);
-
-  const scpi5 = getSCPI5();
-
-
-const payload = {
-  asof: formatDateFRParis(),
-  estr: Math.round(estr * 100) / 100,
-  oat10: Math.round(oat10 * 100) / 100,
-  cac5: cac5,
-  scpi5: scpi5,
-  inflation: Math.round(inflation * 100) / 100
-};
-
-
-  console.log('\n📊 Taux récupérés:');
-  console.log('  €STR:', payload.estr, '%');
-  console.log('  OAT 10 ans:', payload.oat10, '%');
-  console.log('  CAC40 5 ans ann.:', payload.cac5, '%');
-  console.log('  SCPI 5 ans moy.:', payload.scpi5, '%');
-  console.log('  Inflation:', payload.inflation, '%');
-
-  const file = path.join(process.cwd(), 'app', 'api', 'taux', 'route.ts');
-  fs.writeFileSync(file, template(payload), 'utf8');
-  console.log('\n✅ route.ts mis à jour avec succès');
-})();
+main();
