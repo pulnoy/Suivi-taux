@@ -148,9 +148,10 @@ function getSCPI5() {
 }
 
 // Template pour route.ts (pour le site Vercel)
+
 const template = (payload) => `// app/api/taux/route.ts
 // Mis à jour automatiquement par GitHub Actions
-// Dernière mise à jour: ${payload.asof}
+// Dernière mise à jour (Europe/Paris): ${payload.asof} - ${isoParisTimestamp()}
 
 export async function GET() {
   const data = ${JSON.stringify(payload, null, 4)};
@@ -159,6 +160,7 @@ export async function GET() {
     status: 200,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
       "Access-Control-Allow-Origin": "*"
     }
   });
@@ -176,6 +178,7 @@ export async function OPTIONS() {
 }
 `;
 
+
 (async () => {
   console.log('🔄 Récupération des taux depuis les APIs...');
   console.log('FRED_API_KEY:', FRED_API_KEY ? '✓ configurée' : '✗ manquante');
@@ -190,14 +193,16 @@ export async function OPTIONS() {
 
   const scpi5 = getSCPI5();
 
-  const payload = {
-    asof: formatDateFR(),
-    estr: Math.round(estr * 100) / 100,
-    oat10: Math.round(oat10 * 100) / 100,
-    cac5: cac5,
-    scpi5: scpi5,
-    inflation: Math.round(inflation * 100) / 100
-  };
+
+const payload = {
+  asof: formatDateFRParis(),
+  estr: Math.round(estr * 100) / 100,
+  oat10: Math.round(oat10 * 100) / 100,
+  cac5: cac5,
+  scpi5: scpi5,
+  inflation: Math.round(inflation * 100) / 100
+};
+
 
   console.log('\n📊 Taux récupérés:');
   console.log('  €STR:', payload.estr, '%');
