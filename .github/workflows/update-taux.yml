@@ -3,7 +3,7 @@ name: Maj quotidienne des taux
 
 on:
   schedule:
-    - cron: '0 8 * * *'   # 06:00 heure de Paris (05:00 UTC)
+    - cron: '0 8 * * *'   # 09:00 heure de Paris (08:00 UTC)
   workflow_dispatch:
 
 permissions:
@@ -34,8 +34,7 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
         run: node scripts/update-taux.mjs
-        
-# ...
+
       - name: Commit si modifications
         run: |
           git config user.name  "github-actions[bot]"
@@ -43,7 +42,7 @@ jobs:
           if [[ -n "$(git status --porcelain)" ]]; then
             git checkout -B bot/maj-taux
             git add -A
-            git commit -m "chore: maj taux $(date -u +'%Y-%m-%d')"
+            git commit -m "chore: maj taux $(TZ='Europe/Paris' date +'%Y-%m-%d %H:%M:%S')"
           else
             echo "Pas de changement à committer."
           fi
@@ -52,10 +51,12 @@ jobs:
         if: always()
         run: |
           if git rev-parse --verify bot/maj-taux >/dev/null 2>&1; then
-            git push -f origin bot/maj-taux
+            # ⚠️ important : pousse bien la branche locale vers la branche distante du même nom
+            git push -f origin bot/maj-taux:bot/maj-taux
           fi
 
       - name: Ouvrir/mettre à jour la PR
+        id: cpr
         if: always()
         uses: peter-evans/create-pull-request@v6
         with:
@@ -66,18 +67,7 @@ jobs:
           labels: "automatisation"
           commit-message: "chore: maj taux"
 
-          
-      - name: Ouvrir/mettre à jour la PR
-        id: cpr
-        uses: peter-evans/create-pull-request@v6
-        with:
-          branch: bot/maj-taux
-          title: "Maj quotidienne des taux"
-          body: "Mise à jour automatisée des taux."
-          base: main
-          labels: "automatisation"
-          commit-message: "chore: maj taux"
-
+      # --- Auto-merge de la PR si créée/MAJ ---
       - name: Activer l’auto-merge
         if: steps.cpr.outputs.pull-request-number != ''
         uses: peter-evans/enable-pull-request-automerge@v3
@@ -91,4 +81,3 @@ jobs:
         run: gh pr merge --auto --squash ${{ steps.cpr.outputs.pull-request-number }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
