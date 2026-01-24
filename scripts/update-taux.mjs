@@ -21,11 +21,22 @@ function fetchJson(url) {
   });
 }
 
-function formatDateFR() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+
+function formatDateFRParis() {
+  // Date du jour en fuseau Europe/Paris
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris' });
+  return fmt.format(now); // JJ/MM/AAAA
 }
+
+// -- nouvelle fonction pour un horodatage lisible :
+function isoParisTimestamp() {
+  return new Date().toLocaleString('sv-SE', { // "YYYY-MM-DD HH:mm:ss"
+    timeZone: 'Europe/Paris',
+    hour12: false
+  }).replace(' ', 'T'); // "YYYY-MM-DDTHH:mm:ss"
+}
+
 
 // Récupère €STR depuis l'API BCE
 async function fetchESTR() {
