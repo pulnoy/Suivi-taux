@@ -7,13 +7,38 @@ type DataPoint = { date: string; value: number; };
 type Indicateur = { titre: string; valeur: number; suffixe: string; historique: DataPoint[]; };
 type JsonData = { date_mise_a_jour: string; indices: { [key: string]: Indicateur; }; };
 
-// --- CONFIGURATION DU THÈME (Couleurs extraites de ton fichier HTML) ---
-const THEME: { [key: string]: { color: string; bg: string; label: string } } = {
-  estr: { color: '#2563eb', bg: '#e8f0ff', label: 'Monétaire' },      // Bleu
-  oat: { color: '#16a34a', bg: '#e9f9ef', label: 'Obligataire' },     // Vert
-  cac40: { color: '#F2B301', bg: '#fff7e6', label: 'Dynamique' },     // Jaune/Moutarde
-  scpi: { color: '#7c3aed', bg: '#f3e8ff', label: 'Immobilier' },     // Violet
-  inflation: { color: '#ef4444', bg: '#fef2f2', label: 'Indicateur' } // Rouge (Alerte)
+// --- CONFIGURATION DU THÈME & SOURCES ---
+const THEME: { [key: string]: { color: string; bg: string; label: string; source: string } } = {
+  estr: { 
+    color: '#2563eb', 
+    bg: '#e8f0ff', 
+    label: 'Monétaire',
+    source: 'Source : Banque Centrale Européenne (via FRED)'
+  },
+  oat: { 
+    color: '#16a34a', 
+    bg: '#e9f9ef', 
+    label: 'Obligataire',
+    source: 'Source : Banque de France (via FRED)'
+  },
+  cac40: { 
+    color: '#F2B301', 
+    bg: '#fff7e6', 
+    label: 'Dynamique',
+    source: 'Source : Yahoo Finance'
+  },
+  scpi: { 
+    color: '#7c3aed', 
+    bg: '#f3e8ff', 
+    label: 'Immobilier',
+    source: 'Source : ASPIM / France SCPI (Données annuelles)'
+  },
+  inflation: { 
+    color: '#ef4444', 
+    bg: '#fef2f2', 
+    label: 'Indicateur',
+    source: 'Source : OCDE / INSEE (via FRED)'
+  }
 };
 
 // Ordre d'affichage demandé
@@ -40,8 +65,6 @@ const InteractiveChart = ({ data, hexColor }: { data: DataPoint[], hexColor: str
 
   const linePoints = data.map((d, index) => `${getX(index)},${getY(d.value)}`).join(' ');
   const areaPoints = `${linePoints} ${width},${height} 0,${height}`;
-
-  // ID unique pour le dégradé
   const gradientId = `grad-${hexColor.replace('#', '')}`;
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -131,23 +154,20 @@ export default function Dashboard() {
     fetch('/taux.json').then(res => res.json()).then(setData).catch(console.error);
   }, []);
 
-  if (!data) return <div className="min-h-screen flex items-center justify-center text-slate-500">Chargement...</div>;
+  if (!data) return <div className="min-h-screen flex items-center justify-center text-slate-500">Chargement des données...</div>;
 
   const getTrendIcon = (historique: DataPoint[], key: string) => {
     if (historique.length < 2) return '→';
     const last = historique[historique.length - 1].value;
     const prev = historique[historique.length - 2].value;
-    const inverted = ['oat', 'inflation'].includes(key); 
-    
-    // Logique pour la direction de la flèche uniquement
     if (last > prev) return '↗';
     if (last < prev) return '↘';
     return '→';
   };
 
   return (
-    <main className="min-h-screen bg-slate-50/80 p-6 md:p-12 font-sans">
-      <div className="max-w-7xl mx-auto">
+    <main className="min-h-screen bg-slate-50/80 p-6 md:p-12 font-sans flex flex-col">
+      <div className="max-w-7xl mx-auto w-full flex-grow">
         <header className="mb-10 text-center md:text-left">
           <h1 className="text-4xl font-extrabold text-[#003A7A] tracking-tight">Pédagogie des marchés</h1>
           <p className="text-sm font-medium text-slate-500 mt-2">
@@ -155,13 +175,12 @@ export default function Dashboard() {
           </p>
         </header>
 
+        {/* GRILLE DES TUILES */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-10">
           {DISPLAY_ORDER.map((key) => {
-            // Si la clé n'existe pas dans le JSON (sécurité), on saute
             if (!data.indices[key]) return null;
-
             const item = data.indices[key];
-            const theme = THEME[key] || { color: '#64748b', bg: '#f1f5f9', label: 'Autre' };
+            const theme = THEME[key] || { color: '#64748b', bg: '#f1f5f9', label: 'Autre', source: '' };
             const isSelected = selectedKey === key;
             const icon = getTrendIcon(item.historique, key);
 
@@ -203,17 +222,24 @@ export default function Dashboard() {
           })}
         </div>
 
-        {/* GRAPHIQUE */}
+        {/* ZONE GRAPHIQUE */}
         <div className={`transition-all duration-500 ease-out ${selectedKey ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 h-0 overflow-hidden'}`}>
           {selectedKey && data.indices[selectedKey] && (
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-slate-100" 
                  style={{ borderTop: `4px solid ${THEME[selectedKey]?.color || '#ccc'}` }}>
-              <div className="flex items-center gap-3 mb-1">
-                 <h2 className="text-2xl font-bold text-slate-900">{data.indices[selectedKey].titre}</h2>
-                 <span className="px-3 py-1 rounded-full text-sm font-bold" 
-                       style={{ backgroundColor: THEME[selectedKey].bg, color: THEME[selectedKey].color }}>
-                    Historique
-                 </span>
+              
+              <div className="mb-4">
+                 <div className="flex items-center gap-3">
+                   <h2 className="text-2xl font-bold text-slate-900">{data.indices[selectedKey].titre}</h2>
+                   <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide" 
+                         style={{ backgroundColor: THEME[selectedKey].bg, color: THEME[selectedKey].color }}>
+                      Historique
+                   </span>
+                 </div>
+                 {/* SOURCE AJOUTÉE ICI */}
+                 <p className="text-xs text-slate-400 mt-1 italic font-medium">
+                    {THEME[selectedKey]?.source || 'Source non spécifiée'}
+                 </p>
               </div>
               
               <InteractiveChart 
@@ -224,6 +250,14 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* PIED DE PAGE AVEC SOURCES GLOBALES */}
+      <footer className="mt-12 pt-6 border-t border-slate-200 text-center">
+        <p className="text-xs text-slate-400 font-medium">
+          Données agrégées automatiquement via API publiques (BCE, FRED, Yahoo Finance).<br/>
+          Les performances passées ne préjugent pas des performances futures. Usage interne uniquement.
+        </p>
+      </footer>
     </main>
   );
 }
