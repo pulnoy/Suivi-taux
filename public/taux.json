@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-01-24T18:33:26.607Z",
+  "date_mise_a_jour": "2026-01-25T05:22:47.068Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -272,10 +272,6 @@
       "valeur": 1.93,
       "suffixe": "%",
       "historique": [
-        {
-          "date": "2025-01-24",
-          "value": 2.92
-        },
         {
           "date": "2025-01-27",
           "value": 2.92
