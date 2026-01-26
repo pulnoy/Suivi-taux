@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-01-25T05:22:47.068Z",
+  "date_mise_a_jour": "2026-01-26T05:28:07.936Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -1288,7 +1288,7 @@
     },
     "cac40": {
       "titre": "CAC 40 (Moy. 5 ans)",
-      "valeur": 9.76,
+      "valeur": 9.49,
       "suffixe": "%",
       "historique": [
         {
