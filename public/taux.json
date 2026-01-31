@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-01-30T08:52:11.631Z",
+  "date_mise_a_jour": "2026-01-31T08:40:47.046Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -272,10 +272,6 @@
       "valeur": 1.93,
       "suffixe": "%",
       "historique": [
-        {
-          "date": "2025-01-30",
-          "value": 2.92
-        },
         {
           "date": "2025-01-31",
           "value": 2.91
@@ -1287,12 +1283,16 @@
         {
           "date": "2026-01-28",
           "value": 1.93
+        },
+        {
+          "date": "2026-01-29",
+          "value": 1.93
         }
       ]
     },
     "cac40": {
       "titre": "CAC 40 (Moy. 5 ans)",
-      "valeur": 9.61,
+      "valeur": 9.76,
       "suffixe": "%",
       "historique": [
         {
@@ -2317,7 +2317,7 @@
         },
         {
           "date": "2026-01-30",
-          "value": 8085.65
+          "value": 8126.53
         }
       ]
     },
