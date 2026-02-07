@@ -7,30 +7,36 @@ const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
 // --- FONCTIONS UTILITAIRES ---
 
-// Récupère l'historique FRED via la méthode "LIMIT" (plus robuste que les dates)
-// On demande les X dernières valeurs, triées de la plus récente à la plus ancienne.
-async function fetchFredHistory(seriesId, limit = 12, extraParams = '') {
+// Récupère l'historique FRED (Méthode "Force Brute")
+// On récupère TOUT depuis 2020 et on trie manuellement pour trouver le vrai dernier.
+async function fetchFredHistory(seriesId, extraParams = '') {
   if (!FRED_API_KEY) {
     console.error("ERREUR : Clé API FRED manquante.");
     return [];
   }
   
+  // On demande les données depuis 2020-01-01 pour être sûr d'avoir la fin
+  const startDate = '2020-01-01';
+
   try {
-    // sort_order=desc : On veut les plus récentes en premier
-    // limit : On limite le nombre de points (ex: 60 pour 5 ans de données mensuelles)
-    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=${limit}${extraParams}`;
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&observation_start=${startDate}${extraParams}`;
     
     const response = await fetch(url);
     const data = await response.json();
     
-    if (data.observations) {
-      // FRED renvoie du plus récent au plus vieux (desc).
-      // Pour les graphiques, on a besoin de l'inverse (Chronologique : Vieux -> Récent).
-      // On map d'abord, puis on reverse.
-      return data.observations.map(obs => ({
+    if (data.observations && data.observations.length > 0) {
+      // 1. On convertit tout proprement
+      const cleanData = data.observations.map(obs => ({
         date: obs.date,
-        value: parseFloat(parseFloat(obs.value).toFixed(2))
-      })).filter(item => !isNaN(item.value)).reverse(); 
+        value: parseFloat(parseFloat(obs.value).toFixed(2)),
+        timestamp: new Date(obs.date).getTime() // Pour le tri
+      })).filter(item => !isNaN(item.value));
+
+      // 2. On trie du plus ANCIEN au plus RÉCENT (pour le graphique)
+      // Javascript sort est très fiable.
+      cleanData.sort((a, b) => a.timestamp - b.timestamp);
+
+      return cleanData;
     }
   } catch (error) {
     console.error(`Erreur historique FRED (${seriesId}):`, error.message);
@@ -38,7 +44,7 @@ async function fetchFredHistory(seriesId, limit = 12, extraParams = '') {
   return [];
 }
 
-// Récupère l'historique Yahoo (Méthode exacte)
+// Récupère l'historique Yahoo
 async function fetchYahooHistory(ticker) {
   try {
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
@@ -64,14 +70,14 @@ async function fetchYahooHistory(ticker) {
   return [];
 }
 
-// Données manuelles SCPI (Mise à jour annuelle)
+// Données manuelles SCPI
 function getScpiHistory() {
   return [
     { date: "2021-01-01", value: 4.49 },
     { date: "2022-01-01", value: 4.53 },
     { date: "2023-01-01", value: 4.52 },
     { date: "2024-01-01", value: 4.52 }, 
-    { date: "2025-01-01", value: 4.60 }, // Estimation/Projection pour lisser le graph
+    { date: "2025-01-01", value: 4.52 }, // Valeur temporaire 2025 pour afficher une date récente
   ];
 }
 
@@ -106,24 +112,16 @@ async function fetchCac40Perf5Ans() {
 // --- MAIN ---
 
 async function main() {
-  console.log("Début de la mise à jour (Mode LIMIT)...");
+  console.log("Début de la mise à jour (Mode Force Brute)...");
 
-  // 1. Récupérations via FRED (Limit 12 pour 1 an, 60 pour 5 ans)
-  // OAT : IRLTLT01FRM156N est une série MENSUELLE. Limit 12 = 12 derniers mois.
-  const historyOat = await fetchFredHistory('IRLTLT01FRM156N', 12); 
-  
-  // Inflation : FRACPIALLMINMEI (Inflation Consumer Prices for France). 
-  // Limit 60 = 5 ans. units=pc1 donne le % sur 1 an glissant.
-  const historyInflation = await fetchFredHistory('FRACPIALLMINMEI', 60, '&units=pc1'); 
-  
-  // ESTR : Série journalière/mensuelle. Limit 12 suffisant pour le graph court terme ou 300 pour journalier
-  // ECBESTRVOLWGTTRMDMNRT est souvent mensuelle ou hebdo.
-  const historyEstr = await fetchFredHistory('ECBESTRVOLWGTTRMDMNRT', 12);
-
+  // 1. Récupérations
+  const historyOat = await fetchFredHistory('IRLTLT01FRM156N'); 
+  const historyInflation = await fetchFredHistory('FRACPIALLMINMEI', '&units=pc1'); 
+  const historyEstr = await fetchFredHistory('ECBESTRVOLWGTTRMDMNRT');
   const historyCacPrice = await fetchYahooHistory('%5EFCHI'); 
   const historyScpi = getScpiHistory(); 
 
-  // 2. Extraction des dernières valeurs (La dernière du tableau est la plus récente car on a fait reverse())
+  // 2. Extraction de la DERNIÈRE valeur du tableau (Le tableau est trié par date croissante)
   const valOat = historyOat.length ? historyOat[historyOat.length - 1].value : null;
   const valInflation = historyInflation.length ? historyInflation[historyInflation.length - 1].value : null;
   const valEstr = historyEstr.length ? historyEstr[historyEstr.length - 1].value : null;
@@ -131,9 +129,11 @@ async function main() {
   const valCacPerf = await fetchCac40Perf5Ans();
   const valScpi = historyScpi[historyScpi.length - 1].value;
 
-  // Logs pour vérification dans GitHub Actions
-  console.log(`OAT récupéré : ${valOat}% (Dernière date: ${historyOat.length ? historyOat[historyOat.length-1].date : 'N/A'})`);
-  console.log(`Inflation récupérée : ${valInflation}% (Dernière date: ${historyInflation.length ? historyInflation[historyInflation.length-1].date : 'N/A'})`);
+  // Logs pour vérification dans GitHub
+  console.log(`--- VÉRIFICATION ---`);
+  console.log(`OAT Date: ${historyOat.length ? historyOat[historyOat.length-1].date : 'N/A'} | Valeur: ${valOat}`);
+  console.log(`Inflation Date: ${historyInflation.length ? historyInflation[historyInflation.length-1].date : 'N/A'} | Valeur: ${valInflation}`);
+  console.log(`ESTR Date: ${historyEstr.length ? historyEstr[historyEstr.length-1].date : 'N/A'} | Valeur: ${valEstr}`);
 
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
@@ -142,7 +142,7 @@ async function main() {
         titre: "OAT 10 ans",
         valeur: valOat,
         suffixe: "%",
-        historique: historyOat
+        historique: historyOat // On garde tout l'historique depuis 2020 pour le graph
       },
       inflation: {
         titre: "Inflation (5 ans)",
