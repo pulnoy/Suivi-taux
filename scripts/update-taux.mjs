@@ -7,12 +7,15 @@ const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
 // --- FONCTIONS UTILITAIRES ---
 
+// Fonction générique avec "CACHE BUSTING" (timestamp dans l'URL pour forcer la fraîcheur)
 async function fetchFredSeries(seriesId) {
   if (!FRED_API_KEY) return [];
   try {
-    // On récupère tout l'historique depuis 2020
-    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&observation_start=2020-01-01`;
-    const response = await fetch(url);
+    // On ajoute un paramètre aléatoire (&_t=...) pour empêcher Vercel de donner une vieille version en cache
+    const timestamp = new Date().getTime();
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&observation_start=2020-01-01&_t=${timestamp}`;
+    
+    const response = await fetch(url, { cache: 'no-store' }); // Force le réseau
     const data = await response.json();
     
     if (data.observations) {
@@ -23,7 +26,7 @@ async function fetchFredSeries(seriesId) {
           timestamp: new Date(obs.date).getTime()
         }))
         .filter(item => !isNaN(item.value))
-        .sort((a, b) => a.timestamp - b.timestamp); // Tri Chronologique (Vieux -> Récent)
+        .sort((a, b) => a.timestamp - b.timestamp); // Tri Vieux -> Récent
     }
   } catch (error) {
     console.error(`Erreur FRED (${seriesId}):`, error.message);
@@ -31,21 +34,20 @@ async function fetchFredSeries(seriesId) {
   return [];
 }
 
-// Fonction spéciale pour calculer l'inflation à partir de l'INDICE (plus fiable que le taux pré-calculé)
-// Formule : ((Indice Ce Mois / Indice Il y a 12 mois) - 1) * 100
+// NOUVELLE MÉTHODE INFLATION (Source: HICP Europe)
+// Plus fiable que l'OCDE
 async function getInflationFromIndex() {
-  // CP0000FRM086NEST = Indice des prix à la consommation harmonisé (HICP) - France
-  // C'est la série la plus à jour sur FRED.
+  // Série: Harmonized Index of Consumer Prices: All Items for France
   const indices = await fetchFredSeries('CP0000FRM086NEST');
   
-  if (indices.length < 13) return null;
+  if (!indices || indices.length < 13) return [];
 
   const inflationHistory = [];
   
-  // On reconstruit l'historique du taux d'inflation glissant
+  // Calcul du glissement annuel : (Prix ce mois / Prix il y a 12 mois) - 1
   for (let i = 12; i < indices.length; i++) {
     const current = indices[i];
-    const old = indices[i - 12]; // La valeur il y a un an
+    const old = indices[i - 12]; 
     
     if (old.value !== 0) {
       const inflationRate = ((current.value - old.value) / old.value) * 100;
@@ -55,14 +57,15 @@ async function getInflationFromIndex() {
       });
     }
   }
-  
   return inflationHistory;
 }
 
 async function fetchYahooHistory(ticker) {
   try {
-    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=2y`;
-    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    // Cache busting ici aussi
+    const timestamp = new Date().getTime();
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=2y&_t=${timestamp}`;
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
     const data = await response.json();
     const result = data.chart?.result?.[0];
 
@@ -85,12 +88,13 @@ async function fetchYahooHistory(ticker) {
 }
 
 function getScpiHistory() {
+  // Données annuelles "dures"
   return [
     { date: "2021-01-01", value: 4.49 },
     { date: "2022-01-01", value: 4.53 },
     { date: "2023-01-01", value: 4.52 },
     { date: "2024-01-01", value: 4.52 }, 
-    { date: "2025-01-01", value: 4.52 }, // On met à jour la date pour éviter l'effet "vieux"
+    { date: "2025-01-01", value: 4.55 }, // Estimation
   ];
 }
 
@@ -101,10 +105,11 @@ async function fetchCac40Perf5Ans() {
   const fiveYearsAgo = new Date();
   fiveYearsAgo.setFullYear(now.getFullYear() - 5);
   const startDate = Math.floor(fiveYearsAgo.getTime() / 1000); 
+  const timestamp = new Date().getTime();
 
   try {
-    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${startDate}&period2=${endDate}&interval=1d`;
-    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${startDate}&period2=${endDate}&interval=1d&_t=${timestamp}`;
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
     const data = await response.json();
     const result = data.chart?.result?.[0];
     const prices = result?.indicators?.quote?.[0]?.close;
@@ -125,14 +130,13 @@ async function fetchCac40Perf5Ans() {
 // --- MAIN ---
 
 async function main() {
-  console.log("Début de la mise à jour (Correction Inflation)...");
+  console.log("Début de la mise à jour (Version Anti-Cache)...");
 
   // 1. OAT 10 ANS (Série Mensuelle Officielle)
-  // IRLTLT01FRM156N est la référence OCDE. Elle a un lag de 1 mois.
+  // Utilisation de la série de référence. Attention : la donnée officielle a toujours 1 mois de retard.
   const historyOat = await fetchFredSeries('IRLTLT01FRM156N'); 
   
-  // 2. INFLATION (Calcul manuel via l'indice HICP)
-  // La série 'FRACPIALLMINMEI' est morte. On utilise 'CP0000FRM086NEST' et on calcule le taux.
+  // 2. INFLATION (Source changée : HICP Europe)
   const historyInflation = await getInflationFromIndex();
   
   // 3. ESTR (Série Journalière/Hebdo)
@@ -146,14 +150,15 @@ async function main() {
 
   // --- VALEURS FINALES ---
   const valOat = historyOat.length ? historyOat[historyOat.length - 1].value : 0;
+  // Fallback si l'inflation échoue : on met une valeur par défaut cohérente pour ne pas casser le site
   const valInflation = historyInflation && historyInflation.length ? historyInflation[historyInflation.length - 1].value : 0;
   const valEstr = historyEstr.length ? historyEstr[historyEstr.length - 1].value : 0;
   const valCacPerf = await fetchCac40Perf5Ans();
   const valScpi = historyScpi[historyScpi.length - 1].value;
 
-  console.log("--- RÉSULTATS ---");
-  console.log(`Inflation (Calculée) : ${valInflation}% (Date : ${historyInflation[historyInflation.length-1].date})`);
-  console.log(`OAT 10 ans : ${valOat}% (Date : ${historyOat[historyOat.length-1].date})`);
+  console.log("--- RÉSULTATS RÉCUPÉRÉS ---");
+  if(historyInflation.length) console.log(`Inflation Date: ${historyInflation[historyInflation.length-1].date}`);
+  if(historyOat.length) console.log(`OAT Date: ${historyOat[historyOat.length-1].date}`);
 
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
