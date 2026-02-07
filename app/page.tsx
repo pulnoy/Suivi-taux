@@ -19,7 +19,7 @@ const THEME: { [key: string]: { color: string; bg: string; label: string; source
     color: '#16a34a', 
     bg: '#e9f9ef', 
     label: 'Obligataire',
-    source: 'Source : Banque de France (via FRED)'
+    source: 'Source : Banque de France (Moyenne mensuelle via FRED)'
   },
   cac40: { 
     color: '#F2B301', 
@@ -37,7 +37,7 @@ const THEME: { [key: string]: { color: string; bg: string; label: string; source
     color: '#ef4444', 
     bg: '#fef2f2', 
     label: 'Indicateur',
-    source: 'Source : OCDE / INSEE (via FRED)'
+    source: 'Source : Eurostat / INSEE (Indice IPCH via FRED)'
   }
 };
 
@@ -227,7 +227,7 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* AJOUT DE LA DATE ICI */}
+                {/* DATE DE DONNÉE */}
                 <div className="mt-4 pt-3 border-t border-slate-100">
                   <p className="text-[10px] text-slate-400 font-medium">
                     📅 Donnée du : {dataDate}
@@ -252,6 +252,7 @@ export default function Dashboard() {
                       Historique
                    </span>
                  </div>
+                 {/* SOURCE DYNAMIQUE */}
                  <p className="text-xs text-slate-400 mt-1 italic font-medium">
                     {THEME[selectedKey]?.source || 'Source non spécifiée'}
                  </p>
