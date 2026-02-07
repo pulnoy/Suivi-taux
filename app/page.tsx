@@ -41,7 +41,6 @@ const THEME: { [key: string]: { color: string; bg: string; label: string; source
   }
 };
 
-// Ordre d'affichage demandé
 const DISPLAY_ORDER = ['estr', 'oat', 'cac40', 'scpi', 'inflation'];
 
 // --- GRAPHIQUE INTERACTIF ---
@@ -165,13 +164,20 @@ export default function Dashboard() {
     return '→';
   };
 
+  // Récupérer la date de la dernière valeur pour l'affichage
+  const getLastDate = (historique: DataPoint[]) => {
+    if (!historique || historique.length === 0) return 'Date inconnue';
+    const lastPoint = historique[historique.length - 1];
+    return new Date(lastPoint.date).toLocaleDateString('fr-FR');
+  };
+
   return (
     <main className="min-h-screen bg-slate-50/80 p-6 md:p-12 font-sans flex flex-col">
       <div className="max-w-7xl mx-auto w-full flex-grow">
         <header className="mb-10 text-center md:text-left">
           <h1 className="text-4xl font-extrabold text-[#003A7A] tracking-tight">Pédagogie des marchés</h1>
           <p className="text-sm font-medium text-slate-500 mt-2">
-            Mise à jour : {new Date(data.date_mise_a_jour).toLocaleDateString('fr-FR')}
+            Mise à jour globale du site : {new Date(data.date_mise_a_jour).toLocaleDateString('fr-FR')} à {new Date(data.date_mise_a_jour).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}
           </p>
         </header>
 
@@ -183,6 +189,7 @@ export default function Dashboard() {
             const theme = THEME[key] || { color: '#64748b', bg: '#f1f5f9', label: 'Autre', source: '' };
             const isSelected = selectedKey === key;
             const icon = getTrendIcon(item.historique, key);
+            const dataDate = getLastDate(item.historique);
 
             return (
               <div 
@@ -195,27 +202,36 @@ export default function Dashboard() {
                    borderLeftColor: theme.color
                 }}
                 className={`
-                  cursor-pointer p-5 rounded-r-xl border-y border-r shadow-sm transition-all duration-300
+                  cursor-pointer p-5 rounded-r-xl border-y border-r shadow-sm transition-all duration-300 flex flex-col justify-between
                   ${isSelected ? 'ring-1' : 'hover:shadow-lg border-slate-200'}
                 `}
               >
-                <div className="flex justify-between items-start mb-2">
-                   <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#475569' }}>
-                     {item.titre}
-                   </h3>
-                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: theme.bg, color: theme.color }}>
-                     {theme.label}
-                   </span>
+                <div>
+                  <div className="flex justify-between items-start mb-2">
+                     <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#475569' }}>
+                       {item.titre}
+                     </h3>
+                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: theme.bg, color: theme.color }}>
+                       {theme.label}
+                     </span>
+                  </div>
+
+                  <div className="flex items-baseline gap-1 mt-3">
+                    <span className="text-3xl font-extrabold text-slate-900">{item.valeur}</span>
+                    <span className="text-lg text-slate-500 font-semibold">{item.suffixe}</span>
+                  </div>
+                  
+                  <div className="mt-2 text-sm font-bold flex items-center gap-1" style={{ color: theme.color }}>
+                     <span>{icon}</span>
+                     <span className="text-xs opacity-80">Tendance</span>
+                  </div>
                 </div>
 
-                <div className="flex items-baseline gap-1 mt-4">
-                  <span className="text-3xl font-extrabold text-slate-900">{item.valeur}</span>
-                  <span className="text-lg text-slate-500 font-semibold">{item.suffixe}</span>
-                </div>
-                
-                <div className="mt-2 text-sm font-bold flex items-center gap-1" style={{ color: theme.color }}>
-                   <span>{icon}</span>
-                   <span className="text-xs opacity-80">Tendance</span>
+                {/* AJOUT DE LA DATE ICI */}
+                <div className="mt-4 pt-3 border-t border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    📅 Donnée du : {dataDate}
+                  </p>
                 </div>
               </div>
             );
@@ -236,7 +252,6 @@ export default function Dashboard() {
                       Historique
                    </span>
                  </div>
-                 {/* SOURCE AJOUTÉE ICI */}
                  <p className="text-xs text-slate-400 mt-1 italic font-medium">
                     {THEME[selectedKey]?.source || 'Source non spécifiée'}
                  </p>
@@ -251,7 +266,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* PIED DE PAGE AVEC SOURCES GLOBALES */}
       <footer className="mt-12 pt-6 border-t border-slate-200 text-center">
         <p className="text-xs text-slate-400 font-medium">
           Données agrégées automatiquement via API publiques (BCE, FRED, Yahoo Finance).<br/>
