@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-02-10T09:06:12.787Z",
+  "date_mise_a_jour": "2026-02-11T08:59:59.561Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -8439,12 +8439,17 @@
           "date": "2026-02-06",
           "value": 1.93,
           "timestamp": 1770336000000
+        },
+        {
+          "date": "2026-02-09",
+          "value": 1.93,
+          "timestamp": 1770595200000
         }
       ]
     },
     "cac40": {
       "titre": "CAC 40 (Moy. 5 ans)",
-      "valeur": 9.42,
+      "valeur": 9.27,
       "suffixe": "%",
       "historique": [
         {
@@ -10485,7 +10490,11 @@
         },
         {
           "date": "2026-02-10",
-          "value": 8342.22
+          "value": 8327.88
+        },
+        {
+          "date": "2026-02-11",
+          "value": 8297.25
         }
       ]
     },
