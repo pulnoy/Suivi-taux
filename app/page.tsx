@@ -19,7 +19,7 @@ const THEME: { [key: string]: { color: string; bg: string; label: string; source
     color: '#16a34a', 
     bg: '#e9f9ef', 
     label: 'Obligataire',
-    source: 'Source : Banque de France (Moyenne mensuelle via FRED)'
+    source: 'Source : Banque de France (Moyenne mensuelle consolidée)'
   },
   cac40: { 
     color: '#F2B301', 
@@ -164,11 +164,17 @@ export default function Dashboard() {
     return '→';
   };
 
-  // Récupérer la date de la dernière valeur pour l'affichage
   const getLastDate = (historique: DataPoint[]) => {
     if (!historique || historique.length === 0) return 'Date inconnue';
     const lastPoint = historique[historique.length - 1];
     return new Date(lastPoint.date).toLocaleDateString('fr-FR');
+  };
+
+  // Petite fonction pour ajouter une précision textuelle si nécessaire
+  const getDateLabel = (key: string, dateStr: string) => {
+     if (key === 'oat' || key === 'inflation') return `${dateStr} (Moy. Mensuelle)`;
+     if (key === 'scpi') return `${dateStr} (Annuel)`;
+     return dateStr;
   };
 
   return (
@@ -190,6 +196,7 @@ export default function Dashboard() {
             const isSelected = selectedKey === key;
             const icon = getTrendIcon(item.historique, key);
             const dataDate = getLastDate(item.historique);
+            const displayDate = getDateLabel(key, dataDate);
 
             return (
               <div 
@@ -227,10 +234,10 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* DATE DE DONNÉE */}
+                {/* DATE DE DONNÉE AVEC PRÉCISION */}
                 <div className="mt-4 pt-3 border-t border-slate-100">
                   <p className="text-[10px] text-slate-400 font-medium">
-                    📅 Donnée du : {dataDate}
+                    📅 {displayDate}
                   </p>
                 </div>
               </div>
@@ -252,7 +259,6 @@ export default function Dashboard() {
                       Historique
                    </span>
                  </div>
-                 {/* SOURCE DYNAMIQUE */}
                  <p className="text-xs text-slate-400 mt-1 italic font-medium">
                     {THEME[selectedKey]?.source || 'Source non spécifiée'}
                  </p>
