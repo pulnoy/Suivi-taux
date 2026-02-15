@@ -11,7 +11,7 @@ type JsonData = { date_mise_a_jour: string; indices: { [key: string]: Indicateur
 
 // Onglets de navigation
 const CATEGORIES = [
-  { id: 'favorites', label: '⭐ Mes Favoris', keys: [] as string[] }, // Keys sera dynamique
+  { id: 'favorites', label: '⭐ Mes Favoris', keys: [] as string[] },
   { id: 'france_europe', label: '🇫🇷 France & Europe', keys: ['oat', 'inflation', 'cac40', 'cacmid', 'stoxx50'] },
   { id: 'monde_us', label: '🌎 Monde & US', keys: ['sp500', 'nasdaq', 'world', 'emerging', 'eurusd'] },
   { id: 'divers', label: '⚖️ Diversification', keys: ['estr', 'scpi', 'gold', 'brent'] },
