@@ -45,10 +45,11 @@ async function getInflationFromIndex() {
   return inflationHistory;
 }
 
-// 3. Récupération YAHOO FINANCE (Actions & Divers)
+// 3. Récupération YAHOO FINANCE
 async function fetchYahooHistory(ticker) {
   try {
     const timestamp = new Date().getTime();
+    // interval=1d (donnée journalière)
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=2y&_t=${timestamp}`;
     const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
     const data = await response.json();
@@ -94,18 +95,19 @@ async function main() {
 
   // B. ACTIONS FRANCE / EUROPE
   const historyCac40 = await fetchYahooHistory('%5EFCHI'); 
-  const historyCacMid = await fetchYahooHistory('%5ECM60'); // CAC Mid 60
-  const historyStoxx50 = await fetchYahooHistory('%5ESTOXX50E'); // Euro Stoxx 50
+  // CHANGEMENT ICI : Utilisation de l'ETF Amundi (C6E.PA) au lieu de l'indice ^CM60
+  const historyCacMid = await fetchYahooHistory('C6E.PA'); 
+  const historyStoxx50 = await fetchYahooHistory('%5ESTOXX50E'); 
 
   // C. ACTIONS INTERNATIONALES
-  const historySP500 = await fetchYahooHistory('%5EGSPC'); // S&P 500
-  const historyNasdaq = await fetchYahooHistory('%5ENDX'); // Nasdaq 100
-  const historyWorld = await fetchYahooHistory('URTH'); // MSCI World (ETF)
-  const historyEmerging = await fetchYahooHistory('EEM'); // Emerging Markets (ETF)
+  const historySP500 = await fetchYahooHistory('%5EGSPC'); 
+  const historyNasdaq = await fetchYahooHistory('%5ENDX'); 
+  const historyWorld = await fetchYahooHistory('URTH'); 
+  const historyEmerging = await fetchYahooHistory('EEM'); 
 
   // D. DIVERSIFICATION
-  const historyBrent = await fetchYahooHistory('BZ=F'); // Pétrole Brent
-  const historyGold = await fetchYahooHistory('GC=F'); // Or
+  const historyBrent = await fetchYahooHistory('BZ=F'); 
+  const historyGold = await fetchYahooHistory('GC=F'); 
   const historyScpi = getScpiHistory(); 
 
   const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : 0;
@@ -113,7 +115,6 @@ async function main() {
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
     indices: {
-      // Clés identiques à celles utilisées dans page.tsx
       oat: { titre: "OAT 10 ans", valeur: getLast(historyOat), suffixe: "%", historique: historyOat },
       inflation: { titre: "Inflation (1 an)", valeur: getLast(historyInflation), suffixe: "%", historique: historyInflation },
       estr: { titre: "€STR", valeur: getLast(historyEstr), suffixe: "%", historique: historyEstr },
