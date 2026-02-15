@@ -7,7 +7,7 @@ const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
 // --- FONCTIONS UTILITAIRES ---
 
-// 1. Récupération FRED (Taux & Macro)
+// 1. Récupération FRED
 async function fetchFredSeries(seriesId) {
   if (!FRED_API_KEY) return [];
   try {
@@ -29,9 +29,9 @@ async function fetchFredSeries(seriesId) {
   return [];
 }
 
-// 2. Récupération Inflation (Calcul IPCH)
+// 2. Inflation IPCH
 async function getInflationFromIndex() {
-  const indices = await fetchFredSeries('CP0000FRM086NEST'); // HICP France
+  const indices = await fetchFredSeries('CP0000FRM086NEST');
   if (!indices || indices.length < 13) return [];
   const inflationHistory = [];
   for (let i = 12; i < indices.length; i++) {
@@ -45,11 +45,10 @@ async function getInflationFromIndex() {
   return inflationHistory;
 }
 
-// 3. Récupération YAHOO FINANCE
+// 3. Yahoo Finance
 async function fetchYahooHistory(ticker) {
   try {
     const timestamp = new Date().getTime();
-    // interval=1d (donnée journalière)
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=2y&_t=${timestamp}`;
     const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
     const data = await response.json();
@@ -72,7 +71,7 @@ async function fetchYahooHistory(ticker) {
   return [];
 }
 
-// 4. SCPI (Données Annuelles manuelles)
+// 4. SCPI
 function getScpiHistory() {
   return [
     { date: "2021-01-01", value: 4.49 },
@@ -83,31 +82,29 @@ function getScpiHistory() {
   ];
 }
 
-// --- EXÉCUTION PRINCIPALE ---
+// --- MAIN ---
 async function main() {
   console.log("Début de la mise à jour complète...");
 
-  // A. MACRO & TAUX
+  // MACRO
   const historyOat = await fetchFredSeries('IRLTLT01FRM156N'); 
   const historyInflation = await getInflationFromIndex();
   const historyEstr = await fetchFredSeries('ECBESTRVOLWGTTRMDMNRT');
   const historyEurUsd = await fetchYahooHistory('EURUSD=X');
 
-  // B. ACTIONS FRANCE / EUROPE
+  // ACTIONS
   const historyCac40 = await fetchYahooHistory('%5EFCHI'); 
-  // CHANGEMENT ICI : Utilisation de l'ETF Amundi (C6E.PA) au lieu de l'indice ^CM60
   const historyCacMid = await fetchYahooHistory('C6E.PA'); 
   const historyStoxx50 = await fetchYahooHistory('%5ESTOXX50E'); 
-
-  // C. ACTIONS INTERNATIONALES
   const historySP500 = await fetchYahooHistory('%5EGSPC'); 
   const historyNasdaq = await fetchYahooHistory('%5ENDX'); 
   const historyWorld = await fetchYahooHistory('URTH'); 
   const historyEmerging = await fetchYahooHistory('EEM'); 
 
-  // D. DIVERSIFICATION
+  // DIVERS & CRYPTO
   const historyBrent = await fetchYahooHistory('BZ=F'); 
   const historyGold = await fetchYahooHistory('GC=F'); 
+  const historyBtc = await fetchYahooHistory('BTC-USD'); // AJOUT DU BITCOIN
   const historyScpi = getScpiHistory(); 
 
   const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : 0;
@@ -131,6 +128,7 @@ async function main() {
 
       brent: { titre: "Pétrole (Brent)", valeur: getLast(historyBrent), suffixe: "$", historique: historyBrent },
       gold: { titre: "Or (Once)", valeur: getLast(historyGold), suffixe: "$", historique: historyGold },
+      btc: { titre: "Bitcoin", valeur: getLast(historyBtc), suffixe: "$", historique: historyBtc }, // AJOUT DU BITCOIN
       scpi: { titre: "Moyenne SCPI", valeur: getLast(historyScpi), suffixe: "%", historique: historyScpi },
     }
   };
