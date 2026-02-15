@@ -13,7 +13,8 @@ const CATEGORIES = [
   { id: 'favorites', label: '⭐ Mes Favoris', keys: [] as string[] },
   { id: 'france_europe', label: '🇫🇷 France & Europe', keys: ['oat', 'inflation', 'cac40', 'cacmid', 'stoxx50'] },
   { id: 'monde_us', label: '🌎 Monde & US', keys: ['sp500', 'nasdaq', 'world', 'emerging', 'eurusd'] },
-  { id: 'divers', label: '⚖️ Diversification', keys: ['estr', 'scpi', 'gold', 'brent'] },
+  // AJOUT DU BITCOIN DANS DIVERS
+  { id: 'divers', label: '⚖️ Diversification', keys: ['estr', 'scpi', 'gold', 'brent', 'btc'] },
 ];
 
 const THEME: { [key: string]: { color: string; bg: string; label: string; source: string } } = {
@@ -34,6 +35,8 @@ const THEME: { [key: string]: { color: string; bg: string; label: string; source
   scpi: { color: '#7c3aed', bg: '#f3e8ff', label: 'Pierre Papier', source: 'Source : ASPIM (Annuel)' },
   gold: { color: '#F2B301', bg: '#fffce6', label: 'Valeur Refuge', source: 'Source : Yahoo Finance' },
   brent: { color: '#334155', bg: '#f1f5f9', label: 'Énergie', source: 'Source : Yahoo Finance' },
+  // AJOUT DU THEME BITCOIN
+  btc: { color: '#f7931a', bg: '#fff7ed', label: 'Crypto', source: 'Source : Yahoo Finance' },
 };
 
 // --- GRAPHIQUE ---
@@ -77,7 +80,6 @@ const InteractiveChart = ({ data, hexColor }: { data: DataPoint[], hexColor: str
           {activeData && hoverIndex !== null && (<><line x1={getX(hoverIndex)} y1="0" x2={getX(hoverIndex)} y2={height} stroke="#64748b" strokeWidth="1" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/><circle cx={getX(hoverIndex)} cy={getY(activeData.value)} r="6" fill={hexColor} stroke="white" strokeWidth="2" vectorEffect="non-scaling-stroke" /></>)}
         </svg>
         
-        {/* MODIFICATION ICI : TEXTE BLANC ET CONTRASTE AMELIORÉ */}
         {activeData && hoverIndex !== null && (
             <div className="absolute top-4 bg-slate-900/95 backdrop-blur text-white text-xs rounded-lg py-2 px-3 shadow-xl pointer-events-none transform -translate-x-1/2 transition-none z-10 border border-slate-700" style={{ left: `${(hoverIndex / (data.length - 1)) * 100}%` }}>
               <div className="font-medium text-slate-300 whitespace-nowrap mb-0.5">{new Date(activeData.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
