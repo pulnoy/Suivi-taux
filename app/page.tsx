@@ -9,7 +9,6 @@ type JsonData = { date_mise_a_jour: string; indices: { [key: string]: Indicateur
 
 // --- CONFIGURATION ---
 
-// Onglets de navigation
 const CATEGORIES = [
   { id: 'favorites', label: '⭐ Mes Favoris', keys: [] as string[] },
   { id: 'france_europe', label: '🇫🇷 France & Europe', keys: ['oat', 'inflation', 'cac40', 'cacmid', 'stoxx50'] },
@@ -17,7 +16,6 @@ const CATEGORIES = [
   { id: 'divers', label: '⚖️ Diversification', keys: ['estr', 'scpi', 'gold', 'brent'] },
 ];
 
-// Design & Sources
 const THEME: { [key: string]: { color: string; bg: string; label: string; source: string } } = {
   estr: { color: '#2563eb', bg: '#e8f0ff', label: 'Monétaire', source: 'Source : BCE (via FRED)' },
   oat: { color: '#16a34a', bg: '#e9f9ef', label: 'Taux État', source: 'Source : Banque de France (Moy. Mensuelle)' },
@@ -25,7 +23,7 @@ const THEME: { [key: string]: { color: string; bg: string; label: string; source
   eurusd: { color: '#0ea5e9', bg: '#e0f2fe', label: 'Change', source: 'Source : Yahoo Finance' },
 
   cac40: { color: '#003A7A', bg: '#e6f0ff', label: 'Large Caps', source: 'Source : Yahoo Finance' },
-  cacmid: { color: '#4f46e5', bg: '#eef2ff', label: 'Mid Caps', source: 'Source : Yahoo Finance' },
+  cacmid: { color: '#4f46e5', bg: '#eef2ff', label: 'Mid Caps (ETF)', source: 'Source : Yahoo Finance (ETF Amundi C6E)' },
   stoxx50: { color: '#0d9488', bg: '#f0fdfa', label: 'Europe', source: 'Source : Yahoo Finance' },
 
   sp500: { color: '#1e40af', bg: '#dbeafe', label: 'USA Large', source: 'Source : Yahoo Finance' },
@@ -78,7 +76,17 @@ const InteractiveChart = ({ data, hexColor }: { data: DataPoint[], hexColor: str
           <polyline points={linePoints} fill="none" stroke={hexColor} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
           {activeData && hoverIndex !== null && (<><line x1={getX(hoverIndex)} y1="0" x2={getX(hoverIndex)} y2={height} stroke="#64748b" strokeWidth="1" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/><circle cx={getX(hoverIndex)} cy={getY(activeData.value)} r="6" fill={hexColor} stroke="white" strokeWidth="2" vectorEffect="non-scaling-stroke" /></>)}
         </svg>
-        {activeData && hoverIndex !== null && (<div className="absolute top-4 bg-slate-800/90 backdrop-blur text-white text-xs rounded-lg py-2 px-3 shadow-xl pointer-events-none transform -translate-x-1/2 transition-none z-10 border border-slate-700" style={{ left: `${(hoverIndex / (data.length - 1)) * 100}%` }}><div className="font-bold whitespace-nowrap mb-0.5">{new Date(activeData.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div><div className="text-center text-lg font-bold" style={{ color: hexColor === '#F2B301' ? '#fbbf24' : hexColor }}>{activeData.value}</div></div>)}
+        
+        {/* MODIFICATION ICI : TEXTE BLANC ET CONTRASTE AMELIORÉ */}
+        {activeData && hoverIndex !== null && (
+            <div className="absolute top-4 bg-slate-900/95 backdrop-blur text-white text-xs rounded-lg py-2 px-3 shadow-xl pointer-events-none transform -translate-x-1/2 transition-none z-10 border border-slate-700" style={{ left: `${(hoverIndex / (data.length - 1)) * 100}%` }}>
+              <div className="font-medium text-slate-300 whitespace-nowrap mb-0.5">{new Date(activeData.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+              <div className="text-center text-xl font-bold text-white tracking-wide">
+                {activeData.value}
+              </div>
+            </div>
+        )}
+
       </div>
       <div className="flex justify-between text-xs text-slate-400 mt-3 px-2 uppercase tracking-wider font-medium"><span>{new Date(data[0].date).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}</span><span>{new Date(data[data.length - 1].date).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })}</span></div>
     </div>
@@ -90,11 +98,8 @@ export default function Dashboard() {
   const [data, setData] = useState<JsonData | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('favorites');
-  
-  // État des favoris (Liste des clés, ex: ['cac40', 'oat'])
   const [favorites, setFavorites] = useState<string[]>(['oat', 'inflation', 'cac40', 'sp500']); 
 
-  // Charger les favoris depuis le stockage local au démarrage
   useEffect(() => {
     const savedFavs = localStorage.getItem('my_favs');
     if (savedFavs) {
@@ -107,7 +112,7 @@ export default function Dashboard() {
   }, []);
 
   const toggleFavorite = (e: React.MouseEvent, key: string) => {
-    e.stopPropagation(); // Empêche d'ouvrir le graphique quand on clique sur l'étoile
+    e.stopPropagation(); 
     let newFavs = [];
     if (favorites.includes(key)) {
       newFavs = favorites.filter(k => k !== key);
@@ -128,7 +133,6 @@ export default function Dashboard() {
   };
   const getLastDate = (hist: DataPoint[]) => hist && hist.length ? new Date(hist[hist.length-1].date).toLocaleDateString('fr-FR') : '—';
 
-  // Déterminer les clés à afficher selon l'onglet
   let keysToDisplay: string[] = [];
   if (activeTab === 'favorites') {
     keysToDisplay = favorites;
@@ -147,7 +151,6 @@ export default function Dashboard() {
           </p>
         </header>
 
-        {/* ONGLETS */}
         <div className="flex flex-wrap gap-2 mb-8 border-b border-slate-200 pb-1">
           {CATEGORIES.map((cat) => (
             <button
@@ -166,7 +169,6 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* MESSAGE SI AUCUN FAVORI */}
         {activeTab === 'favorites' && keysToDisplay.length === 0 && (
           <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl">
             <p className="text-slate-400 mb-2 text-lg">Votre tableau de bord est vide.</p>
@@ -174,7 +176,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* GRILLE */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-10">
           {keysToDisplay.map((key) => {
             if (!data.indices[key]) return null;
@@ -198,7 +199,6 @@ export default function Dashboard() {
                   ${isSelected ? 'ring-1' : 'hover:shadow-lg border-slate-200'}
                 `}
               >
-                {/* BOUTON ÉTOILE */}
                 <button 
                   onClick={(e) => toggleFavorite(e, key)}
                   className={`
@@ -233,7 +233,6 @@ export default function Dashboard() {
           })}
         </div>
 
-        {/* ZONE GRAPHIQUE */}
         <div className={`transition-all duration-500 ease-out ${selectedKey ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 h-0 overflow-hidden'}`}>
           {selectedKey && data.indices[selectedKey] && (
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-slate-100" style={{ borderTop: `4px solid ${THEME[selectedKey]?.color || '#ccc'}` }}>
