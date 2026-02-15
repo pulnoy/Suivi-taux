@@ -6,6 +6,8 @@ const FRED_API_KEY = process.env.FRED_API_KEY;
 const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
 // --- FONCTIONS UTILITAIRES ---
+
+// 1. Récupération FRED (Taux & Macro)
 async function fetchFredSeries(seriesId) {
   if (!FRED_API_KEY) return [];
   try {
@@ -27,6 +29,7 @@ async function fetchFredSeries(seriesId) {
   return [];
 }
 
+// 2. Récupération Inflation (Calcul IPCH)
 async function getInflationFromIndex() {
   const indices = await fetchFredSeries('CP0000FRM086NEST'); // HICP France
   if (!indices || indices.length < 13) return [];
@@ -42,6 +45,7 @@ async function getInflationFromIndex() {
   return inflationHistory;
 }
 
+// 3. Récupération YAHOO FINANCE (Actions & Divers)
 async function fetchYahooHistory(ticker) {
   try {
     const timestamp = new Date().getTime();
@@ -67,6 +71,7 @@ async function fetchYahooHistory(ticker) {
   return [];
 }
 
+// 4. SCPI (Données Annuelles manuelles)
 function getScpiHistory() {
   return [
     { date: "2021-01-01", value: 4.49 },
@@ -77,27 +82,30 @@ function getScpiHistory() {
   ];
 }
 
+// --- EXÉCUTION PRINCIPALE ---
 async function main() {
   console.log("Début de la mise à jour complète...");
 
-  // 1. MACRO
+  // A. MACRO & TAUX
   const historyOat = await fetchFredSeries('IRLTLT01FRM156N'); 
   const historyInflation = await getInflationFromIndex();
   const historyEstr = await fetchFredSeries('ECBESTRVOLWGTTRMDMNRT');
   const historyEurUsd = await fetchYahooHistory('EURUSD=X');
 
-  // 2. ACTIONS
+  // B. ACTIONS FRANCE / EUROPE
   const historyCac40 = await fetchYahooHistory('%5EFCHI'); 
-  const historyCacMid = await fetchYahooHistory('%5ECM60'); 
-  const historyStoxx50 = await fetchYahooHistory('%5ESTOXX50E'); 
-  const historySP500 = await fetchYahooHistory('%5EGSPC'); 
-  const historyNasdaq = await fetchYahooHistory('%5ENDX'); 
-  const historyWorld = await fetchYahooHistory('URTH'); 
-  const historyEmerging = await fetchYahooHistory('EEM'); 
+  const historyCacMid = await fetchYahooHistory('%5ECM60'); // CAC Mid 60
+  const historyStoxx50 = await fetchYahooHistory('%5ESTOXX50E'); // Euro Stoxx 50
 
-  // 3. DIVERS
-  const historyBrent = await fetchYahooHistory('BZ=F'); 
-  const historyGold = await fetchYahooHistory('GC=F'); 
+  // C. ACTIONS INTERNATIONALES
+  const historySP500 = await fetchYahooHistory('%5EGSPC'); // S&P 500
+  const historyNasdaq = await fetchYahooHistory('%5ENDX'); // Nasdaq 100
+  const historyWorld = await fetchYahooHistory('URTH'); // MSCI World (ETF)
+  const historyEmerging = await fetchYahooHistory('EEM'); // Emerging Markets (ETF)
+
+  // D. DIVERSIFICATION
+  const historyBrent = await fetchYahooHistory('BZ=F'); // Pétrole Brent
+  const historyGold = await fetchYahooHistory('GC=F'); // Or
   const historyScpi = getScpiHistory(); 
 
   const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : 0;
@@ -105,17 +113,21 @@ async function main() {
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
     indices: {
+      // Clés identiques à celles utilisées dans page.tsx
       oat: { titre: "OAT 10 ans", valeur: getLast(historyOat), suffixe: "%", historique: historyOat },
       inflation: { titre: "Inflation (1 an)", valeur: getLast(historyInflation), suffixe: "%", historique: historyInflation },
       estr: { titre: "€STR", valeur: getLast(historyEstr), suffixe: "%", historique: historyEstr },
       eurusd: { titre: "Euro / Dollar", valeur: getLast(historyEurUsd), suffixe: "$", historique: historyEurUsd },
+
       cac40: { titre: "CAC 40", valeur: getLast(historyCac40), suffixe: "pts", historique: historyCac40 },
       cacmid: { titre: "CAC Mid 60", valeur: getLast(historyCacMid), suffixe: "pts", historique: historyCacMid },
       stoxx50: { titre: "Euro Stoxx 50", valeur: getLast(historyStoxx50), suffixe: "pts", historique: historyStoxx50 },
+
       sp500: { titre: "S&P 500", valeur: getLast(historySP500), suffixe: "pts", historique: historySP500 },
       nasdaq: { titre: "Nasdaq 100", valeur: getLast(historyNasdaq), suffixe: "pts", historique: historyNasdaq },
       world: { titre: "MSCI World", valeur: getLast(historyWorld), suffixe: "$", historique: historyWorld },
       emerging: { titre: "Émergents", valeur: getLast(historyEmerging), suffixe: "$", historique: historyEmerging },
+
       brent: { titre: "Pétrole (Brent)", valeur: getLast(historyBrent), suffixe: "$", historique: historyBrent },
       gold: { titre: "Or (Once)", valeur: getLast(historyGold), suffixe: "$", historique: historyGold },
       scpi: { titre: "Moyenne SCPI", valeur: getLast(historyScpi), suffixe: "%", historique: historyScpi },
