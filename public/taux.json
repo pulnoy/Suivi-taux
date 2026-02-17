@@ -1,9 +1,9 @@
 {
-  "date_mise_a_jour": "2026-02-16T08:59:52.727Z",
+  "date_mise_a_jour": "2026-02-17T08:58:05.505Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
-      "valeur": 3.56,
+      "valeur": 3.53,
       "suffixe": "%",
       "historique": [
         {
@@ -365,6 +365,11 @@
           "date": "2025-12-01",
           "value": 3.56,
           "timestamp": 1764547200000
+        },
+        {
+          "date": "2026-01-01",
+          "value": 3.53,
+          "timestamp": 1767225600000
         }
       ]
     },
@@ -8459,18 +8464,19 @@
           "date": "2026-02-12",
           "value": 1.93,
           "timestamp": 1770854400000
+        },
+        {
+          "date": "2026-02-13",
+          "value": 1.93,
+          "timestamp": 1770940800000
         }
       ]
     },
     "eurusd": {
       "titre": "Euro / Dollar",
-      "valeur": 1.19,
+      "valeur": 1.18,
       "suffixe": "$",
       "historique": [
-        {
-          "date": "2024-02-16",
-          "value": 1.08
-        },
         {
           "date": "2024-02-19",
           "value": 1.08
@@ -10534,18 +10540,18 @@
         {
           "date": "2026-02-16",
           "value": 1.19
+        },
+        {
+          "date": "2026-02-17",
+          "value": 1.18
         }
       ]
     },
     "cac40": {
       "titre": "CAC 40",
-      "valeur": 8321.35,
+      "valeur": 8323.12,
       "suffixe": "pts",
       "historique": [
-        {
-          "date": "2024-02-16",
-          "value": 7768.18
-        },
         {
           "date": "2024-02-19",
           "value": 7768.55
@@ -12580,19 +12586,19 @@
         },
         {
           "date": "2026-02-16",
-          "value": 8321.35
+          "value": 8316.5
+        },
+        {
+          "date": "2026-02-17",
+          "value": 8323.12
         }
       ]
     },
     "cacmid": {
       "titre": "CAC Mid 60",
-      "valeur": 154.5,
+      "valeur": 154.25,
       "suffixe": "pts",
       "historique": [
-        {
-          "date": "2024-02-16",
-          "value": 118.21
-        },
         {
           "date": "2024-02-19",
           "value": 118.28
@@ -14627,19 +14633,19 @@
         },
         {
           "date": "2026-02-16",
-          "value": 154.5
+          "value": 153.94
+        },
+        {
+          "date": "2026-02-17",
+          "value": 154.25
         }
       ]
     },
     "stoxx50": {
       "titre": "Euro Stoxx 50",
-      "valeur": 6001.88,
+      "valeur": 5980.02,
       "suffixe": "pts",
       "historique": [
-        {
-          "date": "2024-02-16",
-          "value": 4765.65
-        },
         {
           "date": "2024-02-19",
           "value": 4763.07
@@ -16626,7 +16632,11 @@
         },
         {
           "date": "2026-02-16",
-          "value": 6001.88
+          "value": 5978.88
+        },
+        {
+          "date": "2026-02-17",
+          "value": 5980.02
         }
       ]
     },
@@ -24692,13 +24702,9 @@
     },
     "brent": {
       "titre": "Pétrole (Brent)",
-      "valeur": 67.56,
+      "valeur": 67.88,
       "suffixe": "$",
       "historique": [
-        {
-          "date": "2024-02-16",
-          "value": 83.47
-        },
         {
           "date": "2024-02-20",
           "value": 82.34
@@ -26704,20 +26710,16 @@
           "value": 67.75
         },
         {
-          "date": "2026-02-16",
-          "value": 67.56
+          "date": "2026-02-17",
+          "value": 67.88
         }
       ]
     },
     "gold": {
       "titre": "Or (Once)",
-      "valeur": 5023.4,
+      "valeur": 4941.7,
       "suffixe": "$",
       "historique": [
-        {
-          "date": "2024-02-16",
-          "value": 2011.5
-        },
         {
           "date": "2024-02-20",
           "value": 2027.5
@@ -28723,20 +28725,16 @@
           "value": 5022
         },
         {
-          "date": "2026-02-16",
-          "value": 5023.4
+          "date": "2026-02-17",
+          "value": 4941.7
         }
       ]
     },
     "btc": {
       "titre": "Bitcoin",
-      "valeur": 68742.27,
+      "valeur": 68116.35,
       "suffixe": "$",
       "historique": [
-        {
-          "date": "2024-02-16",
-          "value": 52160.2
-        },
         {
           "date": "2024-02-17",
           "value": 51663
@@ -31659,7 +31657,11 @@
         },
         {
           "date": "2026-02-16",
-          "value": 68742.27
+          "value": 68843.16
+        },
+        {
+          "date": "2026-02-17",
+          "value": 68116.35
         }
       ]
     },
