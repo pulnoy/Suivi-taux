@@ -42,19 +42,18 @@ const MultiLineChart = ({ datasets, mode }: { datasets: {key: string, data: Data
 
   const height = 300; const width = 1000; const paddingY = 30;
 
-  // 1. ALIGNEMENT TEMPOREL : Trouver la date de début commune la plus récente
+  // 1. ALIGNEMENT TEMPOREL
   const startTimes = datasets.map(ds => new Date(ds.data[0]?.date || 0).getTime());
   const commonStartTime = datasets.length > 0 ? Math.max(...startTimes) : 0;
 
   // 2. PRÉPARATION DES DONNÉES
   let allTimes: number[] = [];
   const processedDatasets = datasets.map(ds => {
-    // On ne garde que les données à partir de la date commune
     const filteredData = ds.data.filter(p => new Date(p.date).getTime() >= commonStartTime);
     if (!filteredData.length) return { ...ds, mappedData: [], minVal: 0, maxVal: 0, minPct: 0, maxPct: 0 };
     
     const firstVal = filteredData[0].value;
-    const isRate = ds.suffix === '%'; // Détecte si la valeur est DÉJÀ un taux
+    const isRate = ds.suffix === '%'; 
 
     const mappedData = filteredData.map(p => {
       const time = new Date(p.date).getTime();
@@ -62,10 +61,8 @@ const MultiLineChart = ({ datasets, mode }: { datasets: {key: string, data: Data
       
       let pct = 0;
       if (isRate) {
-        // Pour les taux (ex: OAT) : Variation absolue (ex: 3% - 1% = +2 points/%)
         pct = p.value - firstVal;
       } else {
-        // Pour les indices (ex: CAC40) : Évolution relative
         pct = firstVal !== 0 ? ((p.value - firstVal) / Math.abs(firstVal)) * 100 : 0;
       }
       return { ...p, time, pct };
@@ -270,15 +267,12 @@ export default function Dashboard() {
         {/* ZONE GRAPHIQUE */}
         <div className={`mb-10 transition-all duration-500 ease-out ${selectedKeys.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 h-0 overflow-hidden'}`}>
           <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-slate-100 border-t-4 border-t-[#003A7A]">
-            <div className="flex justify-between items-end mb-2">
+            <div className="flex justify-between items-end mb-4">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
                   Comparateur de Marchés
                   <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{selectedKeys.length}</span>
                 </h2>
-                <p className="text-sm text-slate-500 mt-1">
-                  {chartMode === 'percent' ? "Comparaison de l'évolution depuis une date de départ commune." : "Superposition des courbes (échelles indépendantes)."}
-                </p>
               </div>
               <button onClick={() => setSelectedKeys([])} className="text-xs font-bold text-slate-400 hover:text-red-500 underline">
                 Tout effacer
@@ -287,11 +281,12 @@ export default function Dashboard() {
             
             <MultiLineChart datasets={chartDatasets} mode={chartMode} />
             
-            <div className="flex flex-wrap gap-4 mt-4 justify-center">
+            {/* LÉGENDE : Affichage des NOMS au lieu des SOURCES */}
+            <div className="flex flex-wrap gap-5 mt-5 justify-center">
               {chartDatasets.map(ds => (
-                <div key={ds.key} className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                  <span className="w-2 h-2 rounded-full" style={{backgroundColor: ds.color}}></span>
-                  {THEME[ds.key]?.source}
+                <div key={ds.key} className="flex items-center gap-2 text-sm font-semibold text-slate-700 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+                  <span className="w-3 h-3 rounded-full shadow-sm" style={{backgroundColor: ds.color}}></span>
+                  {ds.title}
                 </div>
               ))}
             </div>
