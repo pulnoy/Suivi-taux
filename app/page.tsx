@@ -34,7 +34,7 @@ const THEME: { [key: string]: { color: string; bg: string; label: string; source
 };
 
 // --- GRAPHIQUE MULTI-COURBES INTELLIGENT ---
-const MultiLineChart = ({ datasets, mode }: { datasets: {key: string, data: DataPoint[], color: string, title: string, suffix: string}[], mode: 'real' | 'percent' }) => {
+const MultiLineChart = ({ datasets, mode }: { datasets: {key: string, data: DataPoint[], color: string, title: string, suffix: string}[], mode: 'real' | 'percent' | 'absolute' }) => {
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -75,8 +75,12 @@ const MultiLineChart = ({ datasets, mode }: { datasets: {key: string, data: Data
 
   const minTime = Math.min(...allTimes);
   const maxTime = Math.max(...allTimes);
+  
+  // Limites Globales pour les modes partagés
   const globalMinPct = Math.min(...processedDatasets.map(ds => ds.minPct));
   const globalMaxPct = Math.max(...processedDatasets.map(ds => ds.maxPct));
+  const globalMinVal = Math.min(...processedDatasets.map(ds => ds.minVal));
+  const globalMaxVal = Math.max(...processedDatasets.map(ds => ds.maxVal));
 
   const getX = (time: number) => (maxTime === minTime) ? width / 2 : ((time - minTime) / (maxTime - minTime)) * width;
   
@@ -84,6 +88,9 @@ const MultiLineChart = ({ datasets, mode }: { datasets: {key: string, data: Data
     if (mode === 'percent') {
       const range = globalMaxPct - globalMinPct || 1;
       return height - paddingY - ((point.pct - globalMinPct) / range) * (height - paddingY * 2);
+    } else if (mode === 'absolute') {
+      const range = globalMaxVal - globalMinVal || 1;
+      return height - paddingY - ((point.value - globalMinVal) / range) * (height - paddingY * 2);
     } else {
       const range = ds.maxVal - ds.minVal || 1;
       return height - paddingY - ((point.value - ds.minVal) / range) * (height - paddingY * 2);
@@ -108,8 +115,14 @@ const MultiLineChart = ({ datasets, mode }: { datasets: {key: string, data: Data
   return (
     <div className="w-full mt-4 relative select-none">
       <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2 px-2 uppercase tracking-wide">
-         <span>{mode === 'percent' ? `Min: ${globalMinPct.toFixed(1)}%` : 'Échelles propres par courbe'}</span>
-         <span>{mode === 'percent' ? `Max: ${globalMaxPct.toFixed(1)}%` : ''}</span>
+         <span>
+           {mode === 'percent' ? `Min: ${globalMinPct.toFixed(1)}%` : 
+            mode === 'absolute' ? `Min: ${globalMinVal.toFixed(2)}%` : 'Échelles propres par courbe'}
+         </span>
+         <span>
+           {mode === 'percent' ? `Max: ${globalMaxPct.toFixed(1)}%` : 
+            mode === 'absolute' ? `Max: ${globalMaxVal.toFixed(2)}%` : ''}
+         </span>
       </div>
 
       <div className="relative w-full h-[300px]">
@@ -122,9 +135,12 @@ const MultiLineChart = ({ datasets, mode }: { datasets: {key: string, data: Data
              setHoverTime(minTime + ((touch.clientX - rect.left) / rect.width) * (maxTime - minTime));
           }}
         >
-          {/* Ligne 0% en mode évolution */}
+          {/* Lignes 0% dynamiques */}
           {mode === 'percent' && globalMinPct < 0 && globalMaxPct > 0 && (
              <line x1="0" y1={getY(null, {pct: 0})} x2={width} y2={getY(null, {pct: 0})} stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="6 4" />
+          )}
+          {mode === 'absolute' && globalMinVal < 0 && globalMaxVal > 0 && (
+             <line x1="0" y1={getY(null, {value: 0})} x2={width} y2={getY(null, {value: 0})} stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="6 4" />
           )}
 
           {processedDatasets.map((ds, i) => {
@@ -199,8 +215,8 @@ export default function Dashboard() {
   const [data, setData] = useState<JsonData | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string>('favorites');
-  const [favorites, setFavorites] = useState<string[]>(['cac40', 'inflation']); 
-  const [chartMode, setChartMode] = useState<'real' | 'percent'>('real');
+  const [favorites, setFavorites] = useState<string[]>(['oat', 'inflation', 'scpi', 'estr']); 
+  const [chartMode, setChartMode] = useState<'real' | 'percent' | 'absolute'>('absolute');
 
   useEffect(() => {
     const savedFavs = localStorage.getItem('my_favs');
@@ -241,6 +257,12 @@ export default function Dashboard() {
     suffix: data.indices[key]?.suffixe || ''
   })).filter(ds => ds.data.length > 0);
 
+  // VÉRIFICATION : Est-ce que toutes les tuiles sélectionnées sont des taux en % ?
+  const areAllRates = chartDatasets.length > 0 && chartDatasets.every(ds => ds.suffix === '%');
+  
+  // Si on est en mode absolu mais qu'on a ajouté le CAC40, on repasse automatiquement en mode réel
+  const effectiveMode = (chartMode === 'absolute' && !areAllRates) ? 'real' : chartMode;
+
   return (
     <main className="min-h-screen bg-slate-50/80 p-6 md:p-12 font-sans flex flex-col">
       <div className="max-w-7xl mx-auto w-full flex-grow">
@@ -253,11 +275,19 @@ export default function Dashboard() {
           </div>
           
           {selectedKeys.length > 0 && (
-            <div className="flex bg-white rounded-lg p-1 shadow-sm border border-slate-200">
-              <button onClick={() => setChartMode('real')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${chartMode === 'real' ? 'bg-[#003A7A] text-white shadow' : 'text-slate-500 hover:bg-slate-100'}`}>
+            <div className="flex flex-wrap gap-1 bg-white rounded-lg p-1 shadow-sm border border-slate-200">
+              <button onClick={() => setChartMode('real')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${effectiveMode === 'real' ? 'bg-[#003A7A] text-white shadow' : 'text-slate-500 hover:bg-slate-100'}`}>
                 Valeurs Réelles (Formes)
               </button>
-              <button onClick={() => setChartMode('percent')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${chartMode === 'percent' ? 'bg-[#003A7A] text-white shadow' : 'text-slate-500 hover:bg-slate-100'}`}>
+              
+              {/* BOUTON EXCLUSIF POUR LES TAUX */}
+              {areAllRates && (
+                <button onClick={() => setChartMode('absolute')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${effectiveMode === 'absolute' ? 'bg-[#003A7A] text-white shadow' : 'text-slate-500 hover:bg-slate-100'}`}>
+                  Comparaison Absolue (Taux)
+                </button>
+              )}
+
+              <button onClick={() => setChartMode('percent')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${effectiveMode === 'percent' ? 'bg-[#003A7A] text-white shadow' : 'text-slate-500 hover:bg-slate-100'}`}>
                 Évolution (Base 100)
               </button>
             </div>
@@ -279,9 +309,9 @@ export default function Dashboard() {
               </button>
             </div>
             
-            <MultiLineChart datasets={chartDatasets} mode={chartMode} />
+            <MultiLineChart datasets={chartDatasets} mode={effectiveMode} />
             
-            {/* LÉGENDE : Affichage des NOMS au lieu des SOURCES */}
+            {/* LÉGENDE */}
             <div className="flex flex-wrap gap-5 mt-5 justify-center">
               {chartDatasets.map(ds => (
                 <div key={ds.key} className="flex items-center gap-2 text-sm font-semibold text-slate-700 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
