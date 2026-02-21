@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-02-20T08:52:56.526Z",
+  "date_mise_a_jour": "2026-02-21T08:41:06.125Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -8484,6 +8484,11 @@
           "date": "2026-02-18",
           "value": 1.93,
           "timestamp": 1771372800000
+        },
+        {
+          "date": "2026-02-19",
+          "value": 1.93,
+          "timestamp": 1771459200000
         }
       ]
     },
@@ -10572,7 +10577,7 @@
     },
     "cac40": {
       "titre": "CAC 40",
-      "valeur": 8436.52,
+      "valeur": 8515.49,
       "suffixe": "pts",
       "historique": [
         {
@@ -12621,13 +12626,13 @@
         },
         {
           "date": "2026-02-20",
-          "value": 8436.52
+          "value": 8515.49
         }
       ]
     },
     "cacmid": {
       "titre": "CAC Mid 60",
-      "valeur": 155.82,
+      "valeur": 156.95,
       "suffixe": "pts",
       "historique": [
         {
@@ -14676,13 +14681,13 @@
         },
         {
           "date": "2026-02-20",
-          "value": 155.82
+          "value": 156.95
         }
       ]
     },
     "stoxx50": {
       "titre": "Euro Stoxx 50",
-      "valeur": 6069.27,
+      "valeur": 6131.31,
       "suffixe": "pts",
       "historique": [
         {
@@ -16683,19 +16688,15 @@
         },
         {
           "date": "2026-02-20",
-          "value": 6069.27
+          "value": 6131.31
         }
       ]
     },
     "sp500": {
       "titre": "S&P 500",
-      "valeur": 6861.89,
+      "valeur": 6909.51,
       "suffixe": "pts",
       "historique": [
-        {
-          "date": "2024-02-20",
-          "value": 4975.51
-        },
         {
           "date": "2024-02-21",
           "value": 4981.8
@@ -18699,18 +18700,18 @@
         {
           "date": "2026-02-19",
           "value": 6861.89
+        },
+        {
+          "date": "2026-02-20",
+          "value": 6909.51
         }
       ]
     },
     "nasdaq": {
       "titre": "Nasdaq 100",
-      "valeur": 24797.34,
+      "valeur": 25012.62,
       "suffixe": "pts",
       "historique": [
-        {
-          "date": "2024-02-20",
-          "value": 17546.1
-        },
         {
           "date": "2024-02-21",
           "value": 17478.91
@@ -20714,18 +20715,18 @@
         {
           "date": "2026-02-19",
           "value": 24797.34
+        },
+        {
+          "date": "2026-02-20",
+          "value": 25012.62
         }
       ]
     },
     "world": {
       "titre": "MSCI World",
-      "valeur": 189.89,
+      "valeur": 191.19,
       "suffixe": "$",
       "historique": [
-        {
-          "date": "2024-02-20",
-          "value": 137.61
-        },
         {
           "date": "2024-02-21",
           "value": 137.7
@@ -22729,18 +22730,18 @@
         {
           "date": "2026-02-19",
           "value": 189.89
+        },
+        {
+          "date": "2026-02-20",
+          "value": 191.19
         }
       ]
     },
     "emerging": {
       "titre": "Émergents",
-      "valeur": 61.04,
+      "valeur": 62.34,
       "suffixe": "$",
       "historique": [
-        {
-          "date": "2024-02-20",
-          "value": 40.14
-        },
         {
           "date": "2024-02-21",
           "value": 40.21
@@ -24744,18 +24745,18 @@
         {
           "date": "2026-02-19",
           "value": 61.04
+        },
+        {
+          "date": "2026-02-20",
+          "value": 62.34
         }
       ]
     },
     "brent": {
       "titre": "Pétrole (Brent)",
-      "valeur": 71.46,
+      "valeur": 71.76,
       "suffixe": "$",
       "historique": [
-        {
-          "date": "2024-02-20",
-          "value": 82.34
-        },
         {
           "date": "2024-02-21",
           "value": 83.03
@@ -26770,19 +26771,15 @@
         },
         {
           "date": "2026-02-20",
-          "value": 71.46
+          "value": 71.76
         }
       ]
     },
     "gold": {
       "titre": "Or (Once)",
-      "valeur": 5041.7,
+      "valeur": 5059.3,
       "suffixe": "$",
       "historique": [
-        {
-          "date": "2024-02-20",
-          "value": 2027.5
-        },
         {
           "date": "2024-02-21",
           "value": 2022.3
@@ -28797,19 +28794,15 @@
         },
         {
           "date": "2026-02-20",
-          "value": 5041.7
+          "value": 5059.3
         }
       ]
     },
     "btc": {
       "titre": "Bitcoin",
-      "valeur": 67774.32,
+      "valeur": 67935.65,
       "suffixe": "$",
       "historique": [
-        {
-          "date": "2024-02-20",
-          "value": 52284.88
-        },
         {
           "date": "2024-02-21",
           "value": 51839.18
@@ -31732,7 +31725,11 @@
         },
         {
           "date": "2026-02-20",
-          "value": 67774.32
+          "value": 68005.42
+        },
+        {
+          "date": "2026-02-21",
+          "value": 67935.65
         }
       ]
     },
