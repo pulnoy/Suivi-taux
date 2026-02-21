@@ -1,391 +1,476 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { IndexCard } from '@/components/index-card';
+import { EnhancedChart } from '@/components/enhanced-chart';
+import { Comparator } from '@/components/comparator';
+import { CorrelationView } from '@/components/correlation-view';
+import { IndexInfoModal } from '@/components/index-info-modal';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { INDEX_EDUCATION } from '@/lib/educational-data';
+import { filterDataByPeriod, formatNumber } from '@/lib/financial-utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { 
+  LayoutDashboard, 
+  GitCompareArrows, 
+  Network, 
+  Star,
+  RefreshCw,
+  ChevronDown,
+  X
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // --- TYPES ---
-type DataPoint = { date: string; value: number; time?: number; pct?: number };
-type Indicateur = { titre: string; valeur: number; suffixe: string; historique: DataPoint[]; };
-type JsonData = { date_mise_a_jour: string; indices: { [key: string]: Indicateur; }; };
+type DataPoint = { date: string; value: number; timestamp?: number };
+type Indicateur = { titre: string; valeur: number; suffixe: string; historique: DataPoint[] };
+type JsonData = { date_mise_a_jour: string; indices: Record<string, Indicateur> };
 
 // --- CONFIGURATION ---
 const CATEGORIES = [
-  { id: 'favorites', label: '⭐ Mes Favoris', keys: [] as string[] },
-  { id: 'france_europe', label: '🇫🇷 France & Europe', keys: ['oat', 'inflation', 'cac40', 'cacmid', 'stoxx50'] },
-  { id: 'monde_us', label: '🌎 Monde & US', keys: ['sp500', 'nasdaq', 'world', 'emerging', 'eurusd'] },
-  { id: 'divers', label: '⚖️ Diversification', keys: ['estr', 'scpi', 'gold', 'brent', 'btc'] },
+  { id: 'favorites', label: 'Mes Favoris', icon: Star, keys: [] as string[] },
+  { id: 'france_europe', label: 'France & Europe', emoji: '🇫🇷', keys: ['oat', 'inflation', 'cac40', 'cacmid', 'stoxx50'] },
+  { id: 'monde_us', label: 'Monde & US', emoji: '🌎', keys: ['sp500', 'nasdaq', 'world', 'emerging', 'eurusd'] },
+  { id: 'divers', label: 'Diversification', emoji: '⚖️', keys: ['estr', 'scpi', 'gold', 'brent', 'btc'] },
 ];
 
-const THEME: { [key: string]: { color: string; bg: string; label: string; source: string } } = {
-  estr: { color: '#2563eb', bg: '#e8f0ff', label: 'Monétaire', source: 'Source : BCE (via FRED)' },
-  oat: { color: '#16a34a', bg: '#e9f9ef', label: 'Taux État', source: 'Source : Banque de France (Moy. Mensuelle)' },
-  inflation: { color: '#ef4444', bg: '#fef2f2', label: 'Prix Conso', source: 'Source : INSEE / Eurostat (HICP)' },
-  eurusd: { color: '#0ea5e9', bg: '#e0f2fe', label: 'Change', source: 'Source : Yahoo Finance' },
-  cac40: { color: '#003A7A', bg: '#e6f0ff', label: 'Large Caps', source: 'Source : Yahoo Finance' },
-  cacmid: { color: '#4f46e5', bg: '#eef2ff', label: 'Mid Caps', source: 'Source : Yahoo Finance (ETF Amundi C6E)' },
-  stoxx50: { color: '#0d9488', bg: '#f0fdfa', label: 'Europe', source: 'Source : Yahoo Finance' },
-  sp500: { color: '#1e40af', bg: '#dbeafe', label: 'USA Large', source: 'Source : Yahoo Finance' },
-  nasdaq: { color: '#7c3aed', bg: '#f3e8ff', label: 'USA Tech', source: 'Source : Yahoo Finance' },
-  world: { color: '#3b82f6', bg: '#eff6ff', label: 'Monde', source: 'Source : Yahoo Finance (ETF Proxy)' },
-  emerging: { color: '#d97706', bg: '#fffbeb', label: 'Émergents', source: 'Source : Yahoo Finance (ETF Proxy)' },
-  scpi: { color: '#7c3aed', bg: '#f3e8ff', label: 'Pierre Papier', source: 'Source : ASPIM (Annuel)' },
-  gold: { color: '#F2B301', bg: '#fffce6', label: 'Valeur Refuge', source: 'Source : Yahoo Finance' },
-  brent: { color: '#334155', bg: '#f1f5f9', label: 'Énergie', source: 'Source : Yahoo Finance' },
-  btc: { color: '#f7931a', bg: '#fff7ed', label: 'Crypto', source: 'Source : Yahoo Finance' },
-};
+const DEFAULT_FAVORITES = ['oat', 'inflation', 'scpi', 'estr'];
 
-// --- GRAPHIQUE MULTI-COURBES INTELLIGENT ---
-const MultiLineChart = ({ datasets, mode }: { datasets: {key: string, data: DataPoint[], color: string, title: string, suffix: string}[], mode: 'real' | 'percent' | 'absolute' }) => {
-  const [hoverTime, setHoverTime] = useState<number | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
+type Period = '1M' | '3M' | '6M' | '1A' | '5A' | 'MAX';
 
-  if (!datasets || datasets.length === 0) return <div className="text-gray-400 text-sm py-8 text-center">Sélectionnez un indice.</div>;
-
-  const height = 300; const width = 1000; const paddingY = 30;
-
-  // 1. ALIGNEMENT TEMPOREL
-  const startTimes = datasets.map(ds => new Date(ds.data[0]?.date || 0).getTime());
-  const commonStartTime = datasets.length > 0 ? Math.max(...startTimes) : 0;
-
-  // 2. PRÉPARATION DES DONNÉES
-  let allTimes: number[] = [];
-  const processedDatasets = datasets.map(ds => {
-    const filteredData = ds.data.filter(p => new Date(p.date).getTime() >= commonStartTime);
-    if (!filteredData.length) return { ...ds, mappedData: [], minVal: 0, maxVal: 0, minPct: 0, maxPct: 0 };
-    
-    const firstVal = filteredData[0].value;
-    const isRate = ds.suffix === '%'; 
-
-    const mappedData = filteredData.map(p => {
-      const time = new Date(p.date).getTime();
-      allTimes.push(time);
-      
-      let pct = 0;
-      if (isRate) {
-        pct = p.value - firstVal;
-      } else {
-        pct = firstVal !== 0 ? ((p.value - firstVal) / Math.abs(firstVal)) * 100 : 0;
-      }
-      return { ...p, time, pct };
-    });
-
-    const vals = mappedData.map(p => p.value);
-    const pcts = mappedData.map(p => p.pct);
-    return { ...ds, mappedData, minVal: Math.min(...vals), maxVal: Math.max(...vals), minPct: Math.min(...pcts), maxPct: Math.max(...pcts) };
-  });
-
-  const minTime = Math.min(...allTimes);
-  const maxTime = Math.max(...allTimes);
-  
-  // Limites Globales pour les modes partagés
-  const globalMinPct = Math.min(...processedDatasets.map(ds => ds.minPct));
-  const globalMaxPct = Math.max(...processedDatasets.map(ds => ds.maxPct));
-  const globalMinVal = Math.min(...processedDatasets.map(ds => ds.minVal));
-  const globalMaxVal = Math.max(...processedDatasets.map(ds => ds.maxVal));
-
-  const getX = (time: number) => (maxTime === minTime) ? width / 2 : ((time - minTime) / (maxTime - minTime)) * width;
-  
-  const getY = (ds: any, point: any) => {
-    if (mode === 'percent') {
-      const range = globalMaxPct - globalMinPct || 1;
-      return height - paddingY - ((point.pct - globalMinPct) / range) * (height - paddingY * 2);
-    } else if (mode === 'absolute') {
-      const range = globalMaxVal - globalMinVal || 1;
-      return height - paddingY - ((point.value - globalMinVal) / range) * (height - paddingY * 2);
-    } else {
-      const range = ds.maxVal - ds.minVal || 1;
-      return height - paddingY - ((point.value - ds.minVal) / range) * (height - paddingY * 2);
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    setHoverTime(minTime + (x / rect.width) * (maxTime - minTime));
-  };
-
-  const closestPoints = hoverTime !== null ? processedDatasets.map(ds => {
-    if (!ds.mappedData.length) return null;
-    const closest = ds.mappedData.reduce((prev, curr) => Math.abs(curr.time - hoverTime) < Math.abs(prev.time - hoverTime) ? curr : prev);
-    return { ...closest, dsColor: ds.color, dsTitle: ds.title, dsSuffix: ds.suffix, isRate: ds.suffix === '%' };
-  }).filter(Boolean) : [];
-
-  const showFill = datasets.length === 1;
-
+// --- LOADING SKELETON ---
+function LoadingSkeleton() {
   return (
-    <div className="w-full mt-4 relative select-none">
-      <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2 px-2 uppercase tracking-wide">
-         <span>
-           {mode === 'percent' ? `Min: ${globalMinPct.toFixed(1)}%` : 
-            mode === 'absolute' ? `Min: ${globalMinVal.toFixed(2)}%` : 'Échelles propres par courbe'}
-         </span>
-         <span>
-           {mode === 'percent' ? `Max: ${globalMaxPct.toFixed(1)}%` : 
-            mode === 'absolute' ? `Max: ${globalMaxVal.toFixed(2)}%` : ''}
-         </span>
-      </div>
-
-      <div className="relative w-full h-[300px]">
-        <svg 
-          ref={svgRef} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" 
-          className="w-full h-full bg-slate-50 rounded-xl border border-slate-200 shadow-inner overflow-hidden cursor-crosshair block"
-          onMouseMove={handleMouseMove} onMouseLeave={() => setHoverTime(null)}
-          onTouchMove={(e) => {
-             const touch = e.touches[0]; const rect = e.currentTarget.getBoundingClientRect();
-             setHoverTime(minTime + ((touch.clientX - rect.left) / rect.width) * (maxTime - minTime));
-          }}
-        >
-          {/* Lignes 0% dynamiques */}
-          {mode === 'percent' && globalMinPct < 0 && globalMaxPct > 0 && (
-             <line x1="0" y1={getY(null, {pct: 0})} x2={width} y2={getY(null, {pct: 0})} stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="6 4" />
-          )}
-          {mode === 'absolute' && globalMinVal < 0 && globalMaxVal > 0 && (
-             <line x1="0" y1={getY(null, {value: 0})} x2={width} y2={getY(null, {value: 0})} stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="6 4" />
-          )}
-
-          {processedDatasets.map((ds, i) => {
-            if (!ds.mappedData.length) return null;
-            const linePoints = ds.mappedData.map(p => `${getX(p.time)},${getY(ds, p)}`).join(' ');
-            return (
-              <g key={ds.key}>
-                {showFill && (
-                  <defs>
-                    <linearGradient id={`grad-${ds.key}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={ds.color} stopOpacity="0.3" /><stop offset="100%" stopColor="white" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                )}
-                {showFill && <polygon points={`${linePoints} ${width},${height} 0,${height}`} fill={`url(#grad-${ds.key})`} />}
-                <polyline points={linePoints} fill="none" stroke={ds.color} strokeWidth={datasets.length > 2 ? "2" : "3"} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-              </g>
-            );
-          })}
-
-          {hoverTime !== null && closestPoints.length > 0 && (
-            <>
-              <line x1={getX(hoverTime)} y1="0" x2={getX(hoverTime)} y2={height} stroke="#64748b" strokeWidth="1" strokeDasharray="4 4" />
-              {closestPoints.map((cp: any, i) => (
-                <circle key={i} cx={getX(cp.time)} cy={getY(processedDatasets.find(d=>d.title === cp.dsTitle), cp)} r="5" fill={cp.dsColor} stroke="white" strokeWidth="2" />
-              ))}
-            </>
-          )}
-        </svg>
-
-        {hoverTime !== null && closestPoints.length > 0 && (
-            <div className="absolute top-4 bg-slate-900/95 backdrop-blur text-white text-xs rounded-xl p-3 shadow-2xl pointer-events-none transform -translate-x-1/2 transition-none z-10 border border-slate-700 w-max min-w-[200px]" 
-                 style={{ left: `${((hoverTime - minTime) / (maxTime - minTime)) * 100}%`, marginLeft: hoverTime > (minTime + (maxTime-minTime)/2) ? '-80px' : '80px' }}>
-              <div className="font-medium text-slate-400 mb-2 pb-2 border-b border-slate-700/50">
-                {new Date(closestPoints[0].time).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </div>
-              <div className="flex flex-col gap-2">
-                {closestPoints.map((cp: any, i) => (
-                  <div key={i} className="flex justify-between items-center gap-6">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: cp.dsColor }}></span>
-                      <span className="font-semibold text-slate-200">{cp.dsTitle}</span>
-                    </div>
-                    <div className="text-right">
-                      {mode === 'percent' ? (
-                        <>
-                          <span className={`font-bold text-sm ${cp.pct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {cp.pct > 0 ? '+' : ''}{cp.pct.toFixed(2)}{cp.isRate ? ' pts' : '%'}
-                          </span>
-                          <span className="text-slate-500 text-[10px] ml-1.5 block">({cp.value}{cp.dsSuffix})</span>
-                        </>
-                      ) : (
-                        <span className="font-bold text-white text-sm">{cp.value} <span className="text-slate-400 font-normal text-xs">{cp.dsSuffix}</span></span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-        )}
-      </div>
-      <div className="flex justify-between text-xs text-slate-400 mt-2 px-2 uppercase tracking-wider font-medium">
-        <span>{new Date(minTime).toLocaleDateString('fr-FR', {month:'short', year:'numeric'})}</span>
-        <span>Aujourd'hui</span>
+    <div className="min-h-screen bg-background p-6 md:p-12">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-start mb-8">
+          <div>
+            <Skeleton className="h-10 w-80 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <Skeleton className="h-9 w-9 rounded-full" />
+        </div>
+        <Skeleton className="h-12 w-full mb-6" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-36 rounded-xl" />
+          ))}
+        </div>
       </div>
     </div>
   );
-};
+}
 
-// --- PAGE PRINCIPALE ---
+// --- MAIN PAGE ---
 export default function Dashboard() {
   const [data, setData] = useState<JsonData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [activeMainTab, setActiveMainTab] = useState('dashboard');
+  const [activeCategory, setActiveCategory] = useState('favorites');
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<string>('favorites');
-  const [favorites, setFavorites] = useState<string[]>(['oat', 'inflation', 'scpi', 'estr']); 
-  const [chartMode, setChartMode] = useState<'real' | 'percent' | 'absolute'>('absolute');
+  const [favorites, setFavorites] = useState<string[]>(DEFAULT_FAVORITES);
+  
+  const [chartMode, setChartMode] = useState<'real' | 'percent' | 'absolute'>('percent');
+  const [chartPeriod, setChartPeriod] = useState<Period>('1A');
+  const [showMA50, setShowMA50] = useState(false);
+  const [showMA200, setShowMA200] = useState(false);
+  
+  const [infoModalKey, setInfoModalKey] = useState<string | null>(null);
+  
+  // Comparator state
+  const [comparatorKeys, setComparatorKeys] = useState<string[]>(['oat', 'cac40']);
 
+  // Load favorites from localStorage
   useEffect(() => {
     const savedFavs = localStorage.getItem('my_favs');
-    if (savedFavs) { try { setFavorites(JSON.parse(savedFavs)); } catch (e) {} }
+    if (savedFavs) {
+      try { 
+        setFavorites(JSON.parse(savedFavs)); 
+      } catch (e) {
+        console.error('Error loading favorites:', e);
+      }
+    }
   }, []);
 
+  // Fetch data
   useEffect(() => {
-    fetch('/taux.json').then(res => res.json()).then(setData).catch(console.error);
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch('/taux.json');
+        if (!res.ok) throw new Error('Erreur lors du chargement des données');
+        const jsonData = await res.json();
+        setData(jsonData);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erreur inconnue');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
-  const toggleFavorite = (e: React.MouseEvent, key: string) => {
-    e.stopPropagation(); 
-    const newFavs = favorites.includes(key) ? favorites.filter(k => k !== key) : [...favorites, key];
-    setFavorites(newFavs);
-    localStorage.setItem('my_favs', JSON.stringify(newFavs));
-  };
+  // Toggle favorite
+  const toggleFavorite = useCallback((e: React.MouseEvent, key: string) => {
+    e.stopPropagation();
+    setFavorites(prev => {
+      const newFavs = prev.includes(key) 
+        ? prev.filter(k => k !== key) 
+        : [...prev, key];
+      localStorage.setItem('my_favs', JSON.stringify(newFavs));
+      return newFavs;
+    });
+  }, []);
 
-  const toggleSelection = (key: string) => {
-    setSelectedKeys(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-  };
+  // Toggle selection
+  const toggleSelection = useCallback((key: string) => {
+    setSelectedKeys(prev => 
+      prev.includes(key) 
+        ? prev.filter(k => k !== key) 
+        : prev.length < 5 ? [...prev, key] : prev
+    );
+  }, []);
 
-  if (!data) return <div className="min-h-screen flex items-center justify-center text-slate-500">Chargement...</div>;
+  // Show info modal
+  const showInfo = useCallback((e: React.MouseEvent, key: string) => {
+    e.stopPropagation();
+    setInfoModalKey(key);
+  }, []);
 
-  const getTrendIcon = (historique: DataPoint[]) => {
-    if (!historique || historique.length < 2) return '→';
-    const last = historique[historique.length - 1].value;
-    const prev = historique[historique.length - 2].value;
-    return last > prev ? '↗' : last < prev ? '↘' : '→';
-  };
+  // Clear selections
+  const clearSelections = useCallback(() => {
+    setSelectedKeys([]);
+  }, []);
 
-  let keysToDisplay: string[] = activeTab === 'favorites' ? favorites : (CATEGORIES.find(c => c.id === activeTab)?.keys || []);
+  // Get keys to display in current category
+  const keysToDisplay = useMemo(() => {
+    if (activeCategory === 'favorites') return favorites;
+    return CATEGORIES.find(c => c.id === activeCategory)?.keys || [];
+  }, [activeCategory, favorites]);
 
-  const chartDatasets = selectedKeys.map(key => ({
-    key,
-    data: data.indices[key]?.historique || [],
-    color: THEME[key]?.color || '#000',
-    title: data.indices[key]?.titre || key,
-    suffix: data.indices[key]?.suffixe || ''
-  })).filter(ds => ds.data.length > 0);
+  // Prepare chart datasets
+  const chartDatasets = useMemo(() => {
+    if (!data) return [];
+    return selectedKeys.map(key => {
+      const index = data.indices[key];
+      if (!index) return null;
+      
+      const filteredData = filterDataByPeriod(index.historique, chartPeriod);
+      return {
+        key,
+        data: filteredData,
+        color: INDEX_EDUCATION[key]?.color || '#64748b',
+        title: index.titre,
+        suffix: index.suffixe
+      };
+    }).filter(Boolean) as { key: string; data: DataPoint[]; color: string; title: string; suffix: string }[];
+  }, [data, selectedKeys, chartPeriod]);
 
-  // VÉRIFICATION : Est-ce que toutes les tuiles sélectionnées sont des taux en % ?
-  const areAllRates = chartDatasets.length > 0 && chartDatasets.every(ds => ds.suffix === '%');
-  
-  // Si on est en mode absolu mais qu'on a ajouté le CAC40, on repasse automatiquement en mode réel
-  const effectiveMode = (chartMode === 'absolute' && !areAllRates) ? 'real' : chartMode;
+  // Check if all selected are rates
+  const areAllRates = useMemo(() => {
+    return chartDatasets.length > 0 && chartDatasets.every(ds => ds.suffix === '%');
+  }, [chartDatasets]);
 
-  return (
-    <main className="min-h-screen bg-slate-50/80 p-6 md:p-12 font-sans flex flex-col">
-      <div className="max-w-7xl mx-auto w-full flex-grow">
-        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-4xl font-extrabold text-[#003A7A] tracking-tight">Pédagogie des marchés</h1>
-            <p className="text-sm font-medium text-slate-500 mt-1">
-              Mise à jour : {new Date(data.date_mise_a_jour).toLocaleDateString('fr-FR')}
-            </p>
-          </div>
-          
-          {selectedKeys.length > 0 && (
-            <div className="flex flex-wrap gap-1 bg-white rounded-lg p-1 shadow-sm border border-slate-200">
-              <button onClick={() => setChartMode('real')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${effectiveMode === 'real' ? 'bg-[#003A7A] text-white shadow' : 'text-slate-500 hover:bg-slate-100'}`}>
-                Valeurs Réelles (Formes)
-              </button>
-              
-              {/* BOUTON EXCLUSIF POUR LES TAUX */}
-              {areAllRates && (
-                <button onClick={() => setChartMode('absolute')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${effectiveMode === 'absolute' ? 'bg-[#003A7A] text-white shadow' : 'text-slate-500 hover:bg-slate-100'}`}>
-                  Comparaison Absolue (Taux)
-                </button>
-              )}
+  // Effective chart mode
+  const effectiveMode = chartMode === 'absolute' && !areAllRates ? 'real' : chartMode;
 
-              <button onClick={() => setChartMode('percent')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${effectiveMode === 'percent' ? 'bg-[#003A7A] text-white shadow' : 'text-slate-500 hover:bg-slate-100'}`}>
-                Évolution (Base 100)
-              </button>
-            </div>
-          )}
-        </header>
+  // Period buttons
+  const periodButtons: { value: Period; label: string }[] = [
+    { value: '1M', label: '1M' },
+    { value: '3M', label: '3M' },
+    { value: '6M', label: '6M' },
+    { value: '1A', label: '1A' },
+    { value: '5A', label: '5A' },
+    { value: 'MAX', label: 'Max' },
+  ];
 
-        {/* ZONE GRAPHIQUE */}
-        <div className={`mb-10 transition-all duration-500 ease-out ${selectedKeys.length > 0 ? 'opacity-100 translate-y-0' : 'opacity-0 h-0 overflow-hidden'}`}>
-          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border border-slate-100 border-t-4 border-t-[#003A7A]">
-            <div className="flex justify-between items-end mb-4">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-                  Comparateur de Marchés
-                  <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{selectedKeys.length}</span>
-                </h2>
-              </div>
-              <button onClick={() => setSelectedKeys([])} className="text-xs font-bold text-slate-400 hover:text-red-500 underline">
-                Tout effacer
-              </button>
-            </div>
-            
-            <MultiLineChart datasets={chartDatasets} mode={effectiveMode} />
-            
-            {/* LÉGENDE */}
-            <div className="flex flex-wrap gap-5 mt-5 justify-center">
-              {chartDatasets.map(ds => (
-                <div key={ds.key} className="flex items-center gap-2 text-sm font-semibold text-slate-700 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
-                  <span className="w-3 h-3 rounded-full shadow-sm" style={{backgroundColor: ds.color}}></span>
-                  {ds.title}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+  if (loading) return <LoadingSkeleton />;
 
-        {/* ONGLETS */}
-        <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-200 pb-1">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveTab(cat.id)}
-              className={`
-                px-4 py-2 rounded-t-lg text-sm font-bold transition-colors flex items-center gap-2
-                ${activeTab === cat.id ? 'bg-white text-[#003A7A] border-t border-x border-slate-200 shadow-sm relative -bottom-[1px]' : 'bg-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100'}
-              `}
-            >
-              {cat.label}
-              {cat.id === 'favorites' && <span className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded-full">{favorites.length}</span>}
-            </button>
-          ))}
-        </div>
-
-        {/* GRILLE DES TUILES */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-10">
-          {keysToDisplay.map((key) => {
-            if (!data.indices[key]) return null;
-            const item = data.indices[key];
-            const theme = THEME[key] || { color: '#64748b', bg: '#f1f5f9', label: 'N/A', source: '' };
-            const isSelected = selectedKeys.includes(key);
-            const isFav = favorites.includes(key);
-
-            return (
-              <div 
-                key={key}
-                onClick={() => toggleSelection(key)}
-                style={{ 
-                   borderColor: isSelected ? theme.color : undefined,
-                   backgroundColor: isSelected ? theme.bg : 'white',
-                   borderLeftWidth: '4px',
-                   borderLeftColor: theme.color
-                }}
-                className={`
-                  cursor-pointer p-5 rounded-r-xl border-y border-r shadow-sm transition-all duration-200 flex flex-col justify-between group relative
-                  ${isSelected ? 'ring-2 shadow-md transform -translate-y-1' : 'hover:shadow-lg border-slate-200 hover:border-slate-300'}
-                `}
-              >
-                <button 
-                  onClick={(e) => toggleFavorite(e, key)}
-                  className={`absolute top-2 right-2 p-1.5 rounded-full transition-all z-10 ${isFav ? 'text-yellow-400 hover:text-yellow-500' : 'text-slate-300 hover:text-slate-400 opacity-0 group-hover:opacity-100'}`}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                </button>
-                <div>
-                  <div className="flex justify-between items-start mb-2 pr-6">
-                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">{item.titre}</h3>
-                  </div>
-                  <div className="flex items-baseline gap-1 mt-3">
-                    <span className="text-2xl font-extrabold text-slate-900">{item.valeur}</span>
-                    <span className="text-base text-slate-500 font-semibold">{item.suffixe}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+  if (error || !data) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center">
+          <p className="text-destructive text-lg mb-4">{error || 'Données non disponibles'}</p>
+          <Button onClick={() => window.location.reload()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Réessayer
+          </Button>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-[#003A7A] dark:text-blue-400 tracking-tight">
+              Suivi-Taux
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Mise à jour : {new Date(data.date_mise_a_jour).toLocaleDateString('fr-FR', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </p>
+          </div>
+          <ThemeToggle />
+        </div>
+      </header>
+
+      {/* Main Tabs */}
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        <Tabs value={activeMainTab} onValueChange={setActiveMainTab}>
+          <TabsList className="grid w-full max-w-md grid-cols-3 mb-6">
+            <TabsTrigger value="dashboard" className="gap-2">
+              <LayoutDashboard className="h-4 w-4" />
+              <span className="hidden sm:inline">Tableau de bord</span>
+            </TabsTrigger>
+            <TabsTrigger value="comparator" className="gap-2">
+              <GitCompareArrows className="h-4 w-4" />
+              <span className="hidden sm:inline">Comparateur</span>
+            </TabsTrigger>
+            <TabsTrigger value="correlation" className="gap-2">
+              <Network className="h-4 w-4" />
+              <span className="hidden sm:inline">Corrélations</span>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Dashboard Tab */}
+          <TabsContent value="dashboard" className="space-y-6">
+            {/* Chart Section (appears when indices selected) */}
+            {selectedKeys.length > 0 && (
+              <div className="bg-card rounded-2xl border border-border shadow-sm p-6 animate-fade-in">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg font-bold text-foreground">
+                      Graphique
+                    </h2>
+                    <Badge variant="secondary">{selectedKeys.length} indice{selectedKeys.length > 1 ? 's' : ''}</Badge>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Period buttons */}
+                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                      {periodButtons.map(btn => (
+                        <Button
+                          key={btn.value}
+                          variant={chartPeriod === btn.value ? 'default' : 'ghost'}
+                          size="sm"
+                          onClick={() => setChartPeriod(btn.value)}
+                          className="h-7 px-2 text-xs"
+                        >
+                          {btn.label}
+                        </Button>
+                      ))}
+                    </div>
+                    
+                    {/* Mode buttons */}
+                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                      <Button
+                        variant={effectiveMode === 'real' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setChartMode('real')}
+                        className="h-7 px-2 text-xs"
+                      >
+                        Valeurs
+                      </Button>
+                      {areAllRates && (
+                        <Button
+                          variant={effectiveMode === 'absolute' ? 'default' : 'ghost'}
+                          size="sm"
+                          onClick={() => setChartMode('absolute')}
+                          className="h-7 px-2 text-xs"
+                        >
+                          Absolu
+                        </Button>
+                      )}
+                      <Button
+                        variant={effectiveMode === 'percent' ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setChartMode('percent')}
+                        className="h-7 px-2 text-xs"
+                      >
+                        Base 100
+                      </Button>
+                    </div>
+                    
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearSelections}
+                      className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Effacer
+                    </Button>
+                  </div>
+                </div>
+                
+                <EnhancedChart
+                  datasets={chartDatasets}
+                  mode={effectiveMode}
+                  period={chartPeriod}
+                  showMA50={showMA50}
+                  showMA200={showMA200}
+                  onToggleMA50={() => setShowMA50(!showMA50)}
+                  onToggleMA200={() => setShowMA200(!showMA200)}
+                />
+                
+                {/* Legend */}
+                <div className="flex flex-wrap gap-3 mt-4 justify-center">
+                  {chartDatasets.map(ds => (
+                    <button
+                      key={ds.key}
+                      onClick={() => toggleSelection(ds.key)}
+                      className={cn(
+                        "flex items-center gap-2 text-sm font-medium",
+                        "bg-muted px-3 py-1.5 rounded-full",
+                        "hover:bg-muted/80 transition-colors"
+                      )}
+                    >
+                      <span 
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: ds.color }}
+                      />
+                      {ds.title}
+                      <X className="h-3 w-3 opacity-50" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Category Tabs */}
+            <div className="flex flex-wrap gap-2 border-b border-border pb-1">
+              {CATEGORIES.map(cat => {
+                const Icon = cat.icon;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={cn(
+                      "px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors flex items-center gap-2",
+                      activeCategory === cat.id 
+                        ? "bg-card text-primary border-t border-x border-border shadow-sm relative -bottom-[1px]" 
+                        : "bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    {Icon ? <Icon className="h-4 w-4" /> : <span>{cat.emoji}</span>}
+                    {cat.label}
+                    {cat.id === 'favorites' && (
+                      <Badge variant="secondary" className="ml-1 text-[10px] px-1.5">
+                        {favorites.length}
+                      </Badge>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Index Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              {keysToDisplay.map((key, index) => {
+                const index_data = data.indices[key];
+                if (!index_data) return null;
+                
+                return (
+                  <div 
+                    key={key}
+                    className="animate-fade-in"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <IndexCard
+                      indexKey={key}
+                      title={index_data.titre}
+                      value={index_data.valeur}
+                      suffix={index_data.suffixe}
+                      historique={index_data.historique}
+                      isSelected={selectedKeys.includes(key)}
+                      isFavorite={favorites.includes(key)}
+                      onSelect={() => toggleSelection(key)}
+                      onToggleFavorite={(e) => toggleFavorite(e, key)}
+                      onShowInfo={(e) => showInfo(e, key)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            {keysToDisplay.length === 0 && activeCategory === 'favorites' && (
+              <div className="text-center py-12 text-muted-foreground">
+                <Star className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                <p className="text-lg font-medium">Aucun favori</p>
+                <p className="text-sm">Cliquez sur l'étoile d'une tuile pour l'ajouter à vos favoris</p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Comparator Tab */}
+          <TabsContent value="comparator">
+            <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-foreground mb-2">Comparateur d'Indices</h2>
+                <p className="text-sm text-muted-foreground">
+                  Comparez jusqu'à 5 indices avec des statistiques détaillées et un tableau de corrélation
+                </p>
+              </div>
+              <Comparator
+                indices={data.indices}
+                selectedKeys={comparatorKeys}
+                onKeysChange={setComparatorKeys}
+              />
+            </div>
+          </TabsContent>
+
+          {/* Correlation Tab */}
+          <TabsContent value="correlation">
+            <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-foreground mb-2">Analyse de Corrélation</h2>
+                <p className="text-sm text-muted-foreground">
+                  Visualisez les corrélations entre indices avec une matrice et un scatter plot interactif
+                </p>
+              </div>
+              <CorrelationView indices={data.indices} />
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* Info Modal */}
+      <IndexInfoModal
+        indexKey={infoModalKey}
+        value={infoModalKey ? data.indices[infoModalKey]?.valeur : undefined}
+        suffix={infoModalKey ? data.indices[infoModalKey]?.suffixe : undefined}
+        historique={infoModalKey ? data.indices[infoModalKey]?.historique : undefined}
+        isOpen={!!infoModalKey}
+        onClose={() => setInfoModalKey(null)}
+      />
+
+      {/* Footer */}
+      <footer className="border-t border-border mt-12">
+        <div className="max-w-7xl mx-auto px-6 py-6 text-center text-xs text-muted-foreground">
+          <p>
+            Données fournies par FRED API, Yahoo Finance et ASPIM. 
+            Mise à jour automatique quotidienne.
+          </p>
+          <p className="mt-1">
+            © {new Date().getFullYear()} Suivi-Taux — Outil pédagogique pour conseillers financiers
+          </p>
+        </div>
+      </footer>
     </main>
   );
 }
