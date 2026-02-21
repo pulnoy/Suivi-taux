@@ -1,24 +1,48 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { ThemeProvider } from '@/components/theme-provider';
 
 export const dynamic = 'force-dynamic';
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ 
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+});
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXTAUTH_URL || 'http://localhost:3000'),
-  title: 'Taux Financiers | Tableau de bord',
-  description: 'Suivi des taux financiers importants : €STR, OAT 10 ans, CAC40 et SCI',
+  metadataBase: new URL(process.env.NEXTAUTH_URL || 'https://suivi-taux.vercel.app'),
+  title: 'Suivi-Taux | Tableau de Bord Financier Professionnel',
+  description: 'Tableau de bord professionnel pour le suivi des taux et indices financiers : OAT, Inflation, €STR, CAC 40, S&P 500, EUR/USD, Or, Bitcoin et plus. Outil pédagogique pour conseillers financiers.',
+  keywords: ['taux financiers', 'OAT', 'inflation', 'CAC 40', 'conseiller financier', 'indices boursiers', 'EUR/USD', 'Bitcoin', 'SCPI'],
+  authors: [{ name: 'Conseiller Financier' }],
   icons: {
     icon: '/favicon.svg',
     shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
   },
   openGraph: {
-    title: 'Taux Financiers | Tableau de bord',
-    description: 'Suivi des taux financiers importants pour conseillers financiers',
+    title: 'Suivi-Taux | Tableau de Bord Financier Professionnel',
+    description: 'Suivez les taux et indices financiers clés avec des outils de comparaison et corrélation avancés.',
     images: ['/og-image.png'],
     type: 'website',
+    locale: 'fr_FR',
+    siteName: 'Suivi-Taux',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Suivi-Taux | Tableau de Bord Financier',
+    description: 'Tableau de bord professionnel pour le suivi des taux et indices financiers.',
+    images: ['/og-image.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
   },
 };
 
@@ -28,11 +52,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr">
+    <html lang="fr" suppressHydrationWarning>
       <head>
         <script src="https://apps.abacus.ai/chatllm/appllm-lib.js"></script>
       </head>
-      <body className={inter.className}>{children}</body>
+      <body className={`${inter.variable} font-sans antialiased`}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange={false}
+        >
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
