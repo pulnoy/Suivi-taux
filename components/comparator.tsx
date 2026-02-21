@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { EnhancedChart } from './enhanced-chart';
 import { INDEX_EDUCATION } from '@/lib/educational-data';
 import { 
@@ -22,7 +22,14 @@ import {
 } from '@/components/ui/table';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, TrendingUp, BarChart3, X } from 'lucide-react';
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CalendarIcon, TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -47,15 +54,138 @@ interface ComparatorProps {
 
 type Period = '1M' | '3M' | '6M' | '1A' | '5A' | 'YTD' | 'MAX' | 'CUSTOM';
 
+// Types pour l'analyse de compatibilité des modes
+type ModeRecommendation = 'real' | 'percent' | 'both';
+type CompatibilityLevel = 'compatible' | 'warning' | 'incompatible';
+
+interface ModeAnalysis {
+  recommendation: ModeRecommendation;
+  compatibilityLevel: CompatibilityLevel;
+  message: string;
+  forceBase100: boolean;
+}
+
+// Fonction pour analyser la compatibilité des indices sélectionnés
+function analyzeModeCompatibility(
+  selectedKeys: string[],
+  indices: Record<string, { valeur: number; suffixe: string }>
+): ModeAnalysis {
+  if (selectedKeys.length === 0) {
+    return {
+      recommendation: 'both',
+      compatibilityLevel: 'compatible',
+      message: '',
+      forceBase100: false
+    };
+  }
+
+  // Récupérer les catégories et valeurs des indices sélectionnés
+  const selectedData = selectedKeys.map(key => ({
+    key,
+    category: INDEX_EDUCATION[key]?.category || 'unknown',
+    value: indices[key]?.valeur || 0,
+    suffix: indices[key]?.suffixe || ''
+  }));
+
+  // Obtenir les catégories uniques
+  const categories = new Set(selectedData.map(d => d.category));
+  const values = selectedData.map(d => Math.abs(d.value));
+  
+  // Calculer le ratio max/min des valeurs
+  const minVal = Math.min(...values.filter(v => v > 0));
+  const maxVal = Math.max(...values);
+  const valueRatio = minVal > 0 ? maxVal / minVal : Infinity;
+
+  // Vérifier si Bitcoin est présent avec d'autres indices
+  const hasBitcoin = selectedKeys.includes('btc');
+  const hasSmallValues = selectedData.some(d => 
+    d.suffix === '%' || Math.abs(d.value) < 100
+  );
+  const hasLargeValues = selectedData.some(d => 
+    Math.abs(d.value) > 10000
+  );
+
+  // Cas 1: Bitcoin avec des taux ou indices à petites valeurs
+  if (hasBitcoin && hasSmallValues) {
+    return {
+      recommendation: 'percent',
+      compatibilityLevel: 'incompatible',
+      message: '⚠️ Bitcoin et indices avec des échelles très différentes détectés. La Base 100 est obligatoire pour une comparaison pertinente.',
+      forceBase100: true
+    };
+  }
+
+  // Cas 2: Ratio de valeurs > 100 (ex: BTC ~50000 vs Inflation ~2)
+  if (valueRatio > 100) {
+    return {
+      recommendation: 'percent',
+      compatibilityLevel: 'incompatible',
+      message: '⚠️ Attention: les échelles des indices sélectionnés sont très différentes. La Base 100 est fortement recommandée.',
+      forceBase100: true
+    };
+  }
+
+  // Cas 3: Catégories mixtes
+  if (categories.size > 1) {
+    return {
+      recommendation: 'percent',
+      compatibilityLevel: 'warning',
+      message: '💡 Les indices sélectionnés ont des catégories différentes. La Base 100 permet de comparer les performances relatives.',
+      forceBase100: false
+    };
+  }
+
+  // Cas 4: Même catégorie
+  const categoryName = Array.from(categories)[0];
+  const categoryLabels: Record<string, string> = {
+    'rates': 'taux',
+    'stocks': 'actions',
+    'forex': 'devises',
+    'commodities': 'matières premières',
+    'crypto': 'cryptomonnaies',
+    'real_estate': 'immobilier'
+  };
+
+  return {
+    recommendation: 'real',
+    compatibilityLevel: 'compatible',
+    message: `✓ Tous les indices sont des ${categoryLabels[categoryName] || 'indices similaires'}. La valeur absolue permet de voir les niveaux réels.`,
+    forceBase100: false
+  };
+}
+
 export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorProps) {
   const [period, setPeriod] = useState<Period>('1A');
   const [mode, setMode] = useState<'real' | 'percent' | 'absolute'>('percent');
   const [customDateRange, setCustomDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [showMA50, setShowMA50] = useState(false);
   const [showMA200, setShowMA200] = useState(false);
+  const [userOverrodeMode, setUserOverrodeMode] = useState(false);
 
   // Available indices for selection
   const availableIndices = Object.keys(indices);
+
+  // Analyse de compatibilité des modes
+  const modeAnalysis = useMemo(() => 
+    analyzeModeCompatibility(selectedKeys, indices), 
+    [selectedKeys, indices]
+  );
+
+  // Présélection automatique du mode selon les indices
+  useEffect(() => {
+    if (!userOverrodeMode && selectedKeys.length > 0) {
+      if (modeAnalysis.forceBase100 || modeAnalysis.recommendation === 'percent') {
+        setMode('percent');
+      } else if (modeAnalysis.recommendation === 'real') {
+        setMode('real');
+      }
+    }
+  }, [selectedKeys, modeAnalysis, userOverrodeMode]);
+
+  // Reset le flag quand la sélection change significativement
+  useEffect(() => {
+    setUserOverrodeMode(false);
+  }, [selectedKeys.length]);
 
   // Filter data by period
   const filteredData = useMemo(() => {
@@ -222,36 +352,129 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           </PopoverContent>
         </Popover>
 
-        {/* Mode buttons */}
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          <Button
-            variant={mode === 'real' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setMode('real')}
-            className="h-8"
-          >
-            Valeurs
-          </Button>
-          {areAllRates && (
-            <Button
-              variant={mode === 'absolute' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setMode('absolute')}
-              className="h-8"
-            >
-              Absolu
-            </Button>
-          )}
-          <Button
-            variant={mode === 'percent' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setMode('percent')}
-            className="h-8"
-          >
-            Base 100
-          </Button>
+        {/* Mode buttons avec tooltip d'aide */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={mode === 'real' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => {
+                      setMode('real');
+                      setUserOverrodeMode(true);
+                    }}
+                    disabled={modeAnalysis.forceBase100}
+                    className={cn(
+                      "h-8",
+                      modeAnalysis.forceBase100 && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    Valeurs
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p className="text-sm">
+                    <strong>Valeur absolue :</strong> Affiche les valeurs réelles des indices 
+                    (ex: CAC 40 = 7500 points, OAT = 3.2%)
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            {areAllRates && (
+              <Button
+                variant={mode === 'absolute' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => {
+                  setMode('absolute');
+                  setUserOverrodeMode(true);
+                }}
+                className="h-8"
+              >
+                Absolu
+              </Button>
+            )}
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={mode === 'percent' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => {
+                      setMode('percent');
+                      setUserOverrodeMode(true);
+                    }}
+                    className="h-8"
+                  >
+                    Base 100
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p className="text-sm">
+                    <strong>Base 100 :</strong> Normalise tous les indices à 100 au début de la période 
+                    pour comparer les performances relatives (ex: +15% vs +8%)
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          {/* Icône d'aide générale */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="p-1 rounded-full hover:bg-muted transition-colors">
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-sm p-3">
+                <div className="space-y-2 text-sm">
+                  <p className="font-semibold">Quel mode choisir ?</p>
+                  <p>
+                    <strong>Valeurs :</strong> Pour comparer des indices de même type 
+                    (ex: CAC 40 vs S&P 500)
+                  </p>
+                  <p>
+                    <strong>Base 100 :</strong> Pour comparer des indices d'échelles différentes 
+                    (ex: CAC 40 vs Bitcoin vs Inflation)
+                  </p>
+                  <p className="text-muted-foreground italic">
+                    💡 Le mode est présélectionné automatiquement selon vos indices.
+                  </p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
+
+      {/* Message d'aide contextuel */}
+      {selectedKeys.length > 1 && modeAnalysis.message && (
+        <Alert 
+          variant={modeAnalysis.compatibilityLevel === 'incompatible' ? 'destructive' : 'default'}
+          className={cn(
+            "py-2",
+            modeAnalysis.compatibilityLevel === 'compatible' && 'border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-900',
+            modeAnalysis.compatibilityLevel === 'warning' && 'border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-900',
+          )}
+        >
+          <AlertDescription className="flex items-center gap-2 text-sm">
+            {modeAnalysis.compatibilityLevel === 'incompatible' && (
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            )}
+            {modeAnalysis.compatibilityLevel === 'warning' && (
+              <Lightbulb className="h-4 w-4 flex-shrink-0 text-yellow-600" />
+            )}
+            {modeAnalysis.compatibilityLevel === 'compatible' && (
+              <span className="text-green-600">✓</span>
+            )}
+            {modeAnalysis.message}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Chart */}
       {selectedKeys.length > 0 && (

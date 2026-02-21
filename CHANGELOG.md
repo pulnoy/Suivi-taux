@@ -1,5 +1,55 @@
 # Changelog - Suivi-Taux
 
+## [2.1.0] - 2026-02-21
+
+### 🆕 Nouvelles Fonctionnalités
+
+#### Timeline des Crises Financières
+- **Nouvelle section** remplaçant l'analyse de corrélation
+- **7 crises majeures documentées** : Bulle Internet (2000), Subprimes (2008), Dette européenne (2010-2012), Marchés émergents (2015), COVID-19 (2020), Inflation/Ukraine (2022), Crise bancaire 2023
+- **Interface interactive** : Points cliquables avec détails dépliables
+- **Impacts chiffrés** : Variations des principaux indices pour chaque crise
+- **Code couleur** : Gravité (Critique, Majeur, Modéré)
+- **Design responsive** : Timeline verticale avec points de repère
+
+#### Aide au Choix Valeur Absolue vs Base 100
+- **Présélection automatique intelligente** :
+  - Base 100 automatique si catégories différentes
+  - Base 100 obligatoire si échelles incompatibles (ex: Bitcoin + Inflation)
+  - Valeur absolue si indices de même type
+- **Messages contextuels** :
+  - ✓ Vert : Indices compatibles, valeur absolue recommandée
+  - 💡 Jaune : Catégories différentes, Base 100 conseillée
+  - ⚠️ Rouge : Échelles incompatibles, Base 100 obligatoire
+- **Tooltips d'aide** : Explication des modes au survol
+- **Icône "?"** avec aide complète
+
+#### Historiques Maximisés
+- **FRED API** : Données depuis 2000 (vs 2020 avant)
+- **Yahoo Finance** : Range "max" pour 10-25 ans d'historique
+- **SCPI** : Historique étendu depuis 2000
+- **Objectif** : Comparaisons long terme pertinentes
+
+### 🔧 Corrections
+
+#### Tooltips du Graphique
+- **Affichage systématique** de TOUS les indices visibles
+- **"N/A" affiché** pour les valeurs manquantes
+- **Plus de valeurs invisibles** au survol
+
+### 🗑️ Suppressions
+
+- **Section Corrélation** : Retirée (scatter plot et heatmap)
+- **Composant correlation-view.tsx** : Supprimé
+- **Onglet "Corrélations"** : Remplacé par "Timeline Crises"
+
+### 🎨 Modifications UI
+
+- **Footer** : Texte simplifié "Gillian Noësen"
+- **Navigation** : Nouvel onglet "Timeline Crises" avec icône horloge
+
+---
+
 ## [2.0.0] - 2026-02-21
 
 ### 🎨 Refonte Visuelle Complète

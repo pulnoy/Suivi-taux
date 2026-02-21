@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { IndexCard } from '@/components/index-card';
 import { EnhancedChart } from '@/components/enhanced-chart';
 import { Comparator } from '@/components/comparator';
-import { CorrelationView } from '@/components/correlation-view';
+import { TimelineCrises } from '@/components/timeline-crises';
 import { IndexInfoModal } from '@/components/index-info-modal';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { INDEX_EDUCATION } from '@/lib/educational-data';
@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { 
   LayoutDashboard, 
   GitCompareArrows, 
-  Network, 
+  Clock,
   Star,
   RefreshCw,
   ChevronDown,
@@ -241,9 +241,9 @@ export default function Dashboard() {
               <GitCompareArrows className="h-4 w-4" />
               <span className="hidden sm:inline">Comparateur</span>
             </TabsTrigger>
-            <TabsTrigger value="correlation" className="gap-2">
-              <Network className="h-4 w-4" />
-              <span className="hidden sm:inline">Corrélations</span>
+            <TabsTrigger value="timeline" className="gap-2">
+              <Clock className="h-4 w-4" />
+              <span className="hidden sm:inline">Timeline Crises</span>
             </TabsTrigger>
           </TabsList>
 
@@ -434,16 +434,16 @@ export default function Dashboard() {
             </div>
           </TabsContent>
 
-          {/* Correlation Tab */}
-          <TabsContent value="correlation">
+          {/* Timeline Tab */}
+          <TabsContent value="timeline">
             <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
               <div className="mb-6">
-                <h2 className="text-xl font-bold text-foreground mb-2">Analyse de Corrélation</h2>
+                <h2 className="text-xl font-bold text-foreground mb-2">Timeline des Crises Financières</h2>
                 <p className="text-sm text-muted-foreground">
-                  Visualisez les corrélations entre indices avec une matrice et un scatter plot interactif
+                  Découvrez les principales crises économiques et leur impact sur les marchés financiers
                 </p>
               </div>
-              <CorrelationView indices={data.indices} />
+              <TimelineCrises />
             </div>
           </TabsContent>
         </Tabs>
@@ -467,7 +467,7 @@ export default function Dashboard() {
             Mise à jour automatique quotidienne.
           </p>
           <p className="mt-1">
-            © {new Date().getFullYear()} Suivi-Taux — Outil pédagogique pour conseillers financiers
+            Gillian Noësen
           </p>
         </div>
       </footer>

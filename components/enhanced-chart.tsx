@@ -162,12 +162,15 @@ export function EnhancedChart({
     setBrushDomain(null);
   }, []);
 
-  // Custom tooltip
+  // Custom tooltip - Affiche TOUS les indices, même si valeur manquante
   const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload || !payload.length) return null;
+    if (!active || !label) return null;
+    
+    // Trouver le point de données pour cette date
+    const dataPoint = chartData.find(d => d.date === label);
     
     return (
-      <div className="bg-popover border border-border rounded-lg shadow-xl p-3 min-w-[180px]">
+      <div className="bg-popover border border-border rounded-lg shadow-xl p-3 min-w-[200px]">
         <p className="text-sm font-semibold text-muted-foreground mb-2 pb-2 border-b border-border">
           {new Date(label).toLocaleDateString('fr-FR', { 
             day: 'numeric', 
@@ -176,32 +179,39 @@ export function EnhancedChart({
           })}
         </p>
         <div className="space-y-1.5">
-          {payload.filter((p: any) => !p.dataKey.includes('_ma')).map((entry: any, idx: number) => {
-            const ds = datasets.find(d => d.key === entry.dataKey);
-            const isRate = ds?.suffix === '%';
-            const value = entry.value;
+          {/* Afficher TOUS les datasets, pas seulement ceux dans payload */}
+          {datasets.map((ds) => {
+            const value = dataPoint?.[ds.key];
+            const isRate = ds.suffix === '%';
+            const hasValue = value !== undefined && value !== null;
             
             return (
-              <div key={idx} className="flex items-center justify-between gap-4">
+              <div key={ds.key} className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <span 
                     className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: entry.color }}
+                    style={{ backgroundColor: ds.color }}
                   />
                   <span className="text-sm font-medium text-foreground">
-                    {ds?.title || entry.dataKey}
+                    {ds.title}
                   </span>
                 </div>
-                <span className={cn(
-                  "text-sm font-bold",
-                  mode === 'percent' 
-                    ? value >= 0 ? 'text-green-600' : 'text-red-600'
-                    : 'text-foreground'
-                )}>
-                  {mode === 'percent' && value >= 0 ? '+' : ''}
-                  {formatNumber(value, 2)}
-                  {mode === 'percent' ? (isRate ? ' pts' : '%') : ` ${ds?.suffix || ''}`}
-                </span>
+                {hasValue ? (
+                  <span className={cn(
+                    "text-sm font-bold",
+                    mode === 'percent' 
+                      ? value >= 0 ? 'text-green-600' : 'text-red-600'
+                      : 'text-foreground'
+                  )}>
+                    {mode === 'percent' && value >= 0 ? '+' : ''}
+                    {formatNumber(value, 2)}
+                    {mode === 'percent' ? (isRate ? ' pts' : '%') : ` ${ds.suffix || ''}`}
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground italic">
+                    N/A
+                  </span>
+                )}
               </div>
             );
           })}
