@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-02-21T08:41:06.125Z",
+  "date_mise_a_jour": "2026-02-21T14:58:50.296Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -28800,7 +28800,7 @@
     },
     "btc": {
       "titre": "Bitcoin",
-      "valeur": 67935.65,
+      "valeur": 68431.68,
       "suffixe": "$",
       "historique": [
         {
@@ -31729,7 +31729,7 @@
         },
         {
           "date": "2026-02-21",
-          "value": 67935.65
+          "value": 68431.68
         }
       ]
     },
