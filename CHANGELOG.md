@@ -1,5 +1,36 @@
 # Changelog - Suivi-Taux
 
+## [2.1.1] - 2026-02-21
+
+### 🐛 Correction Critique - Historique Limité
+
+#### Problème
+- Le bouton "Max" dans le graphique n'affichait que 2 ans d'historique au lieu de 20+ ans
+- Les données Yahoo Finance étaient récupérées avec `range=max` mais Yahoo renvoyait des données mensuelles limitées
+
+#### Solution
+- **Yahoo Finance** : Utilisation de `period1` et `period2` avec timestamps Unix explicites
+  - `period1=946684800` (2000-01-01)
+  - `interval=1wk` pour des données hebdomadaires sur 20+ ans
+- **Fallback intelligent** : Pour les ETF récents (URTH, EEM), fallback sur données quotidiennes échantillonnées
+- **Données FRED** : Fallback sur données existantes si `FRED_API_KEY` non disponible
+
+#### Résultat
+| Indice | Avant | Après |
+|--------|-------|-------|
+| CAC 40 | 2 ans | **27 ans** (depuis 1999) |
+| S&P 500 | 2 ans | **26 ans** (depuis 2000) |
+| Nasdaq | 2 ans | **26 ans** (depuis 2000) |
+| Or | 2 ans | **26 ans** (depuis 2000) |
+| EUR/USD | 2 ans | **23 ans** (depuis 2003) |
+| Bitcoin | 2 ans | **12 ans** (depuis 2014) |
+
+#### Note
+Pour actualiser les données FRED (OAT, Inflation, €STR), configurez la variable d'environnement `FRED_API_KEY`.
+Clé gratuite disponible sur https://fred.stlouisfed.org/docs/api/api_key.html
+
+---
+
 ## [2.1.0] - 2026-02-21
 
 ### 🆕 Nouvelles Fonctionnalités
