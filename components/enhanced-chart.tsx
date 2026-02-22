@@ -66,38 +66,25 @@ export function EnhancedChart({
   // Get date ranges for each dataset (for showing in legend)
   const dateRanges = useMemo(() => getDatasetDateRanges(datasets), [datasets]);
 
-  // Process data for chart with projection support
-  const { chartData, hasProjections } = useMemo(() => {
-    if (!datasets || datasets.length === 0) return { chartData: [], hasProjections: false };
+  // Process data for chart (simple - no projections)
+  const chartData = useMemo(() => {
+    if (!datasets || datasets.length === 0) return [];
 
     // Get all unique dates and sort them
     const allDates = new Set<string>();
     datasets.forEach(ds => ds.data.forEach(d => allDates.add(d.date)));
     const sortedDates = Array.from(allDates).sort();
     
-    if (sortedDates.length === 0) return { chartData: [], hasProjections: false };
+    if (sortedDates.length === 0) return [];
 
-    // Get the global start and end date (earliest start, latest end)
-    const globalStart = sortedDates[0];
-    const globalEnd = sortedDates[sortedDates.length - 1];
-
-    // Track if we have projections
-    let foundProjections = false;
-
-    // Build chart data with both real and projected values
+    // Build chart data with real values only
     const data = sortedDates.map(date => {
       const point: Record<string, any> = { date };
       
       datasets.forEach(ds => {
         const dataPoint = ds.data.find(d => d.date === date);
-        const dsStart = ds.data[0]?.date || '';
-        const dsEnd = ds.data[ds.data.length - 1]?.date || '';
-        
-        // Check if this date is within the dataset's range
-        const isWithinRange = date >= dsStart && date <= dsEnd;
         
         if (dataPoint) {
-          // Real data point
           if (mode === 'percent') {
             const firstPoint = ds.data[0];
             const baseValue = firstPoint?.value || 1;
@@ -111,51 +98,13 @@ export function EnhancedChart({
           } else {
             point[ds.key] = dataPoint.value;
           }
-          point[`${ds.key}_real`] = true;
-        } else if (!isWithinRange) {
-          // Need projection - date is outside the dataset's range
-          foundProjections = true;
-          
-          // Find the closest available value for projection
-          let projectedValue: number | null = null;
-          
-          if (date < dsStart) {
-            // Before dataset starts - use first available value (for backward projection)
-            const firstVal = ds.data[0]?.value;
-            if (firstVal !== undefined) {
-              projectedValue = firstVal;
-            }
-          } else if (date > dsEnd) {
-            // After dataset ends - use last available value (for forward projection)
-            const lastVal = ds.data[ds.data.length - 1]?.value;
-            if (lastVal !== undefined) {
-              projectedValue = lastVal;
-            }
-          }
-          
-          if (projectedValue !== null) {
-            if (mode === 'percent') {
-              const firstPoint = ds.data[0];
-              const baseValue = firstPoint?.value || 1;
-              const isRate = ds.suffix === '%';
-              
-              if (isRate) {
-                point[`${ds.key}_proj`] = projectedValue - baseValue;
-              } else {
-                point[`${ds.key}_proj`] = ((projectedValue - baseValue) / Math.abs(baseValue)) * 100;
-              }
-            } else {
-              point[`${ds.key}_proj`] = projectedValue;
-            }
-            point[`${ds.key}_real`] = false;
-          }
         }
       });
       
       return point;
     });
 
-    return { chartData: data, hasProjections: foundProjections };
+    return data;
   }, [datasets, mode]);
 
   // Calculate moving averages
@@ -286,8 +235,9 @@ export function EnhancedChart({
 
   if (!datasets || datasets.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[350px] text-muted-foreground">
-        Sélectionnez un ou plusieurs indices pour afficher le graphique
+      <div className="flex flex-col items-center justify-center h-[350px] text-muted-foreground bg-muted/30 rounded-xl border border-dashed border-border">
+        <p className="text-lg font-medium">Aucun indice sélectionné</p>
+        <p className="text-sm mt-2">Sélectionnez au moins 2 indices pour commencer la comparaison</p>
       </div>
     );
   }
@@ -364,16 +314,7 @@ export function EnhancedChart({
         </div>
       </div>
 
-      {/* Projection Note */}
-      {hasProjections && (
-        <div className="mb-2 p-2 bg-muted/50 rounded-lg text-center">
-          <p className="text-xs text-muted-foreground flex items-center justify-center gap-2">
-            <span className="inline-block w-6 h-0 border-t-2 border-dashed border-muted-foreground"></span>
-            Les lignes pointillées représentent des projections et ne sont pas incluses dans les statistiques
-            <span className="inline-block w-6 h-0 border-t-2 border-dashed border-muted-foreground"></span>
-          </p>
-        </div>
-      )}
+
 
       {/* Chart */}
       <div ref={chartRef} className="bg-card rounded-xl p-4">
@@ -442,21 +383,7 @@ export function EnhancedChart({
               />
             ))}
 
-            {/* Projection lines (dotted) */}
-            {hasProjections && datasets.map((ds, idx) => (
-              <Line
-                key={`${ds.key}_proj`}
-                type="monotone"
-                dataKey={`${ds.key}_proj`}
-                stroke={ds.color}
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                dot={false}
-                yAxisId={mode === 'real' && datasets.length <= 2 ? (idx === 0 ? 'left' : 'right') : undefined}
-                connectNulls
-                legendType="none"
-              />
-            ))}
+
 
             {/* Moving averages */}
             {showMA50 && datasets.map((ds) => (

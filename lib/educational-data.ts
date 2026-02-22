@@ -44,9 +44,9 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
   },
   
   inflation: {
-    title: 'Inflation (IPCH)',
-    shortDescription: 'Indice des Prix à la Consommation Harmonisé. Mesure l\'évolution des prix dans la zone euro.',
-    fullDescription: `L'Indice des Prix à la Consommation Harmonisé (IPCH) mesure l'évolution moyenne des prix des biens et services consommés par les ménages. Il est calculé selon une méthode harmonisée au niveau européen, permettant la comparaison entre pays.`,
+    title: 'Inflation France',
+    shortDescription: 'Indice des Prix à la Consommation (IPC) en France. Mesure l\'évolution des prix sur 1 an glissant (source: INSEE/OECD).',
+    fullDescription: `L'Indice des Prix à la Consommation (IPC) mesure l'évolution moyenne des prix des biens et services consommés par les ménages en France. Il est calculé par l'INSEE et permet de suivre l'inflation sur 1 an glissant.`,
     importance: `L'inflation érode le pouvoir d'achat et la valeur de l'épargne. La BCE vise une inflation de 2% pour maintenir la stabilité des prix tout en permettant une croissance économique saine.`,
     factors: [
       'Prix de l\'énergie et des matières premières',
