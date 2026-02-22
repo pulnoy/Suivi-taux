@@ -86,7 +86,7 @@ async function getInflationFromIndex() {
   return inflationHistory;
 }
 
-// 3. Yahoo Finance - Historique maximum avec period1/period2 (données hebdomadaires pour 20+ ans)
+// 3. Yahoo Finance - Historique maximum avec données hybrides (hebdo historique + quotidien récent)
 async function fetchYahooHistory(ticker, useWeekly = true) {
   try {
     const now = Math.floor(Date.now() / 1000);
@@ -138,7 +138,48 @@ async function fetchYahooHistory(ticker, useWeekly = true) {
   return [];
 }
 
-// 3b. Yahoo Finance avec fallback (essaie hebdomadaire, puis quotidien si pas assez de données)
+// 3a. Récupérer les données quotidiennes récentes (derniers 30 jours) pour mise à jour
+async function fetchYahooRecentDaily(ticker) {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const thirtyDaysAgo = now - (30 * 24 * 60 * 60);
+    
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${thirtyDaysAgo}&period2=${now}&interval=1d`;
+    
+    const response = await fetch(url, { 
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json'
+      }, 
+      cache: 'no-store' 
+    });
+    
+    const data = await response.json();
+    const result = data.chart?.result?.[0];
+    
+    if (result?.timestamp?.length > 0) {
+      const dates = result.timestamp;
+      const prices = result.indicators.quote[0].close;
+      const history = [];
+      
+      for (let i = 0; i < dates.length; i++) {
+        if (prices[i] != null && !isNaN(prices[i])) {
+          history.push({
+            date: new Date(dates[i] * 1000).toISOString().split('T')[0],
+            value: parseFloat(prices[i].toFixed(2)),
+            timestamp: dates[i] * 1000
+          });
+        }
+      }
+      return history;
+    }
+  } catch (error) {
+    // Silently fail for recent data
+  }
+  return [];
+}
+
+// 3b. Yahoo Finance avec fallback et mise à jour quotidienne récente
 async function fetchYahooHistoryWithFallback(ticker) {
   // D'abord essayer hebdomadaire pour avoir 20+ ans
   let history = await fetchYahooHistory(ticker, true);
@@ -185,6 +226,21 @@ async function fetchYahooHistoryWithFallback(ticker) {
     }
   }
   
+  // Ajouter les données quotidiennes récentes pour avoir les derniers jours
+  const recentDaily = await fetchYahooRecentDaily(ticker);
+  if (recentDaily.length > 0 && history.length > 0) {
+    // Trouver la dernière date dans l'historique hebdo
+    const lastHistoDate = history[history.length - 1].date;
+    
+    // Ajouter les données quotidiennes plus récentes que la dernière hebdo
+    const newDailyData = recentDaily.filter(d => d.date > lastHistoDate);
+    
+    if (newDailyData.length > 0) {
+      history = [...history, ...newDailyData];
+      console.log(`  + ${ticker}: ajout de ${newDailyData.length} points quotidiens récents jusqu'au ${newDailyData[newDailyData.length - 1].date}`);
+    }
+  }
+  
   return history;
 }
 
@@ -218,6 +274,7 @@ function getScpiHistory() {
     { date: "2023-01-01", value: 4.52 },
     { date: "2024-01-01", value: 4.52 }, 
     { date: "2025-01-01", value: 4.55 },
+    { date: "2026-01-01", value: 4.58 }, // Estimation prévisionnelle
   ];
 }
 
