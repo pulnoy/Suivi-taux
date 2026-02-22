@@ -59,31 +59,42 @@ async function fetchFredSeries(seriesId) {
   return [];
 }
 
-// 2. Inflation IPCH
+// 2. Inflation France (IPC INSEE/OECD - variation sur 1 an glissant)
 async function getInflationFromIndex() {
   if (!FRED_API_KEY) {
     // Fallback: utiliser les données existantes
     if (existingData?.indices?.inflation?.historique?.length > 0) {
-      console.log(`  ⚠️ Inflation: utilisation des données existantes (pas de clé API)`);
+      console.log(`  ⚠️ Inflation France: utilisation des données existantes (pas de clé API)`);
       return existingData.indices.inflation.historique;
     }
-    console.log(`  ❌ Inflation: pas de clé API et pas de données existantes`);
+    console.log(`  ❌ Inflation France: pas de clé API et pas de données existantes`);
     return [];
   }
   
-  const indices = await fetchFredSeries('CP0000FRM086NEST');
-  if (!indices || indices.length < 13) return [];
-  const inflationHistory = [];
-  for (let i = 12; i < indices.length; i++) {
-    const current = indices[i];
-    const old = indices[i - 12]; 
-    if (old.value !== 0) {
-      const inflationRate = ((current.value - old.value) / old.value) * 100;
-      inflationHistory.push({ date: current.date, value: parseFloat(inflationRate.toFixed(2)) });
+  try {
+    const timestamp = new Date().getTime();
+    // FRACPIALLMINMEI: Consumer Price Index France (OECD)
+    // units=pc1: Percent Change from Year Ago (variation sur 1 an)
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=FRACPIALLMINMEI&api_key=${FRED_API_KEY}&file_type=json&observation_start=${HISTORY_START_DATE}&units=pc1&_t=${timestamp}`;
+    const response = await fetch(url, { cache: 'no-store' });
+    const data = await response.json();
+    
+    if (data.observations) {
+      const result = data.observations
+        .map(obs => ({
+          date: obs.date,
+          value: parseFloat(parseFloat(obs.value).toFixed(2)),
+          timestamp: new Date(obs.date).getTime()
+        }))
+        .filter(item => !isNaN(item.value))
+        .sort((a, b) => a.timestamp - b.timestamp);
+      console.log(`  ✓ Inflation France: ${result.length} points, ${result[0]?.date} → ${result[result.length-1]?.date}`);
+      return result;
     }
+  } catch (error) { 
+    console.error(`Erreur Inflation France:`, error.message); 
   }
-  console.log(`  ✓ Inflation: ${inflationHistory.length} points calculés`);
-  return inflationHistory;
+  return [];
 }
 
 // 3. Yahoo Finance - Historique maximum avec données hybrides (hebdo historique + quotidien récent)
@@ -322,7 +333,7 @@ async function main() {
     date_mise_a_jour: new Date().toISOString(),
     indices: {
       oat: { titre: "OAT 10 ans", valeur: getLast(historyOat), suffixe: "%", historique: historyOat },
-      inflation: { titre: "Inflation (1 an)", valeur: getLast(historyInflation), suffixe: "%", historique: historyInflation },
+      inflation: { titre: "Inflation France", valeur: getLast(historyInflation), suffixe: "%", historique: historyInflation },
       estr: { titre: "€STR", valeur: getLast(historyEstr), suffixe: "%", historique: historyEstr },
       eurusd: { titre: "Euro / Dollar", valeur: getLast(historyEurUsd), suffixe: "$", historique: historyEurUsd },
 

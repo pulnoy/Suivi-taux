@@ -1,5 +1,44 @@
 # Changelog - Suivi-Taux
 
+## [2.2.1] - 2026-02-22
+
+### 🔧 Corrections
+
+#### 1. Tooltip pour le mode "Absolu"
+- **Ajout d'un tooltip explicatif** sur le bouton "Absolu" (pour les taux uniquement)
+- **Texte** : "Affiche les valeurs réelles des indices (ex: CAC 40 = 7500 points). Utile pour comparer des indices de même nature."
+- **Style cohérent** avec les tooltips existants de "Valeurs" et "Base 100"
+
+#### 2. Aucune présélection au lancement
+- **Suppression de la présélection** automatique des indices OAT et CAC 40 au démarrage
+- **Tableau vide au chargement** : L'utilisateur doit manuellement sélectionner les indices
+- **Message d'invite** : "Sélectionnez au moins 2 indices pour commencer la comparaison"
+
+#### 3. Retrait des projections en pointillés
+- **Suppression complète** de la fonctionnalité de projection en pointillés
+- **Comportement simplifié** : Les lignes commencent/s'arrêtent aux dates où les données sont disponibles
+- **Suppression de la note** : "Les lignes pointillées représentent des projections..."
+- **Code allégé** : Retrait de toute la logique de détection et d'affichage des projections
+
+#### 4. Inflation France au lieu de Zone Euro
+- **Nouvelle source** : `FRACPIALLMINMEI` (OECD Consumer Price Index France) au lieu de `CP0000FRM086NEST` (IPCH Zone Euro)
+- **Transformation automatique** : Variation sur 1 an glissant via le paramètre `units=pc1`
+- **Titre mis à jour** : "Inflation France" au lieu de "Inflation (1 an)"
+- **Description corrigée** : "Indice des Prix à la Consommation (IPC) en France. Mesure l'évolution des prix sur 1 an glissant (source: INSEE/OECD)."
+
+### 📁 Fichiers Modifiés
+
+```
+components/comparator.tsx        # Tooltip Absolu + présélection vide
+components/enhanced-chart.tsx    # Retrait projections + message d'invite
+app/page.tsx                     # Présélection vide []
+scripts/update-taux.mjs          # Inflation France (FRACPIALLMINMEI)
+lib/educational-data.ts          # Description Inflation France
+CHANGELOG.md                     # Documentation v2.2.1
+```
+
+---
+
 ## [2.2.0] - 2026-02-22
 
 ### 🆕 Nouvelles Fonctionnalités

@@ -392,17 +392,29 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             </TooltipProvider>
             
             {areAllRates && (
-              <Button
-                variant={mode === 'absolute' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => {
-                  setMode('absolute');
-                  setUserOverrodeMode(true);
-                }}
-                className="h-8"
-              >
-                Absolu
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={mode === 'absolute' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => {
+                        setMode('absolute');
+                        setUserOverrodeMode(true);
+                      }}
+                      className="h-8"
+                    >
+                      Absolu
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <p className="text-sm">
+                      <strong>Valeurs absolues :</strong> Affiche les valeurs réelles des indices 
+                      (ex: CAC 40 = 7500 points). Utile pour comparer des indices de même nature.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
             
             <TooltipProvider>

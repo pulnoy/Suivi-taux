@@ -50,7 +50,7 @@ export default function Dashboard() {
   const [activeMainTab, setActiveMainTab] = useState('comparator');
   
   // Comparator state
-  const [comparatorKeys, setComparatorKeys] = useState<string[]>(['oat', 'cac40']);
+  const [comparatorKeys, setComparatorKeys] = useState<string[]>([]);
 
   // Fetch data
   useEffect(() => {
