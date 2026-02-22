@@ -1,5 +1,62 @@
 # Changelog - Suivi-Taux
 
+## [2.2.2] - 2026-02-22
+
+### 🐛 Correction Bug Critique - Moyennes Mobiles
+
+#### Problème
+- **Erreur "Invariant failed"** : L'application plantait au clic sur "MM 50j" ou "MM 200j"
+- **Cause identifiée** : 
+  - Les lignes de moyennes mobiles n'avaient pas de `yAxisId` en mode dual-axis
+  - Pas de vérification si assez de données pour calculer les MM
+  - Valeurs `undefined` passées à Recharts causant le crash
+
+#### Solution
+- **yAxisId ajouté** : Les lignes MM utilisent maintenant le même axe que leur indice parent
+- **Vérifications de sécurité** : 
+  - Contrôle du nombre minimum de points de données (50 ou 200)
+  - Filtrage des valeurs `undefined`/`null`/`NaN` avant calcul
+  - Calcul de moyenne même avec données partielles (min 50% des valeurs requises)
+- **Désactivation intelligente** : Options MM grisées si pas assez de données
+
+### ✨ Nouvelles Fonctionnalités - Tooltips Explicatifs
+
+#### Tooltips pour Moyennes Mobiles
+- **Icône ℹ️ cliquable** à côté de chaque option MM 50j et MM 200j
+- **MM 50j** : "Moyenne Mobile 50 jours : Lisse les variations à court terme et identifie la tendance récente. Utile pour détecter les changements de direction à moyen terme."
+- **MM 200j** : "Moyenne Mobile 200 jours : Lisse les variations à long terme et identifie la tendance de fond. Souvent utilisée comme support/résistance majeur. Un indice au-dessus de sa MM 200j est considéré en tendance haussière."
+- **Avertissement contextuel** : Si pas assez de données, le tooltip l'indique
+
+#### Message Contextuel
+- **Bandeau explicatif** quand les MM sont activées : "Les moyennes mobiles lissent les variations et aident à identifier les tendances."
+- **Texte adaptatif** selon les MM activées (50j seule, 200j seule, ou les deux)
+
+### 🎨 Améliorations UX
+
+#### Légende Améliorée
+- **Distinction visuelle claire** entre :
+  - Ligne continue = Valeur réelle
+  - Pointillés courts = MM 50 jours
+  - Pointillés longs = MM 200 jours
+- **Opacité différenciée** : MM 50j à 70%, MM 200j à 50% pour ne pas surcharger
+
+#### Tooltip du Graphique
+- **Valeurs MM incluses** dans le tooltip au survol
+- **Format hiérarchique** : Valeur principale puis MM indentées dessous
+
+#### États Désactivés
+- **Options grisées** si pas assez de données
+- **Message explicite** : "⚠️ Pas assez de données (X points, Y requis)"
+
+### 📁 Fichiers Modifiés
+
+```
+components/enhanced-chart.tsx   # Correction bug + tooltips + UX
+CHANGELOG.md                    # Documentation v2.2.2
+```
+
+---
+
 ## [2.2.1] - 2026-02-22
 
 ### 🔧 Corrections

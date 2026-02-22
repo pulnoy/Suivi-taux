@@ -2,12 +2,13 @@
 
 import { useState, useMemo, useRef, useCallback } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend,
   ResponsiveContainer, ReferenceLine, Brush, Area, ComposedChart
 } from 'recharts';
-import { Download, ZoomIn, ZoomOut, RotateCcw, Image as ImageIcon } from 'lucide-react';
+import { Download, ZoomIn, ZoomOut, RotateCcw, Image as ImageIcon, Info, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { INDEX_EDUCATION } from '@/lib/educational-data';
 import { calculateMovingAverage, normalizeToBase100, formatNumber } from '@/lib/financial-utils';
 import { cn } from '@/lib/utils';
@@ -50,6 +51,12 @@ function getDatasetDateRanges(datasets: DatasetConfig[]): DateRange[] {
     end: ds.data[ds.data.length - 1]?.date || ''
   }));
 }
+
+// Tooltips explicatifs pour les moyennes mobiles
+const MA_TOOLTIPS = {
+  ma50: "Moyenne Mobile 50 jours : Lisse les variations à court terme et identifie la tendance récente. Utile pour détecter les changements de direction à moyen terme.",
+  ma200: "Moyenne Mobile 200 jours : Lisse les variations à long terme et identifie la tendance de fond. Souvent utilisée comme support/résistance majeur. Un indice au-dessus de sa MM 200j est considéré en tendance haussière."
+};
 
 export function EnhancedChart({
   datasets,
@@ -107,30 +114,74 @@ export function EnhancedChart({
     return data;
   }, [datasets, mode]);
 
-  // Calculate moving averages
+  // Vérifier si assez de données pour les moyennes mobiles
+  const dataAvailability = useMemo(() => {
+    const dataLength = chartData.length;
+    return {
+      canShowMA50: dataLength >= 50,
+      canShowMA200: dataLength >= 200,
+      dataLength
+    };
+  }, [chartData]);
+
+  // Calculate moving averages avec vérifications de sécurité
   const maData = useMemo(() => {
     if (!showMA50 && !showMA200) return chartData;
+    if (chartData.length === 0) return chartData;
     
     return chartData.map((point, idx) => {
       const newPoint = { ...point };
       
       datasets.forEach(ds => {
-        if (showMA50 && idx >= 49) {
+        // Vérifier que la valeur existe pour ce dataset à cet index
+        const currentValue = point[ds.key];
+        
+        // MA 50 - seulement si assez de données et valeur existe
+        if (showMA50 && dataAvailability.canShowMA50 && idx >= 49) {
           const slice = chartData.slice(idx - 49, idx + 1);
-          const sum = slice.reduce((acc, p) => acc + (p[ds.key] || 0), 0);
-          newPoint[`${ds.key}_ma50`] = sum / 50;
+          // Filtrer les valeurs undefined/null et calculer la moyenne
+          const validValues = slice
+            .map(p => p[ds.key])
+            .filter((v): v is number => v !== undefined && v !== null && !isNaN(v));
+          
+          if (validValues.length >= 25) { // Au moins 50% des valeurs nécessaires
+            const sum = validValues.reduce((acc, v) => acc + v, 0);
+            newPoint[`${ds.key}_ma50`] = sum / validValues.length;
+          }
         }
         
-        if (showMA200 && idx >= 199) {
+        // MA 200 - seulement si assez de données et valeur existe
+        if (showMA200 && dataAvailability.canShowMA200 && idx >= 199) {
           const slice = chartData.slice(idx - 199, idx + 1);
-          const sum = slice.reduce((acc, p) => acc + (p[ds.key] || 0), 0);
-          newPoint[`${ds.key}_ma200`] = sum / 200;
+          // Filtrer les valeurs undefined/null et calculer la moyenne
+          const validValues = slice
+            .map(p => p[ds.key])
+            .filter((v): v is number => v !== undefined && v !== null && !isNaN(v));
+          
+          if (validValues.length >= 100) { // Au moins 50% des valeurs nécessaires
+            const sum = validValues.reduce((acc, v) => acc + v, 0);
+            newPoint[`${ds.key}_ma200`] = sum / validValues.length;
+          }
         }
       });
       
       return newPoint;
     });
-  }, [chartData, datasets, showMA50, showMA200]);
+  }, [chartData, datasets, showMA50, showMA200, dataAvailability]);
+
+  // Vérifier si les MA ont des données valides à afficher
+  const maHasData = useMemo(() => {
+    if (!maData || maData.length === 0) return { ma50: false, ma200: false };
+    
+    const hasMA50Data = datasets.some(ds => 
+      maData.some(point => point[`${ds.key}_ma50`] !== undefined)
+    );
+    const hasMA200Data = datasets.some(ds => 
+      maData.some(point => point[`${ds.key}_ma200`] !== undefined)
+    );
+    
+    return { ma50: hasMA50Data, ma200: hasMA200Data };
+  }, [maData, datasets]);
 
   // Export to CSV
   const exportCSV = useCallback(() => {
@@ -180,7 +231,7 @@ export function EnhancedChart({
     if (!active || !label) return null;
     
     // Trouver le point de données pour cette date
-    const dataPoint = chartData.find(d => d.date === label);
+    const dataPoint = maData.find(d => d.date === label);
     
     return (
       <div className="bg-popover border border-border rounded-lg shadow-xl p-3 min-w-[200px]">
@@ -195,35 +246,52 @@ export function EnhancedChart({
           {/* Afficher TOUS les datasets, pas seulement ceux dans payload */}
           {datasets.map((ds) => {
             const value = dataPoint?.[ds.key];
+            const ma50Value = dataPoint?.[`${ds.key}_ma50`];
+            const ma200Value = dataPoint?.[`${ds.key}_ma200`];
             const isRate = ds.suffix === '%';
             const hasValue = value !== undefined && value !== null;
             
             return (
-              <div key={ds.key} className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <span 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: ds.color }}
-                  />
-                  <span className="text-sm font-medium text-foreground">
-                    {ds.title}
-                  </span>
+              <div key={ds.key} className="space-y-1">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <span 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: ds.color }}
+                    />
+                    <span className="text-sm font-medium text-foreground">
+                      {ds.title}
+                    </span>
+                  </div>
+                  {hasValue ? (
+                    <span className={cn(
+                      "text-sm font-bold",
+                      mode === 'percent' 
+                        ? value >= 0 ? 'text-green-600' : 'text-red-600'
+                        : 'text-foreground'
+                    )}>
+                      {mode === 'percent' && value >= 0 ? '+' : ''}
+                      {formatNumber(value, 2)}
+                      {mode === 'percent' ? (isRate ? ' pts' : '%') : ` ${ds.suffix || ''}`}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground italic">
+                      N/A
+                    </span>
+                  )}
                 </div>
-                {hasValue ? (
-                  <span className={cn(
-                    "text-sm font-bold",
-                    mode === 'percent' 
-                      ? value >= 0 ? 'text-green-600' : 'text-red-600'
-                      : 'text-foreground'
-                  )}>
-                    {mode === 'percent' && value >= 0 ? '+' : ''}
-                    {formatNumber(value, 2)}
-                    {mode === 'percent' ? (isRate ? ' pts' : '%') : ` ${ds.suffix || ''}`}
-                  </span>
-                ) : (
-                  <span className="text-sm text-muted-foreground italic">
-                    N/A
-                  </span>
+                {/* Afficher les MA si activées et disponibles */}
+                {showMA50 && ma50Value !== undefined && (
+                  <div className="flex items-center justify-between gap-4 pl-5 text-xs text-muted-foreground">
+                    <span>└ MM 50j</span>
+                    <span>{formatNumber(ma50Value, 2)}</span>
+                  </div>
+                )}
+                {showMA200 && ma200Value !== undefined && (
+                  <div className="flex items-center justify-between gap-4 pl-5 text-xs text-muted-foreground">
+                    <span>└ MM 200j</span>
+                    <span>{formatNumber(ma200Value, 2)}</span>
+                  </div>
                 )}
               </div>
             );
@@ -251,179 +319,281 @@ export function EnhancedChart({
     
     return datasets.map(ds => {
       const values = chartData.map(d => d[ds.key]).filter(v => v !== undefined);
+      if (values.length === 0) return ['auto', 'auto'];
       const min = Math.min(...values);
       const max = Math.max(...values);
-      const padding = (max - min) * 0.1;
+      const padding = (max - min) * 0.1 || 1;
       return [min - padding, max + padding];
     });
   }, [chartData, datasets, mode]);
 
+  // Déterminer le yAxisId pour un dataset donné
+  const getYAxisId = (dsIndex: number): string | undefined => {
+    if (mode === 'real' && datasets.length <= 2) {
+      return dsIndex === 0 ? 'left' : 'right';
+    }
+    return undefined;
+  };
+
   return (
-    <div className="space-y-4">
-      {/* Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          {datasets.length === 1 && onToggleMA50 && onToggleMA200 && (
-            <>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox 
-                  checked={showMA50} 
-                  onCheckedChange={() => onToggleMA50()}
-                />
-                <span className="text-muted-foreground">MM 50j</span>
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox 
-                  checked={showMA200} 
-                  onCheckedChange={() => onToggleMA200()}
-                />
-                <span className="text-muted-foreground">MM 200j</span>
-              </label>
-            </>
-          )}
+    <TooltipProvider>
+      <div className="space-y-4">
+        {/* Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {datasets.length === 1 && onToggleMA50 && onToggleMA200 && (
+              <>
+                {/* MM 50j avec tooltip explicatif */}
+                <div className="flex items-center gap-1">
+                  <label className={cn(
+                    "flex items-center gap-2 text-sm cursor-pointer",
+                    !dataAvailability.canShowMA50 && "opacity-50 cursor-not-allowed"
+                  )}>
+                    <Checkbox 
+                      checked={showMA50 && dataAvailability.canShowMA50} 
+                      onCheckedChange={() => dataAvailability.canShowMA50 && onToggleMA50()}
+                      disabled={!dataAvailability.canShowMA50}
+                    />
+                    <span className="text-muted-foreground">MM 50j</span>
+                  </label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="text-muted-foreground hover:text-foreground transition-colors">
+                        <HelpCircle className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs text-sm">
+                      <p>{MA_TOOLTIPS.ma50}</p>
+                      {!dataAvailability.canShowMA50 && (
+                        <p className="mt-2 text-yellow-500 font-medium">
+                          ⚠️ Pas assez de données ({dataAvailability.dataLength} points, 50 requis)
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* MM 200j avec tooltip explicatif */}
+                <div className="flex items-center gap-1">
+                  <label className={cn(
+                    "flex items-center gap-2 text-sm cursor-pointer",
+                    !dataAvailability.canShowMA200 && "opacity-50 cursor-not-allowed"
+                  )}>
+                    <Checkbox 
+                      checked={showMA200 && dataAvailability.canShowMA200} 
+                      onCheckedChange={() => dataAvailability.canShowMA200 && onToggleMA200()}
+                      disabled={!dataAvailability.canShowMA200}
+                    />
+                    <span className="text-muted-foreground">MM 200j</span>
+                  </label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="text-muted-foreground hover:text-foreground transition-colors">
+                        <HelpCircle className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs text-sm">
+                      <p>{MA_TOOLTIPS.ma200}</p>
+                      {!dataAvailability.canShowMA200 && (
+                        <p className="mt-2 text-yellow-500 font-medium">
+                          ⚠️ Pas assez de données ({dataAvailability.dataLength} points, 200 requis)
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={resetZoom}
+              className="h-8"
+            >
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Réinitialiser
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={exportCSV}
+              className="h-8"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              CSV
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={exportPNG}
+              className="h-8"
+            >
+              <ImageIcon className="h-4 w-4 mr-1" />
+              PNG
+            </Button>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={resetZoom}
-            className="h-8"
-          >
-            <RotateCcw className="h-4 w-4 mr-1" />
-            Réinitialiser
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={exportCSV}
-            className="h-8"
-          >
-            <Download className="h-4 w-4 mr-1" />
-            CSV
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={exportPNG}
-            className="h-8"
-          >
-            <ImageIcon className="h-4 w-4 mr-1" />
-            PNG
-          </Button>
-        </div>
-      </div>
 
+        {/* Message contextuel quand les MA sont activées */}
+        {(showMA50 || showMA200) && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+            <Info className="h-4 w-4 flex-shrink-0" />
+            <p>
+              Les moyennes mobiles lissent les variations et aident à identifier les tendances.
+              {showMA50 && !showMA200 && " La MM 50j (ligne pointillée) indique la tendance à moyen terme."}
+              {!showMA50 && showMA200 && " La MM 200j (ligne pointillée longue) indique la tendance de fond."}
+              {showMA50 && showMA200 && " MM 50j (pointillés courts) = moyen terme, MM 200j (pointillés longs) = long terme."}
+            </p>
+          </div>
+        )}
 
-
-      {/* Chart */}
-      <div ref={chartRef} className="bg-card rounded-xl p-4">
-        <ResponsiveContainer width="100%" height={350}>
-          <ComposedChart data={maData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.3} />
-            <XAxis 
-              dataKey="date" 
-              tickFormatter={(date) => new Date(date).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}
-              className="text-xs"
-              tick={{ fill: 'currentColor' }}
-              tickLine={{ stroke: 'currentColor' }}
-              axisLine={{ stroke: 'currentColor' }}
-            />
-            
-            {/* Y Axis */}
-            {mode === 'real' && datasets.length <= 2 ? (
-              datasets.map((ds, idx) => (
-                <YAxis
-                  key={ds.key}
-                  yAxisId={idx === 0 ? 'left' : 'right'}
-                  orientation={idx === 0 ? 'left' : 'right'}
-                  domain={yDomains?.[idx] || ['auto', 'auto']}
-                  tickFormatter={(v) => formatNumber(v, 2)}
-                  className="text-xs"
-                  tick={{ fill: ds.color }}
-                  tickLine={{ stroke: ds.color }}
-                  axisLine={{ stroke: ds.color }}
-                />
-              ))
-            ) : (
-              <YAxis
-                tickFormatter={(v) => mode === 'percent' ? `${v > 0 ? '+' : ''}${formatNumber(v, 1)}%` : formatNumber(v, 2)}
+        {/* Chart */}
+        <div ref={chartRef} className="bg-card rounded-xl p-4">
+          <ResponsiveContainer width="100%" height={350}>
+            <ComposedChart data={maData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.3} />
+              <XAxis 
+                dataKey="date" 
+                tickFormatter={(date) => new Date(date).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}
                 className="text-xs"
                 tick={{ fill: 'currentColor' }}
                 tickLine={{ stroke: 'currentColor' }}
                 axisLine={{ stroke: 'currentColor' }}
               />
+              
+              {/* Y Axis */}
+              {mode === 'real' && datasets.length <= 2 ? (
+                datasets.map((ds, idx) => (
+                  <YAxis
+                    key={ds.key}
+                    yAxisId={idx === 0 ? 'left' : 'right'}
+                    orientation={idx === 0 ? 'left' : 'right'}
+                    domain={yDomains?.[idx] || ['auto', 'auto']}
+                    tickFormatter={(v) => formatNumber(v, 2)}
+                    className="text-xs"
+                    tick={{ fill: ds.color }}
+                    tickLine={{ stroke: ds.color }}
+                    axisLine={{ stroke: ds.color }}
+                  />
+                ))
+              ) : (
+                <YAxis
+                  tickFormatter={(v) => mode === 'percent' ? `${v > 0 ? '+' : ''}${formatNumber(v, 1)}%` : formatNumber(v, 2)}
+                  className="text-xs"
+                  tick={{ fill: 'currentColor' }}
+                  tickLine={{ stroke: 'currentColor' }}
+                  axisLine={{ stroke: 'currentColor' }}
+                />
+              )}
+
+              <RechartsTooltip content={<CustomTooltip />} />
+              <Legend 
+                formatter={(value) => {
+                  // Améliorer l'affichage de la légende
+                  if (value.endsWith('_ma50')) {
+                    return 'MM 50j (pointillés)';
+                  }
+                  if (value.endsWith('_ma200')) {
+                    return 'MM 200j (pointillés longs)';
+                  }
+                  const ds = datasets.find(d => d.key === value);
+                  return ds?.title || value;
+                }}
+              />
+
+              {/* Reference line at 0 for percent mode */}
+              {mode === 'percent' && (
+                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="5 5" />
+              )}
+
+              {/* Data lines - Real data (solid) */}
+              {datasets.map((ds, idx) => (
+                <Line
+                  key={ds.key}
+                  type="monotone"
+                  dataKey={ds.key}
+                  stroke={ds.color}
+                  strokeWidth={2}
+                  dot={false}
+                  yAxisId={getYAxisId(idx)}
+                  connectNulls
+                  name={ds.title}
+                />
+              ))}
+
+              {/* Moving averages - seulement si des données valides existent */}
+              {showMA50 && maHasData.ma50 && datasets.map((ds, idx) => (
+                <Line
+                  key={`${ds.key}_ma50`}
+                  type="monotone"
+                  dataKey={`${ds.key}_ma50`}
+                  stroke={ds.color}
+                  strokeWidth={1.5}
+                  strokeDasharray="5 5"
+                  dot={false}
+                  name={`${ds.title} MM 50j`}
+                  connectNulls
+                  yAxisId={getYAxisId(idx)}
+                  opacity={0.7}
+                />
+              ))}
+
+              {showMA200 && maHasData.ma200 && datasets.map((ds, idx) => (
+                <Line
+                  key={`${ds.key}_ma200`}
+                  type="monotone"
+                  dataKey={`${ds.key}_ma200`}
+                  stroke={ds.color}
+                  strokeWidth={1.5}
+                  strokeDasharray="10 5"
+                  dot={false}
+                  name={`${ds.title} MM 200j`}
+                  connectNulls
+                  yAxisId={getYAxisId(idx)}
+                  opacity={0.5}
+                />
+              ))}
+
+              {/* Brush for zoom */}
+              <Brush 
+                dataKey="date" 
+                height={30} 
+                stroke="#8884d8"
+                tickFormatter={(date) => new Date(date).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Légende améliorée pour les lignes */}
+        {(showMA50 || showMA200) && (
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground px-2">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-0.5 bg-current" />
+              <span>Valeur réelle</span>
+            </div>
+            {showMA50 && (
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-0.5 bg-current" style={{ 
+                  background: 'repeating-linear-gradient(90deg, currentColor 0, currentColor 3px, transparent 3px, transparent 6px)' 
+                }} />
+                <span>MM 50 jours</span>
+              </div>
             )}
-
-            <Tooltip content={<CustomTooltip />} />
-            <Legend 
-              formatter={(value) => {
-                const ds = datasets.find(d => d.key === value || d.key === value.replace('_ma50', '').replace('_ma200', ''));
-                return ds?.title || value;
-              }}
-            />
-
-            {/* Reference line at 0 for percent mode */}
-            {mode === 'percent' && (
-              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="5 5" />
+            {showMA200 && (
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-0.5 bg-current" style={{ 
+                  background: 'repeating-linear-gradient(90deg, currentColor 0, currentColor 6px, transparent 6px, transparent 10px)' 
+                }} />
+                <span>MM 200 jours</span>
+              </div>
             )}
-
-            {/* Data lines - Real data (solid) */}
-            {datasets.map((ds, idx) => (
-              <Line
-                key={ds.key}
-                type="monotone"
-                dataKey={ds.key}
-                stroke={ds.color}
-                strokeWidth={2}
-                dot={false}
-                yAxisId={mode === 'real' && datasets.length <= 2 ? (idx === 0 ? 'left' : 'right') : undefined}
-                connectNulls
-                name={ds.title}
-              />
-            ))}
-
-
-
-            {/* Moving averages */}
-            {showMA50 && datasets.map((ds) => (
-              <Line
-                key={`${ds.key}_ma50`}
-                type="monotone"
-                dataKey={`${ds.key}_ma50`}
-                stroke={ds.color}
-                strokeWidth={1}
-                strokeDasharray="5 5"
-                dot={false}
-                name={`MM 50j`}
-                connectNulls
-              />
-            ))}
-
-            {showMA200 && datasets.map((ds) => (
-              <Line
-                key={`${ds.key}_ma200`}
-                type="monotone"
-                dataKey={`${ds.key}_ma200`}
-                stroke={ds.color}
-                strokeWidth={1}
-                strokeDasharray="10 5"
-                dot={false}
-                name={`MM 200j`}
-                connectNulls
-              />
-            ))}
-
-            {/* Brush for zoom */}
-            <Brush 
-              dataKey="date" 
-              height={30} 
-              stroke="#8884d8"
-              tickFormatter={(date) => new Date(date).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
+          </div>
+        )}
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
