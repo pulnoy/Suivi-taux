@@ -279,28 +279,36 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             const isSelected = selectedKeys.includes(key);
             
             return (
-              <button
-                key={key}
-                onClick={() => toggleIndex(key)}
-                disabled={!isSelected && selectedKeys.length >= 5}
-                className={cn(
-                  'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all',
-                  'border',
-                  isSelected
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-muted/50 text-muted-foreground hover:bg-muted',
-                  !isSelected && selectedKeys.length >= 5 && 'opacity-50 cursor-not-allowed'
-                )}
-              >
-                <span 
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: education?.color || '#64748b' }}
-                />
-                {index.titre}
-                {isSelected && (
-                  <X className="h-3 w-3 ml-1 hover:text-destructive" />
-                )}
-              </button>
+              <TooltipProvider key={key}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => toggleIndex(key)}
+                      disabled={!isSelected && selectedKeys.length >= 5}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all',
+                        'border',
+                        isSelected
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border bg-muted/50 text-muted-foreground hover:bg-muted',
+                        !isSelected && selectedKeys.length >= 5 && 'opacity-50 cursor-not-allowed'
+                      )}
+                    >
+                      <span 
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: education?.color || '#64748b' }}
+                      />
+                      {index.titre}
+                      {isSelected && (
+                        <X className="h-3 w-3 ml-1 hover:text-destructive" />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <p className="text-sm">{education?.shortDescription || index.titre}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             );
           })}
         </div>
@@ -505,11 +513,71 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                   <TableHead className="w-[150px]">Indice</TableHead>
                   <TableHead className="text-right">Début</TableHead>
                   <TableHead className="text-right">Fin</TableHead>
-                  <TableHead className="text-right">Rendement</TableHead>
-                  <TableHead className="text-right">Rend. Annualisé</TableHead>
-                  <TableHead className="text-right">Volatilité</TableHead>
-                  <TableHead className="text-right">Max Drawdown</TableHead>
-                  <TableHead className="text-right">Sharpe</TableHead>
+                  <TableHead className="text-right">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">
+                          Rendement
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm font-semibold mb-1">Rendement Total</p>
+                          <p className="text-sm">Performance totale sur la période sélectionnée, en pourcentage.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">
+                          Rend. Annualisé
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm font-semibold mb-1">Rendement Annualisé</p>
+                          <p className="text-sm">Performance moyenne par an, calculée sur la période. Permet de comparer des périodes différentes.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">
+                          Volatilité
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm font-semibold mb-1">Volatilité</p>
+                          <p className="text-sm">Écart-type des rendements. Mesure le risque et la variabilité de l'indice. Plus c'est élevé, plus c'est risqué.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">
+                          Max Drawdown
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm font-semibold mb-1">Maximum Drawdown</p>
+                          <p className="text-sm">Plus forte baisse depuis un sommet. Mesure la perte maximale subie sur la période.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">
+                          Sharpe
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm font-semibold mb-1">Ratio de Sharpe</p>
+                          <p className="text-sm">Rendement ajusté du risque. Mesure le rendement excédentaire par unité de risque. Plus c'est élevé, meilleur est le rapport rendement/risque.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

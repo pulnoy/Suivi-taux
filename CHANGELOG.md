@@ -1,5 +1,53 @@
 # Changelog - Suivi-Taux
 
+## [2.2.0] - 2026-02-22
+
+### 🆕 Nouvelles Fonctionnalités
+
+#### Simplification de l'Interface
+- **Suppression de l'onglet "Tableau de bord"** : L'ancienne vue avec les tuiles d'indices a été retirée
+- **Renommage** : L'onglet "Comparateur" devient "Tableau de bord"
+- **Interface épurée** : Seuls 2 onglets restent (Tableau de bord + Timeline Crises)
+- **Texte simplifié** : "Comparez jusqu'à 5 indices"
+
+#### Tooltips Explicatifs
+- **Pour chaque indice** : Descriptions détaillées au survol dans le sélecteur
+  - OAT 10 ans, Inflation (HICP), €STR, CAC 40, CAC Mid 60, Euro Stoxx 50
+  - S&P 500, Nasdaq 100, MSCI World, Marchés Émergents
+  - EUR/USD, SCPI, Or, Pétrole (WTI), Bitcoin
+- **Pour les indicateurs statistiques** (avec soulignement pointillé) :
+  - Rendement Total : "Performance totale sur la période sélectionnée"
+  - Rendement Annualisé : "Performance moyenne par an, permet de comparer des périodes différentes"
+  - Volatilité : "Écart-type des rendements, mesure le risque"
+  - Maximum Drawdown : "Plus forte baisse depuis un sommet"
+  - Ratio de Sharpe : "Rendement ajusté du risque"
+
+#### Projection en Pointillés pour Données Manquantes
+- **Détection automatique** : Quand les indices n'ont pas le même historique disponible
+- **Lignes pointillées** : Projection horizontale des valeurs manquantes
+- **Note explicative** : "Les lignes pointillées représentent des projections et ne sont pas incluses dans les statistiques"
+- **Clarté visuelle** : Distinction entre données réelles (ligne continue) et projections (pointillés)
+
+### 🔧 Améliorations
+
+#### Fraîcheur des Données
+- **Mise à jour quotidienne améliorée** : Ajout de données quotidiennes récentes en complément des données hebdomadaires
+- **Yahoo Finance** : Récupération des 30 derniers jours en données quotidiennes pour avoir les dernières valeurs
+- **SCPI** : Ajout de l'estimation 2026 (4.58%)
+
+### 📁 Fichiers Modifiés
+
+```
+app/page.tsx                     # Interface simplifiée (1 onglet supprimé)
+components/comparator.tsx        # Tooltips indices + statistiques
+components/enhanced-chart.tsx    # Projections en pointillés
+lib/educational-data.ts          # Descriptions des indices enrichies
+scripts/update-taux.mjs          # Données quotidiennes récentes + SCPI 2026
+CHANGELOG.md                     # Documentation v2.2.0
+```
+
+---
+
 ## [2.1.1] - 2026-02-21
 
 ### 🐛 Correction Critique - Historique Limité
