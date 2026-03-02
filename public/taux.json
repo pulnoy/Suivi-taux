@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-03-01T08:41:03.544Z",
+  "date_mise_a_jour": "2026-03-02T08:56:07.694Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -11314,7 +11314,7 @@
     },
     "eurusd": {
       "titre": "Euro / Dollar",
-      "valeur": 1.18,
+      "valeur": 1.17,
       "suffixe": "$",
       "historique": [
         {
@@ -17113,15 +17113,15 @@
           "timestamp": 1771804800000
         },
         {
-          "date": "2026-02-27",
-          "value": 1.18,
-          "timestamp": 1772231351000
+          "date": "2026-03-02",
+          "value": 1.17,
+          "timestamp": 1772441714000
         }
       ]
     },
     "cac40": {
       "titre": "CAC 40",
-      "valeur": 8580.75,
+      "valeur": 8425.92,
       "suffixe": "pts",
       "historique": [
         {
@@ -23950,35 +23950,15 @@
           "timestamp": 1771628400000
         },
         {
-          "date": "2026-02-23",
-          "value": 8497.17,
-          "timestamp": 1771833600000
-        },
-        {
-          "date": "2026-02-24",
-          "value": 8519.21,
-          "timestamp": 1771920000000
-        },
-        {
-          "date": "2026-02-25",
-          "value": 8559.07,
-          "timestamp": 1772006400000
-        },
-        {
-          "date": "2026-02-26",
-          "value": 8620.93,
-          "timestamp": 1772092800000
-        },
-        {
-          "date": "2026-02-27",
-          "value": 8580.75,
-          "timestamp": 1772179200000
+          "date": "2026-03-02",
+          "value": 8425.92,
+          "timestamp": 1772440860000
         }
       ]
     },
     "cacmid": {
       "titre": "CAC Mid 60",
-      "valeur": 157.82,
+      "valeur": 154.25,
       "suffixe": "pts",
       "historique": [
         {
@@ -28272,15 +28252,15 @@
           "timestamp": 1771801200000
         },
         {
-          "date": "2026-02-27",
-          "value": 157.82,
-          "timestamp": 1772210123000
+          "date": "2026-03-02",
+          "value": 154.25,
+          "timestamp": 1772440745000
         }
       ]
     },
     "stoxx50": {
       "titre": "Euro Stoxx 50",
-      "valeur": 6138.41,
+      "valeur": 6005.79,
       "suffixe": "pts",
       "historique": [
         {
@@ -33224,9 +33204,9 @@
           "timestamp": 1771801200000
         },
         {
-          "date": "2026-02-27",
-          "value": 6138.41,
-          "timestamp": 1772211600000
+          "date": "2026-03-02",
+          "value": 6005.79,
+          "timestamp": 1772440860000
         }
       ]
     },
@@ -50640,9 +50620,24 @@
           "timestamp": 1771822800000
         },
         {
+          "date": "2026-02-24",
+          "value": 190.77,
+          "timestamp": 1771943400000
+        },
+        {
+          "date": "2026-02-25",
+          "value": 192.37,
+          "timestamp": 1772029800000
+        },
+        {
+          "date": "2026-02-26",
+          "value": 191.68,
+          "timestamp": 1772116200000
+        },
+        {
           "date": "2026-02-27",
           "value": 190.84,
-          "timestamp": 1772226000000
+          "timestamp": 1772202600000
         }
       ]
     },
@@ -56622,15 +56617,30 @@
           "timestamp": 1771822800000
         },
         {
+          "date": "2026-02-24",
+          "value": 62.62,
+          "timestamp": 1771943400000
+        },
+        {
+          "date": "2026-02-25",
+          "value": 63.31,
+          "timestamp": 1772029800000
+        },
+        {
+          "date": "2026-02-26",
+          "value": 62.71,
+          "timestamp": 1772116200000
+        },
+        {
           "date": "2026-02-27",
           "value": 62.58,
-          "timestamp": 1772226000000
+          "timestamp": 1772202600000
         }
       ]
     },
     "brent": {
       "titre": "Pétrole (Brent)",
-      "valeur": 72.87,
+      "valeur": 79.37,
       "suffixe": "$",
       "historique": [
         {
@@ -61479,15 +61489,15 @@
           "timestamp": 1771822800000
         },
         {
-          "date": "2026-02-27",
-          "value": 72.87,
-          "timestamp": 1772229599000
+          "date": "2026-03-02",
+          "value": 79.37,
+          "timestamp": 1772441162000
         }
       ]
     },
     "gold": {
       "titre": "Or (Once)",
-      "valeur": 5247.9,
+      "valeur": 5420.3,
       "suffixe": "$",
       "historique": [
         {
@@ -68146,15 +68156,15 @@
           "timestamp": 1771822800000
         },
         {
-          "date": "2026-02-27",
-          "value": 5247.9,
-          "timestamp": 1772229597000
+          "date": "2026-03-02",
+          "value": 5420.3,
+          "timestamp": 1772441164000
         }
       ]
     },
     "btc": {
       "titre": "Bitcoin",
-      "valeur": 67176.46,
+      "valeur": 66218.05,
       "suffixe": "$",
       "historique": [
         {
@@ -71144,13 +71154,13 @@
         },
         {
           "date": "2026-02-23",
-          "value": 66995.86,
+          "value": 65738.1,
           "timestamp": 1771804800000
         },
         {
-          "date": "2026-03-01",
-          "value": 67176.46,
-          "timestamp": 1772354280000
+          "date": "2026-03-02",
+          "value": 66218.05,
+          "timestamp": 1772441640000
         }
       ]
     },
