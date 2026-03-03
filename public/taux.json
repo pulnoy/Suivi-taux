@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-03-02T08:56:07.694Z",
+  "date_mise_a_jour": "2026-03-03T08:54:35.035Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -3097,7 +3097,7 @@
     },
     "estr": {
       "titre": "€STR",
-      "valeur": 1.94,
+      "valeur": 1.93,
       "suffixe": "%",
       "historique": [
         {
@@ -11309,12 +11309,17 @@
           "date": "2026-02-26",
           "value": 1.94,
           "timestamp": 1772064000000
+        },
+        {
+          "date": "2026-02-27",
+          "value": 1.93,
+          "timestamp": 1772150400000
         }
       ]
     },
     "eurusd": {
       "titre": "Euro / Dollar",
-      "valeur": 1.17,
+      "valeur": 1.16,
       "suffixe": "$",
       "historique": [
         {
@@ -17114,14 +17119,19 @@
         },
         {
           "date": "2026-03-02",
-          "value": 1.17,
-          "timestamp": 1772441714000
+          "value": 1.18,
+          "timestamp": 1772409600000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 1.16,
+          "timestamp": 1772528051000
         }
       ]
     },
     "cac40": {
       "titre": "CAC 40",
-      "valeur": 8425.92,
+      "valeur": 8228.63,
       "suffixe": "pts",
       "historique": [
         {
@@ -23950,15 +23960,20 @@
           "timestamp": 1771628400000
         },
         {
-          "date": "2026-03-02",
-          "value": 8425.92,
-          "timestamp": 1772440860000
+          "date": "2026-02-27",
+          "value": 8394.32,
+          "timestamp": 1772233200000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 8228.63,
+          "timestamp": 1772527170000
         }
       ]
     },
     "cacmid": {
       "titre": "CAC Mid 60",
-      "valeur": 154.25,
+      "valeur": 151.13,
       "suffixe": "pts",
       "historique": [
         {
@@ -28252,15 +28267,20 @@
           "timestamp": 1771801200000
         },
         {
-          "date": "2026-03-02",
-          "value": 154.25,
-          "timestamp": 1772440745000
+          "date": "2026-03-01",
+          "value": 154.61,
+          "timestamp": 1772406000000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 151.13,
+          "timestamp": 1772526968000
         }
       ]
     },
     "stoxx50": {
       "titre": "Euro Stoxx 50",
-      "valeur": 6005.79,
+      "valeur": 5841.61,
       "suffixe": "pts",
       "historique": [
         {
@@ -33204,15 +33224,20 @@
           "timestamp": 1771801200000
         },
         {
-          "date": "2026-03-02",
-          "value": 6005.79,
-          "timestamp": 1772440860000
+          "date": "2026-03-01",
+          "value": 5986.93,
+          "timestamp": 1772406000000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 5841.61,
+          "timestamp": 1772527170000
         }
       ]
     },
     "sp500": {
       "titre": "S&P 500",
-      "valeur": 6878.88,
+      "valeur": 6881.62,
       "suffixe": "pts",
       "historique": [
         {
@@ -40041,35 +40066,20 @@
           "timestamp": 1771650000000
         },
         {
-          "date": "2026-02-23",
-          "value": 6837.75,
-          "timestamp": 1771857000000
+          "date": "2026-02-28",
+          "value": 6881.62,
+          "timestamp": 1772254800000
         },
         {
-          "date": "2026-02-24",
-          "value": 6890.07,
-          "timestamp": 1771943400000
-        },
-        {
-          "date": "2026-02-25",
-          "value": 6946.13,
-          "timestamp": 1772029800000
-        },
-        {
-          "date": "2026-02-26",
-          "value": 6908.86,
-          "timestamp": 1772116200000
-        },
-        {
-          "date": "2026-02-27",
-          "value": 6878.88,
-          "timestamp": 1772202600000
+          "date": "2026-03-02",
+          "value": 6881.62,
+          "timestamp": 1772487229000
         }
       ]
     },
     "nasdaq": {
       "titre": "Nasdaq 100",
-      "valeur": 24960.04,
+      "valeur": 24992.6,
       "suffixe": "pts",
       "historique": [
         {
@@ -46898,35 +46908,20 @@
           "timestamp": 1771650000000
         },
         {
-          "date": "2026-02-23",
-          "value": 24708.94,
-          "timestamp": 1771857000000
+          "date": "2026-02-28",
+          "value": 24992.6,
+          "timestamp": 1772254800000
         },
         {
-          "date": "2026-02-24",
-          "value": 24977.04,
-          "timestamp": 1771943400000
-        },
-        {
-          "date": "2026-02-25",
-          "value": 25329.04,
-          "timestamp": 1772029800000
-        },
-        {
-          "date": "2026-02-26",
-          "value": 25034.37,
-          "timestamp": 1772116200000
-        },
-        {
-          "date": "2026-02-27",
-          "value": 24960.04,
-          "timestamp": 1772202600000
+          "date": "2026-03-02",
+          "value": 24992.6,
+          "timestamp": 1772489759000
         }
       ]
     },
     "world": {
       "titre": "MSCI World",
-      "valeur": 190.84,
+      "valeur": 190.18,
       "suffixe": "$",
       "historique": [
         {
@@ -50620,30 +50615,15 @@
           "timestamp": 1771822800000
         },
         {
-          "date": "2026-02-24",
-          "value": 190.77,
-          "timestamp": 1771943400000
-        },
-        {
-          "date": "2026-02-25",
-          "value": 192.37,
-          "timestamp": 1772029800000
-        },
-        {
-          "date": "2026-02-26",
-          "value": 191.68,
-          "timestamp": 1772116200000
-        },
-        {
-          "date": "2026-02-27",
-          "value": 190.84,
-          "timestamp": 1772202600000
+          "date": "2026-03-02",
+          "value": 190.18,
+          "timestamp": 1772427600000
         }
       ]
     },
     "emerging": {
       "titre": "Émergents",
-      "valeur": 62.58,
+      "valeur": 61.5,
       "suffixe": "$",
       "historique": [
         {
@@ -56617,30 +56597,15 @@
           "timestamp": 1771822800000
         },
         {
-          "date": "2026-02-24",
-          "value": 62.62,
-          "timestamp": 1771943400000
-        },
-        {
-          "date": "2026-02-25",
-          "value": 63.31,
-          "timestamp": 1772029800000
-        },
-        {
-          "date": "2026-02-26",
-          "value": 62.71,
-          "timestamp": 1772116200000
-        },
-        {
-          "date": "2026-02-27",
-          "value": 62.58,
-          "timestamp": 1772202600000
+          "date": "2026-03-02",
+          "value": 61.5,
+          "timestamp": 1772427600000
         }
       ]
     },
     "brent": {
       "titre": "Pétrole (Brent)",
-      "valeur": 79.37,
+      "valeur": 81.27,
       "suffixe": "$",
       "historique": [
         {
@@ -61490,14 +61455,19 @@
         },
         {
           "date": "2026-03-02",
-          "value": 79.37,
-          "timestamp": 1772441162000
+          "value": 77.74,
+          "timestamp": 1772427600000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 81.27,
+          "timestamp": 1772527473000
         }
       ]
     },
     "gold": {
       "titre": "Or (Once)",
-      "valeur": 5420.3,
+      "valeur": 5318.1,
       "suffixe": "$",
       "historique": [
         {
@@ -68157,14 +68127,19 @@
         },
         {
           "date": "2026-03-02",
-          "value": 5420.3,
-          "timestamp": 1772441164000
+          "value": 5294.4,
+          "timestamp": 1772427600000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 5318.1,
+          "timestamp": 1772527470000
         }
       ]
     },
     "btc": {
       "titre": "Bitcoin",
-      "valeur": 66218.05,
+      "valeur": 67095.4,
       "suffixe": "$",
       "historique": [
         {
@@ -71159,8 +71134,13 @@
         },
         {
           "date": "2026-03-02",
-          "value": 66218.05,
-          "timestamp": 1772441640000
+          "value": 68775.85,
+          "timestamp": 1772409600000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 67095.4,
+          "timestamp": 1772527980000
         }
       ]
     },
