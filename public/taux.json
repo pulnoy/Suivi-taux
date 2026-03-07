@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-03-06T08:51:02.504Z",
+  "date_mise_a_jour": "2026-03-07T08:41:05.290Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -3097,7 +3097,7 @@
     },
     "estr": {
       "titre": "€STR",
-      "valeur": 1.93,
+      "valeur": 1.94,
       "suffixe": "%",
       "historique": [
         {
@@ -11329,6 +11329,11 @@
           "date": "2026-03-04",
           "value": 1.93,
           "timestamp": 1772582400000
+        },
+        {
+          "date": "2026-03-05",
+          "value": 1.94,
+          "timestamp": 1772668800000
         }
       ]
     },
@@ -17140,13 +17145,13 @@
         {
           "date": "2026-03-06",
           "value": 1.16,
-          "timestamp": 1772787013000
+          "timestamp": 1772836153000
         }
       ]
     },
     "cac40": {
       "titre": "CAC 40",
-      "valeur": 8087.12,
+      "valeur": 7993.49,
       "suffixe": "pts",
       "historique": [
         {
@@ -23976,19 +23981,39 @@
         },
         {
           "date": "2026-02-27",
-          "value": 8045.8,
+          "value": 7993.49,
           "timestamp": 1772233200000
         },
         {
+          "date": "2026-03-02",
+          "value": 8394.32,
+          "timestamp": 1772438400000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 8103.84,
+          "timestamp": 1772524800000
+        },
+        {
+          "date": "2026-03-04",
+          "value": 8167.73,
+          "timestamp": 1772611200000
+        },
+        {
+          "date": "2026-03-05",
+          "value": 8045.8,
+          "timestamp": 1772697600000
+        },
+        {
           "date": "2026-03-06",
-          "value": 8087.12,
-          "timestamp": 1772786145000
+          "value": 7993.49,
+          "timestamp": 1772784000000
         }
       ]
     },
     "cacmid": {
       "titre": "CAC Mid 60",
-      "valeur": 150.06,
+      "valeur": 148.28,
       "suffixe": "pts",
       "historique": [
         {
@@ -28283,19 +28308,19 @@
         },
         {
           "date": "2026-03-01",
-          "value": 149.82,
+          "value": 148.28,
           "timestamp": 1772406000000
         },
         {
           "date": "2026-03-06",
-          "value": 150.06,
-          "timestamp": 1772785853000
+          "value": 148.28,
+          "timestamp": 1772814909000
         }
       ]
     },
     "stoxx50": {
       "titre": "Euro Stoxx 50",
-      "valeur": 5809.53,
+      "valeur": 5719.9,
       "suffixe": "pts",
       "historique": [
         {
@@ -33240,19 +33265,19 @@
         },
         {
           "date": "2026-03-01",
-          "value": 5782.89,
+          "value": 5719.9,
           "timestamp": 1772406000000
         },
         {
           "date": "2026-03-06",
-          "value": 5809.53,
-          "timestamp": 1772786160000
+          "value": 5719.9,
+          "timestamp": 1772816400000
         }
       ]
     },
     "sp500": {
       "titre": "S&P 500",
-      "valeur": 6830.71,
+      "valeur": 6740.02,
       "suffixe": "pts",
       "historique": [
         {
@@ -40082,19 +40107,39 @@
         },
         {
           "date": "2026-02-28",
-          "value": 6830.71,
+          "value": 6740.02,
           "timestamp": 1772254800000
+        },
+        {
+          "date": "2026-03-02",
+          "value": 6881.62,
+          "timestamp": 1772461800000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 6816.63,
+          "timestamp": 1772548200000
+        },
+        {
+          "date": "2026-03-04",
+          "value": 6869.5,
+          "timestamp": 1772634600000
         },
         {
           "date": "2026-03-05",
           "value": 6830.71,
-          "timestamp": 1772746545000
+          "timestamp": 1772721000000
+        },
+        {
+          "date": "2026-03-06",
+          "value": 6740.02,
+          "timestamp": 1772807400000
         }
       ]
     },
     "nasdaq": {
       "titre": "Nasdaq 100",
-      "valeur": 25020.41,
+      "valeur": 24643.02,
       "suffixe": "pts",
       "historique": [
         {
@@ -46924,19 +46969,39 @@
         },
         {
           "date": "2026-02-28",
-          "value": 25020.41,
+          "value": 24643.02,
           "timestamp": 1772254800000
+        },
+        {
+          "date": "2026-03-02",
+          "value": 24992.6,
+          "timestamp": 1772461800000
+        },
+        {
+          "date": "2026-03-03",
+          "value": 24720.08,
+          "timestamp": 1772548200000
+        },
+        {
+          "date": "2026-03-04",
+          "value": 25093.68,
+          "timestamp": 1772634600000
         },
         {
           "date": "2026-03-05",
           "value": 25020.41,
-          "timestamp": 1772748959000
+          "timestamp": 1772721000000
+        },
+        {
+          "date": "2026-03-06",
+          "value": 24643.02,
+          "timestamp": 1772807400000
         }
       ]
     },
     "world": {
       "titre": "MSCI World",
-      "valeur": 187.09,
+      "valeur": 184.98,
       "suffixe": "$",
       "historique": [
         {
@@ -50631,19 +50696,19 @@
         },
         {
           "date": "2026-03-02",
-          "value": 187.09,
+          "value": 184.98,
           "timestamp": 1772427600000
         },
         {
-          "date": "2026-03-05",
-          "value": 187.09,
-          "timestamp": 1772744400000
+          "date": "2026-03-06",
+          "value": 184.98,
+          "timestamp": 1772830800000
         }
       ]
     },
     "emerging": {
       "titre": "Émergents",
-      "valeur": 57.63,
+      "valeur": 57.32,
       "suffixe": "$",
       "historique": [
         {
@@ -56618,19 +56683,19 @@
         },
         {
           "date": "2026-03-02",
-          "value": 57.63,
+          "value": 57.32,
           "timestamp": 1772427600000
         },
         {
-          "date": "2026-03-05",
-          "value": 57.63,
-          "timestamp": 1772744400000
+          "date": "2026-03-06",
+          "value": 57.32,
+          "timestamp": 1772830803000
         }
       ]
     },
     "brent": {
       "titre": "Pétrole (Brent)",
-      "valeur": 85.63,
+      "valeur": 92.69,
       "suffixe": "$",
       "historique": [
         {
@@ -61480,19 +61545,19 @@
         },
         {
           "date": "2026-03-02",
-          "value": 85.41,
+          "value": 92.69,
           "timestamp": 1772427600000
         },
         {
           "date": "2026-03-06",
-          "value": 85.63,
-          "timestamp": 1772786450000
+          "value": 92.69,
+          "timestamp": 1772834398000
         }
       ]
     },
     "gold": {
       "titre": "Or (Once)",
-      "valeur": 5116.4,
+      "valeur": 5158.7,
       "suffixe": "$",
       "historique": [
         {
@@ -68152,19 +68217,19 @@
         },
         {
           "date": "2026-03-02",
-          "value": 5065.3,
+          "value": 5146.1,
           "timestamp": 1772427600000
         },
         {
           "date": "2026-03-06",
-          "value": 5116.4,
-          "timestamp": 1772786459000
+          "value": 5158.7,
+          "timestamp": 1772834399000
         }
       ]
     },
     "btc": {
       "titre": "Bitcoin",
-      "valeur": 70918.15,
+      "valeur": 67934.32,
       "suffixe": "$",
       "historique": [
         {
@@ -71159,13 +71224,13 @@
         },
         {
           "date": "2026-03-02",
-          "value": 70841.13,
+          "value": 68136.49,
           "timestamp": 1772409600000
         },
         {
-          "date": "2026-03-06",
-          "value": 70918.15,
-          "timestamp": 1772786940000
+          "date": "2026-03-07",
+          "value": 67934.32,
+          "timestamp": 1772872680000
         }
       ]
     },
