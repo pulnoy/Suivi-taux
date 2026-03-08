@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Comparator } from '@/components/comparator';
 import { TimelineCrises } from '@/components/timeline-crises';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
@@ -12,6 +11,7 @@ import {
   Clock,
   RefreshCw
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // --- TYPES ---
 type DataPoint = { date: string; value: number; timestamp?: number };
@@ -21,19 +21,15 @@ type JsonData = { date_mise_a_jour: string; indices: Record<string, Indicateur> 
 // --- LOADING SKELETON ---
 function LoadingSkeleton() {
   return (
-    <div className="min-h-screen bg-background p-6 md:p-12">
+    <div className="min-h-screen bg-background p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <Skeleton className="h-10 w-80 mb-2" />
-            <Skeleton className="h-4 w-48" />
-          </div>
-          <Skeleton className="h-9 w-9 rounded-full" />
+        <div className="flex justify-between items-center mb-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-8 w-64" />
         </div>
-        <Skeleton className="h-12 w-full mb-6" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
           {[...Array(5)].map((_, i) => (
-            <Skeleton key={i} className="h-36 rounded-xl" />
+            <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
         </div>
       </div>
@@ -47,7 +43,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [activeMainTab, setActiveMainTab] = useState('comparator');
+  const [activeMainTab, setActiveMainTab] = useState<'comparator' | 'timeline'>('comparator');
   
   // Comparator state
   const [comparatorKeys, setComparatorKeys] = useState<string[]>([]);
@@ -75,7 +71,7 @@ export default function Dashboard() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center">
           <p className="text-destructive text-lg mb-4">{error || 'Données non disponibles'}</p>
           <Button onClick={() => window.location.reload()}>
@@ -89,82 +85,88 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Header compact avec onglets intégrés */}
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-[#003A7A] dark:text-blue-400 tracking-tight">
+        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-4">
+          {/* Logo et date de mise à jour */}
+          <div className="flex items-center gap-3 min-w-0">
+            <h1 className="text-xl md:text-2xl font-extrabold text-[#003A7A] dark:text-blue-400 tracking-tight whitespace-nowrap">
               Suivi-Taux
             </h1>
-            <p className="text-xs text-muted-foreground">
-              Mise à jour : {new Date(data.date_mise_a_jour).toLocaleDateString('fr-FR', {
+            <span className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap">
+              {new Date(data.date_mise_a_jour).toLocaleDateString('fr-FR', {
                 day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
+                month: 'short',
+                year: 'numeric'
               })}
-            </p>
+            </span>
           </div>
-          <ThemeToggle />
+          
+          {/* Onglets de navigation intégrés au header */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-muted rounded-lg p-0.5">
+              <button
+                onClick={() => setActiveMainTab('comparator')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
+                  activeMainTab === 'comparator'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                <span className="hidden sm:inline">Tableau de bord</span>
+              </button>
+              <button
+                onClick={() => setActiveMainTab('timeline')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
+                  activeMainTab === 'timeline'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Clock className="h-4 w-4" />
+                <span className="hidden sm:inline">Timeline</span>
+              </button>
+            </div>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
-      {/* Main Tabs */}
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        <Tabs value={activeMainTab} onValueChange={setActiveMainTab}>
-          <TabsList className="grid w-full max-w-md grid-cols-2 mb-6">
-            <TabsTrigger value="comparator" className="gap-2">
-              <LayoutDashboard className="h-4 w-4" />
-              <span className="hidden sm:inline">Tableau de bord</span>
-            </TabsTrigger>
-            <TabsTrigger value="timeline" className="gap-2">
-              <Clock className="h-4 w-4" />
-              <span className="hidden sm:inline">Timeline Crises</span>
-            </TabsTrigger>
-          </TabsList>
+      {/* Contenu principal avec marges réduites */}
+      <div className="max-w-7xl mx-auto px-4 py-3">
+        {/* Tableau de bord */}
+        {activeMainTab === 'comparator' && (
+          <div className="bg-card rounded-xl border border-border shadow-sm p-4">
+            <Comparator
+              indices={data.indices}
+              selectedKeys={comparatorKeys}
+              onKeysChange={setComparatorKeys}
+            />
+          </div>
+        )}
 
-          {/* Tableau de bord (anciennement Comparator) */}
-          <TabsContent value="comparator">
-            <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-foreground mb-2">Tableau de bord</h2>
-                <p className="text-sm text-muted-foreground">
-                  Comparez jusqu'à 5 indices
-                </p>
-              </div>
-              <Comparator
-                indices={data.indices}
-                selectedKeys={comparatorKeys}
-                onKeysChange={setComparatorKeys}
-              />
+        {/* Timeline Tab */}
+        {activeMainTab === 'timeline' && (
+          <div className="bg-card rounded-xl border border-border shadow-sm p-4">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-foreground">Timeline des Crises Financières</h2>
+              <p className="text-sm text-muted-foreground">
+                Principales crises économiques et leur impact sur les marchés
+              </p>
             </div>
-          </TabsContent>
-
-          {/* Timeline Tab */}
-          <TabsContent value="timeline">
-            <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-foreground mb-2">Timeline des Crises Financières</h2>
-                <p className="text-sm text-muted-foreground">
-                  Découvrez les principales crises économiques et leur impact sur les marchés financiers
-                </p>
-              </div>
-              <TimelineCrises />
-            </div>
-          </TabsContent>
-        </Tabs>
+            <TimelineCrises />
+          </div>
+        )}
       </div>
 
-      {/* Footer */}
-      <footer className="border-t border-border mt-12">
-        <div className="max-w-7xl mx-auto px-6 py-6 text-center text-xs text-muted-foreground">
+      {/* Footer compact */}
+      <footer className="border-t border-border mt-6">
+        <div className="max-w-7xl mx-auto px-4 py-3 text-center text-xs text-muted-foreground">
           <p>
-            Données fournies par FRED API, Yahoo Finance et ASPIM. 
-            Mise à jour automatique quotidienne.
-          </p>
-          <p className="mt-1">
-            Gillian Noësen
+            Données: FRED API, Yahoo Finance, ASPIM • Mise à jour quotidienne • Gillian Noësen
           </p>
         </div>
       </footer>

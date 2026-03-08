@@ -329,26 +329,96 @@ async function main() {
 
   const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : 0;
 
+  // Fonction pour calculer la performance annualisée sur une période donnée
+  const calculateAnnualizedPerformance = (historique, years) => {
+    if (!historique || historique.length < 2) return null;
+    
+    const now = new Date();
+    const targetDate = new Date(now);
+    targetDate.setFullYear(targetDate.getFullYear() - years);
+    
+    // Trouver le point le plus proche de la date cible
+    const currentValue = historique[historique.length - 1]?.value;
+    let pastValue = null;
+    
+    for (let i = historique.length - 1; i >= 0; i--) {
+      const pointDate = new Date(historique[i].date);
+      if (pointDate <= targetDate) {
+        pastValue = historique[i].value;
+        break;
+      }
+    }
+    
+    // Si on n'a pas trouvé de point assez ancien, prendre le premier
+    if (pastValue === null && historique.length > 0) {
+      const firstPoint = historique[0];
+      const firstDate = new Date(firstPoint.date);
+      const actualYears = (now - firstDate) / (365.25 * 24 * 60 * 60 * 1000);
+      
+      if (actualYears < years * 0.5) return null; // Pas assez de données
+      
+      pastValue = firstPoint.value;
+      years = actualYears; // Utiliser la période réelle
+    }
+    
+    if (!pastValue || !currentValue || pastValue <= 0 || currentValue <= 0) return null;
+    
+    // Formule performance annualisée: (Vfinal/Vinitial)^(1/n) - 1
+    const performance = (Math.pow(currentValue / pastValue, 1 / years) - 1) * 100;
+    
+    return parseFloat(performance.toFixed(2));
+  };
+
+  // Fonction pour créer les données d'un indice avec performances
+  const createIndexData = (titre, valeur, suffixe, historique) => {
+    const data = {
+      titre,
+      valeur,
+      suffixe,
+      historique
+    };
+    
+    // Calculer les performances annualisées pour les indices non-taux
+    if (suffixe !== '%' && historique && historique.length > 0) {
+      const perf1an = calculateAnnualizedPerformance(historique, 1);
+      const perf3ans = calculateAnnualizedPerformance(historique, 3);
+      const perf5ans = calculateAnnualizedPerformance(historique, 5);
+      
+      data.performances = {
+        annualisee_1an: perf1an,
+        annualisee_3ans: perf3ans,
+        annualisee_5ans: perf5ans
+      };
+    }
+    
+    return data;
+  };
+
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
     indices: {
+      // Taux (pas de performance annualisée)
       oat: { titre: "OAT 10 ans", valeur: getLast(historyOat), suffixe: "%", historique: historyOat },
       inflation: { titre: "Inflation France", valeur: getLast(historyInflation), suffixe: "%", historique: historyInflation },
       estr: { titre: "€STR", valeur: getLast(historyEstr), suffixe: "%", historique: historyEstr },
-      eurusd: { titre: "Euro / Dollar", valeur: getLast(historyEurUsd), suffixe: "$", historique: historyEurUsd },
+      
+      // Devises et indices avec performances annualisées
+      eurusd: createIndexData("Euro / Dollar", getLast(historyEurUsd), "$", historyEurUsd),
 
-      cac40: { titre: "CAC 40", valeur: getLast(historyCac40), suffixe: "pts", historique: historyCac40 },
-      cacmid: { titre: "CAC Mid 60", valeur: getLast(historyCacMid), suffixe: "pts", historique: historyCacMid },
-      stoxx50: { titre: "Euro Stoxx 50", valeur: getLast(historyStoxx50), suffixe: "pts", historique: historyStoxx50 },
+      cac40: createIndexData("CAC 40", getLast(historyCac40), "pts", historyCac40),
+      cacmid: createIndexData("CAC Mid 60", getLast(historyCacMid), "pts", historyCacMid),
+      stoxx50: createIndexData("Euro Stoxx 50", getLast(historyStoxx50), "pts", historyStoxx50),
 
-      sp500: { titre: "S&P 500", valeur: getLast(historySP500), suffixe: "pts", historique: historySP500 },
-      nasdaq: { titre: "Nasdaq 100", valeur: getLast(historyNasdaq), suffixe: "pts", historique: historyNasdaq },
-      world: { titre: "MSCI World", valeur: getLast(historyWorld), suffixe: "$", historique: historyWorld },
-      emerging: { titre: "Émergents", valeur: getLast(historyEmerging), suffixe: "$", historique: historyEmerging },
+      sp500: createIndexData("S&P 500", getLast(historySP500), "pts", historySP500),
+      nasdaq: createIndexData("Nasdaq 100", getLast(historyNasdaq), "pts", historyNasdaq),
+      world: createIndexData("MSCI World", getLast(historyWorld), "$", historyWorld),
+      emerging: createIndexData("Émergents", getLast(historyEmerging), "$", historyEmerging),
 
-      brent: { titre: "Pétrole (Brent)", valeur: getLast(historyBrent), suffixe: "$", historique: historyBrent },
-      gold: { titre: "Or (Once)", valeur: getLast(historyGold), suffixe: "$", historique: historyGold },
-      btc: { titre: "Bitcoin", valeur: getLast(historyBtc), suffixe: "$", historique: historyBtc }, // AJOUT DU BITCOIN
+      brent: createIndexData("Pétrole (Brent)", getLast(historyBrent), "$", historyBrent),
+      gold: createIndexData("Or (Once)", getLast(historyGold), "$", historyGold),
+      btc: createIndexData("Bitcoin", getLast(historyBtc), "$", historyBtc),
+      
+      // SCPI (taux, pas de performance)
       scpi: { titre: "Moyenne SCPI", valeur: getLast(historyScpi), suffixe: "%", historique: historyScpi },
     }
   };
