@@ -59,19 +59,59 @@ async function fetchFredSeries(seriesId) {
   return [];
 }
 
-// 2. Inflation France (IPC INSEE/OECD - variation sur 1 an glissant)
-async function getInflationFromIndex() {
-  if (!FRED_API_KEY) {
-    // Fallback: utiliser les données existantes
-    if (existingData?.indices?.inflation?.historique?.length > 0) {
-      console.log(`  ⚠️ Inflation France: utilisation des données existantes (pas de clé API)`);
-      return existingData.indices.inflation.historique;
+// 2. Inflation France - SOURCE PRIMAIRE: API INSEE BDM (pas de clé API requise)
+// Série 001761313: IPC Glissement annuel (variation sur 1 an)
+// Note: L'API FRED FRACPIALLMINMEI a un retard de ~1 an, donc on utilise INSEE en priorité
+async function getInflationFromINSEE() {
+  try {
+    console.log(`  Fetching INSEE BDM (série 001761313)...`);
+    // API INSEE BDM - Glissement annuel IPC France
+    // Format SDMX XML, pas de clé API requise pour les données publiques
+    const url = `https://www.bdm.insee.fr/series/sdmx/data/SERIES_BDM/001761313?startPeriod=${HISTORY_START_DATE.substring(0,4)}`;
+    const response = await fetch(url, { 
+      cache: 'no-store',
+      headers: { 'Accept': 'application/xml' }
+    });
+    const xmlText = await response.text();
+    
+    // Parser le XML SDMX pour extraire les observations
+    const observations = [];
+    const obsRegex = /TIME_PERIOD="([^"]+)"[^>]*OBS_VALUE="([^"]+)"/g;
+    let match;
+    while ((match = obsRegex.exec(xmlText)) !== null) {
+      const [_, period, value] = match;
+      // Convertir "2025-12" en "2025-12-01" pour cohérence
+      const date = period.length === 7 ? `${period}-01` : period;
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue)) {
+        observations.push({
+          date,
+          value: parseFloat(numValue.toFixed(2)),
+          timestamp: new Date(date).getTime()
+        });
+      }
     }
-    console.log(`  ❌ Inflation France: pas de clé API et pas de données existantes`);
+    
+    if (observations.length > 0) {
+      // Trier par date (les données INSEE sont en ordre inverse)
+      observations.sort((a, b) => a.timestamp - b.timestamp);
+      console.log(`  ✓ INSEE Inflation: ${observations.length} points, ${observations[0]?.date} → ${observations[observations.length-1]?.date}`);
+      return observations;
+    }
+  } catch (error) {
+    console.error(`  ⚠️ Erreur INSEE:`, error.message);
+  }
+  return [];
+}
+
+// Fallback: API FRED (retard d'environ 1 an)
+async function getInflationFromFRED() {
+  if (!FRED_API_KEY) {
     return [];
   }
   
   try {
+    console.log(`  Fetching FRED FRACPIALLMINMEI (fallback)...`);
     const timestamp = new Date().getTime();
     // FRACPIALLMINMEI: Consumer Price Index France (OECD)
     // units=pc1: Percent Change from Year Ago (variation sur 1 an)
@@ -88,12 +128,37 @@ async function getInflationFromIndex() {
         }))
         .filter(item => !isNaN(item.value))
         .sort((a, b) => a.timestamp - b.timestamp);
-      console.log(`  ✓ Inflation France: ${result.length} points, ${result[0]?.date} → ${result[result.length-1]?.date}`);
+      console.log(`  ✓ FRED Inflation: ${result.length} points, ${result[0]?.date} → ${result[result.length-1]?.date}`);
       return result;
     }
   } catch (error) { 
-    console.error(`Erreur Inflation France:`, error.message); 
+    console.error(`  ⚠️ Erreur FRED Inflation:`, error.message); 
   }
+  return [];
+}
+
+// Fonction principale: essaie INSEE d'abord, puis FRED, puis données existantes
+async function getInflationFromIndex() {
+  // 1. Essayer l'API INSEE (source primaire, données plus récentes)
+  let inseeData = await getInflationFromINSEE();
+  if (inseeData.length > 0) {
+    return inseeData;
+  }
+  
+  // 2. Fallback sur FRED si INSEE échoue
+  console.log(`  ⚠️ INSEE indisponible, tentative FRED...`);
+  let fredData = await getInflationFromFRED();
+  if (fredData.length > 0) {
+    return fredData;
+  }
+  
+  // 3. Fallback sur données existantes
+  if (existingData?.indices?.inflation?.historique?.length > 0) {
+    console.log(`  ⚠️ Inflation France: utilisation des données existantes (APIs indisponibles)`);
+    return existingData.indices.inflation.historique;
+  }
+  
+  console.log(`  ❌ Inflation France: aucune source disponible`);
   return [];
 }
 
