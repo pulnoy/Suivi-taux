@@ -1,5 +1,34 @@
 # Changelog - Suivi-Taux
 
+## [2.3.1] - 2026-03-08
+
+### 🐛 Fix: Inflation France - Données à jour jusqu'à décembre 2025
+
+#### Problème Identifié
+- Les données d'inflation française s'arrêtaient en **mars 2025** (9 mois de retard)
+- Cause : L'API FRED `FRACPIALLMINMEI` (source OECD) publie avec un retard important (~1 an)
+
+#### Solution Implémentée
+- **Nouvelle source principale : API INSEE BDM** (série `001761313`)
+  - Données officielles françaises (Institut National de la Statistique)
+  - Mise à jour mensuelle, données plus récentes
+  - Aucune clé API requise (données publiques)
+- **Système de fallback robuste** :
+  1. INSEE BDM (prioritaire) - données jusqu'à ~1-2 mois de décalage
+  2. FRED FRACPIALLMINMEI (fallback) - si INSEE indisponible
+  3. Données existantes - si toutes les APIs échouent
+
+#### Détails Techniques
+- Série INSEE `001761313` : IPC Glissement annuel (variation sur 1 an)
+- Format SDMX XML parsé directement
+- Compatible avec le format existant du fichier `taux.json`
+
+#### Résultat
+- **Avant** : Données jusqu'à mars 2025 (303 points)
+- **Après** : Données jusqu'à décembre 2025 (312 points, +9 mois)
+
+---
+
 ## [2.3.0] - 2026-03-08
 
 ### 🎨 Interface Plus Compacte
