@@ -1,5 +1,70 @@
 # Changelog - Suivi-Taux
 
+## [2.3.0] - 2026-03-08
+
+### 🎨 Interface Plus Compacte
+
+#### Header Repensé
+- **Onglets intégrés au header** : "Tableau de bord" et "Timeline" déplacés à droite du titre "Suivi-Taux"
+- **Layout optimisé** : Toggle élégant avec états visuels clairs (actif/inactif)
+- **Responsive amélioré** : Labels masqués sur mobile, icônes toujours visibles
+
+#### Espacements Réduits
+- **Padding header** : Réduit de `py-4` à `py-2`
+- **Marges contenu** : Réduites de `py-6` à `py-3`
+- **Titre redondant supprimé** : "Tableau de bord - Comparez jusqu'à 5 indices" retiré car déjà présent dans la section sélection
+- **Footer compact** : Informations condensées sur une seule ligne
+
+#### Gains d'Espace
+- **~100-150px gagnés** en hauteur pour le graphique
+- Interface plus aérée et professionnelle
+
+### 📊 Format des Dates Adaptatif (Axe X)
+
+#### Problème Résolu
+- Les dates étaient répétitives et peu lisibles : "janv. 26, janv. 26, janv. 26..."
+
+#### Nouveau Format Intelligent
+- **Court terme (1M, 3M)** : Format `jj/mm` (ex: 15/02, 22/02, 01/03)
+- **Moyen terme (6M, 1A, YTD)** : Format `mm/aa` (ex: 02/26, 03/26, 04/26)
+- **Long terme (5A, MAX)** : Format année uniquement (ex: 2020, 2021, 2022)
+
+#### Espacement Optimisé
+- **Intervalle automatique** : Calcul dynamique du nombre de labels (~8 max)
+- **MinTickGap** : Espacement minimum de 30px entre labels
+- **Brush aligné** : Même format de dates dans la zone de zoom
+
+### 📈 Performances Annualisées Corrigées
+
+#### Problème Identifié
+- Certains consommateurs du fichier `taux.json` calculaient mal les performances
+- Ex: CAC 40 affiché à 7993% au lieu de ~5-8% annualisé
+
+#### Solution
+- **Nouvelles propriétés** ajoutées dans `taux.json` pour les indices non-taux :
+  ```json
+  "performances": {
+    "annualisee_1an": 8.5,
+    "annualisee_3ans": 6.2,
+    "annualisee_5ans": 5.7
+  }
+  ```
+- **Formule correcte** : `(Vfinal/Vinitial)^(1/n) - 1`
+- **Indices concernés** : CAC 40, S&P 500, Nasdaq, Euro Stoxx 50, MSCI World, Émergents, Or, Pétrole, Bitcoin, EUR/USD
+
+#### Gestion des Données Insuffisantes
+- Retourne `null` si moins de 50% de la période demandée est disponible
+- Adapte automatiquement la période au données disponibles
+
+### 🔧 Technique
+
+#### Fichiers Modifiés
+- `app/page.tsx` : Refonte du layout et header
+- `components/enhanced-chart.tsx` : Format dates et intervalles
+- `scripts/update-taux.mjs` : Calcul des performances annualisées
+
+---
+
 ## [2.2.2] - 2026-02-22
 
 ### 🐛 Correction Bug Critique - Moyennes Mobiles

@@ -37,6 +37,48 @@ interface EnhancedChartProps {
   onToggleMA200?: () => void;
 }
 
+// Fonction pour formater les dates selon la période
+const formatXAxisDate = (dateString: string, period: string): string => {
+  const date = new Date(dateString);
+  
+  switch(period) {
+    case '1M':
+    case '3M':
+      // Format jj/mm pour court terme
+      return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+    
+    case '6M':
+    case '1A':
+    case 'YTD':
+      // Format mm/aa pour moyen terme
+      return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
+    
+    case '5A':
+    case 'MAX':
+      // Format année pour long terme
+      return date.getFullYear().toString();
+    
+    default:
+      // Format par défaut mm/aa
+      return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
+  }
+};
+
+// Fonction pour calculer l'intervalle optimal de ticks
+const getTickInterval = (dataLength: number, period: string): number | 'preserveStartEnd' => {
+  // Nombre cible de ticks à afficher
+  const targetTicks = 8;
+  
+  if (dataLength <= targetTicks) {
+    return 0; // Afficher tous les ticks
+  }
+  
+  // Calculer l'intervalle pour avoir environ targetTicks labels
+  const interval = Math.ceil(dataLength / targetTicks);
+  
+  return interval;
+};
+
 // Determine date ranges for each dataset
 interface DateRange {
   key: string;
@@ -457,11 +499,13 @@ export function EnhancedChart({
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.3} />
               <XAxis 
                 dataKey="date" 
-                tickFormatter={(date) => new Date(date).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}
+                tickFormatter={(date) => formatXAxisDate(date, period)}
                 className="text-xs"
-                tick={{ fill: 'currentColor' }}
+                tick={{ fill: 'currentColor', fontSize: 11 }}
                 tickLine={{ stroke: 'currentColor' }}
                 axisLine={{ stroke: 'currentColor' }}
+                interval={getTickInterval(maData.length, period)}
+                minTickGap={30}
               />
               
               {/* Y Axis */}
@@ -562,7 +606,7 @@ export function EnhancedChart({
                 dataKey="date" 
                 height={30} 
                 stroke="#8884d8"
-                tickFormatter={(date) => new Date(date).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}
+                tickFormatter={(date) => formatXAxisDate(date, period)}
               />
             </ComposedChart>
           </ResponsiveContainer>
