@@ -61,43 +61,48 @@ async function fetchFredSeries(seriesId) {
 //    Série FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD (mensuelle, quasi temps réel)
 //    Utilisée pour compléter les données FRED avec les mois récents manquants
 // ─────────────────────────────────────────────────────────────
-async function getOatRecentFromBDF() {
+// Récupère les données OAT récentes depuis l'API SDMX de la BCE (Banque Centrale Européenne)
+// Série : IRS.M.FR.L.L40.CI.0.EUR.N.Z — Taux souverain France 10 ans, mensuel
+// API publique, sans clé, mise à jour en quasi temps réel (J+2 environ)
+async function getOatRecentFromECB() {
   try {
-    console.log(`  Fetching Banque de France Webstat v2.1 (OAT 10 ans récent)...`);
-    // API OpenDataSoft v2.1 — portail Banque de France
-    // Les points du nom SDMX sont remplacés par des tirets bas dans l'ID dataset
-    // FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD → FM_M_FR_EUR_FR2_BB_FR10YT_RR_YLD
-    const url = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/FM_M_FR_EUR_FR2_BB_FR10YT_RR_YLD/records?limit=24&order_by=time_period%20DESC`;
+    console.log(`  Fetching BCE SDMX (OAT 10 ans récent)...`);
+    // startPeriod = il y a 3 ans pour couvrir largement le retard FRED
+    const startPeriod = new Date();
+    startPeriod.setFullYear(startPeriod.getFullYear() - 3);
+    const startStr = startPeriod.toISOString().substring(0, 7); // "2023-03"
+
+    const url = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0.EUR.N.Z?startPeriod=${startStr}&format=jsondata`;
     const response = await fetch(url, {
       cache: 'no-store',
       headers: { 'Accept': 'application/json' }
     });
 
     if (!response.ok) {
-      console.log(`  ⚠️ BDF Webstat HTTP ${response.status}`);
+      console.log(`  ⚠️ BCE HTTP ${response.status}`);
       return [];
     }
 
     const json = await response.json();
-    const records = json.results ?? json.records ?? [];
 
-    if (records.length === 0) {
-      console.log(`  ⚠️ BDF Webstat: aucun enregistrement retourné`);
+    // Format SDMX-JSON : les périodes et valeurs sont dans des tableaux parallèles
+    const periods = json?.data?.dataSets?.[0]?.series?.['0:0:0:0:0:0:0:0:0']?.observations;
+    const allPeriods = json?.data?.structure?.dimensions?.observation?.[0]?.values;
+
+    if (!periods || !allPeriods) {
+      console.log(`  ⚠️ BCE: structure JSON inattendue`);
       return [];
     }
 
     const observations = [];
-    for (const rec of records) {
-      // Les champs peuvent varier légèrement selon le dataset
-      const fields = rec.fields ?? rec;
-      const period = fields.time_period ?? fields.TIME_PERIOD ?? fields.period;
-      const rawValue = fields.obs_value ?? fields.OBS_VALUE ?? fields.value;
+    for (const [idx, obs] of Object.entries(periods)) {
+      const periodObj = allPeriods[parseInt(idx)];
+      if (!periodObj || obs[0] == null) continue;
 
-      if (!period || rawValue == null) continue;
+      const period = periodObj.id ?? periodObj.name; // ex: "2026-02"
+      const date = period.length === 7 ? `${period}-01` : period;
+      const numValue = parseFloat(obs[0]);
 
-      // Convertir "2025-01" → "2025-01-01"
-      const date = String(period).length === 7 ? `${period}-01` : String(period);
-      const numValue = parseFloat(rawValue);
       if (!isNaN(numValue)) {
         observations.push({
           date,
@@ -110,29 +115,27 @@ async function getOatRecentFromBDF() {
     if (observations.length > 0) {
       observations.sort((a, b) => a.timestamp - b.timestamp);
       const last = observations[observations.length - 1];
-      console.log(`  ✓ BDF Webstat OAT: ${observations.length} points récents, dernier: ${last.date} = ${last.value}%`);
+      console.log(`  ✓ BCE OAT: ${observations.length} points récents, dernier: ${last.date} = ${last.value}%`);
       return observations;
     }
 
-    // Log de debug si aucun point parsé
-    console.log(`  ⚠️ BDF Webstat: aucune observation parsée — champs disponibles:`, Object.keys(records[0]?.fields ?? records[0] ?? {}));
+    console.log(`  ⚠️ BCE: aucune observation parsée`);
     return [];
   } catch (error) {
-    console.error(`  ⚠️ Erreur BDF Webstat:`, error.message);
+    console.error(`  ⚠️ Erreur BCE:`, error.message);
     return [];
   }
 }
 
-// Fusion FRED (historique long) + BDF (données récentes)
+// Fusion FRED (historique long) + BCE (données récentes)
 async function getOatHistory() {
   // 1. Récupérer l'historique long depuis FRED
   const fredData = await fetchFredSeries('IRLTLT01FRM156N');
 
-  // 2. Récupérer les données récentes depuis la Banque de France
-  const bdfData = await getOatRecentFromBDF();
+  // 2. Récupérer les données récentes depuis la BCE
+  const ecbData = await getOatRecentFromECB();
 
-  if (fredData.length === 0 && bdfData.length === 0) {
-    // Fallback sur données existantes
+  if (fredData.length === 0 && ecbData.length === 0) {
     if (existingData?.indices?.oat?.historique?.length > 0) {
       console.log(`  ⚠️ OAT: utilisation des données existantes`);
       return existingData.indices.oat.historique;
@@ -140,20 +143,21 @@ async function getOatHistory() {
     return [];
   }
 
-  if (bdfData.length === 0) return fredData;
-  if (fredData.length === 0) return bdfData;
+  if (ecbData.length === 0) return fredData;
+  if (fredData.length === 0) return ecbData;
 
-  // Fusionner : garder FRED comme base, compléter avec BDF pour les mois manquants
+  // Fusionner : FRED comme base historique, BCE pour les mois manquants récents
   const lastFredDate = fredData[fredData.length - 1].date;
-  const newBdfPoints = bdfData.filter(d => d.date > lastFredDate);
+  const newEcbPoints = ecbData.filter(d => d.date > lastFredDate);
 
-  if (newBdfPoints.length > 0) {
-    const merged = [...fredData, ...newBdfPoints];
-    console.log(`  ✓ OAT fusionné: ${merged.length} points (FRED jusqu'au ${lastFredDate}, +${newBdfPoints.length} points BDF jusqu'au ${newBdfPoints[newBdfPoints.length-1].date})`);
+  if (newEcbPoints.length > 0) {
+    const merged = [...fredData, ...newEcbPoints];
+    const lastNew = newEcbPoints[newEcbPoints.length - 1];
+    console.log(`  ✓ OAT fusionné: ${merged.length} points (FRED → ${lastFredDate}, +${newEcbPoints.length} points BCE → ${lastNew.date})`);
     return merged;
   }
 
-  console.log(`  ℹ️ OAT: BDF n'apporte pas de nouveaux points au-delà de FRED (${lastFredDate})`);
+  console.log(`  ℹ️ OAT: BCE n'apporte pas de nouveaux points au-delà de FRED (${lastFredDate})`);
   return fredData;
 }
 
@@ -547,8 +551,8 @@ async function main() {
     console.log("   Pour obtenir une clé gratuite: https://fred.stlouisfed.org/docs/api/api_key.html\n");
   }
 
-  // OAT 10 ans : FRED + Banque de France pour les mois récents
-  console.log("📊 Récupération OAT 10 ans (FRED + Banque de France)...");
+  // OAT 10 ans : FRED (historique) + BCE (mois récents manquants)
+  console.log("📊 Récupération OAT 10 ans (FRED + BCE)...");
   const historyOat = await getOatHistory();
 
   // Inflation : INSEE BDM (série principale + secours) puis FRED
