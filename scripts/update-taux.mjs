@@ -63,12 +63,14 @@ async function fetchFredSeries(seriesId) {
 // ─────────────────────────────────────────────────────────────
 async function getOatRecentFromBDF() {
   try {
-    console.log(`  Fetching Banque de France Webstat (OAT 10 ans récent)...`);
-    // API publique Webstat – pas de clé requise pour les séries publiques
-    const url = `https://webstat.banque-france.fr/fr/api/series/sdmx/data/FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD?startPeriod=2025-01`;
+    console.log(`  Fetching Banque de France Webstat v2.1 (OAT 10 ans récent)...`);
+    // Nouvelle API REST OpenDataSoft v2.1 — remplace l'ancienne API SDMX
+    // Dataset : FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD — OAT 10 ans France (mensuel)
+    // Récupère les 24 derniers mois pour couvrir le retard éventuel de FRED
+    const url = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD/records?limit=24&order_by=time_period%20DESC`;
     const response = await fetch(url, {
       cache: 'no-store',
-      headers: { 'Accept': 'application/xml, application/json' }
+      headers: { 'Accept': 'application/json' }
     });
 
     if (!response.ok) {
@@ -76,18 +78,26 @@ async function getOatRecentFromBDF() {
       return [];
     }
 
-    const text = await response.text();
+    const json = await response.json();
+    const records = json.results ?? json.records ?? [];
 
-    // Parser XML SDMX — deux formats possibles selon la version de l'API
+    if (records.length === 0) {
+      console.log(`  ⚠️ BDF Webstat: aucun enregistrement retourné`);
+      return [];
+    }
+
     const observations = [];
+    for (const rec of records) {
+      // Les champs peuvent varier légèrement selon le dataset
+      const fields = rec.fields ?? rec;
+      const period = fields.time_period ?? fields.TIME_PERIOD ?? fields.period;
+      const rawValue = fields.obs_value ?? fields.OBS_VALUE ?? fields.value;
 
-    // Format 1 : TIME_PERIOD="2025-01" OBS_VALUE="3.12"
-    const regex1 = /TIME_PERIOD="([^"]+)"[^>]*OBS_VALUE="([^"]+)"/g;
-    let match;
-    while ((match = regex1.exec(text)) !== null) {
-      const [_, period, value] = match;
-      const date = period.length === 7 ? `${period}-01` : period;
-      const numValue = parseFloat(value);
+      if (!period || rawValue == null) continue;
+
+      // Convertir "2025-01" → "2025-01-01"
+      const date = String(period).length === 7 ? `${period}-01` : String(period);
+      const numValue = parseFloat(rawValue);
       if (!isNaN(numValue)) {
         observations.push({
           date,
@@ -97,35 +107,15 @@ async function getOatRecentFromBDF() {
       }
     }
 
-    // Format 2 : <ObsValue value="3.12"/> précédé de <ObsDimension value="2025-01"/>
-    if (observations.length === 0) {
-      const dimRegex = /<ObsDimension[^>]*value="([^"]+)"/g;
-      const valRegex = /<ObsValue[^>]*value="([^"]+)"/g;
-      const dims = [], vals = [];
-      let m;
-      while ((m = dimRegex.exec(text)) !== null) dims.push(m[1]);
-      while ((m = valRegex.exec(text)) !== null) vals.push(m[1]);
-      for (let i = 0; i < Math.min(dims.length, vals.length); i++) {
-        const period = dims[i];
-        const date = period.length === 7 ? `${period}-01` : period;
-        const numValue = parseFloat(vals[i]);
-        if (!isNaN(numValue)) {
-          observations.push({
-            date,
-            value: parseFloat(numValue.toFixed(2)),
-            timestamp: new Date(date).getTime()
-          });
-        }
-      }
-    }
-
     if (observations.length > 0) {
       observations.sort((a, b) => a.timestamp - b.timestamp);
-      console.log(`  ✓ BDF Webstat OAT: ${observations.length} points récents, dernier: ${observations[observations.length-1]?.date} = ${observations[observations.length-1]?.value}%`);
+      const last = observations[observations.length - 1];
+      console.log(`  ✓ BDF Webstat OAT: ${observations.length} points récents, dernier: ${last.date} = ${last.value}%`);
       return observations;
     }
 
-    console.log(`  ⚠️ BDF Webstat: aucune observation parsée (${text.length} chars reçus)`);
+    // Log de debug si aucun point parsé
+    console.log(`  ⚠️ BDF Webstat: aucune observation parsée — champs disponibles:`, Object.keys(records[0]?.fields ?? records[0] ?? {}));
     return [];
   } catch (error) {
     console.error(`  ⚠️ Erreur BDF Webstat:`, error.message);
@@ -277,21 +267,35 @@ async function getInflationFromFRED() {
 }
 
 async function getInflationFromIndex() {
-  // 1. Série principale INSEE
-  let data = await fetchINSEESerie('001761313');
+  // ⚠️ IMPORTANT : depuis février 2026, l'INSEE a migré vers la base 2025.
+  // Les séries base 2015 (001761313, 001763852) sont arrêtées à décembre 2025.
+  // Les nouvelles séries base 2025 sont rétropolées depuis 1996.
+
+  // 1. NOUVELLE série INSEE base 2025 — IPC glissement annuel, ensemble des ménages, France
+  //    Source : https://www.insee.fr/fr/statistiques/serie/011812231
+  let data = await fetchINSEESerie('011812231');
   if (data.length > 0) return data;
 
-  // 2. Série de secours INSEE (révision base 2015)
-  console.log(`  ⚠️ Série 001761313 indisponible, tentative série 001763852...`);
+  // 2. Série de secours base 2025 — IPCH glissement annuel
+  console.log(`  ⚠️ Série 011812231 indisponible, tentative série 011812232...`);
+  data = await fetchINSEESerie('011812232');
+  if (data.length > 0) return data;
+
+  // 3. Anciennes séries base 2015 (historique jusqu'à déc. 2025 uniquement)
+  console.log(`  ⚠️ Base 2025 indisponible, tentative base 2015 (001761313)...`);
+  data = await fetchINSEESerie('001761313');
+  if (data.length > 0) return data;
+
+  console.log(`  ⚠️ Tentative base 2015 secours (001763852)...`);
   data = await fetchINSEESerie('001763852');
   if (data.length > 0) return data;
 
-  // 3. Fallback FRED
+  // 4. Fallback FRED
   console.log(`  ⚠️ INSEE indisponible, tentative FRED...`);
   data = await getInflationFromFRED();
   if (data.length > 0) return data;
 
-  // 4. Fallback données existantes
+  // 5. Fallback données existantes
   if (existingData?.indices?.inflation?.historique?.length > 0) {
     console.log(`  ⚠️ Inflation France: utilisation des données existantes`);
     return existingData.indices.inflation.historique;
