@@ -61,54 +61,76 @@ async function fetchFredSeries(seriesId) {
 //    Série FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD (mensuelle, quasi temps réel)
 //    Utilisée pour compléter les données FRED avec les mois récents manquants
 // ─────────────────────────────────────────────────────────────
-// Récupère les données OAT récentes depuis l'API SDMX de la BCE (Banque Centrale Européenne)
-// Série : IRS.M.FR.L.L40.CI.0.EUR.N.Z — Taux souverain France 10 ans, mensuel
-// API publique, sans clé, mise à jour en quasi temps réel (J+2 environ)
+// Récupère les données OAT récentes depuis l'API de la BCE
+// Série IRS : taux d'intérêt à long terme, France, mensuel
+// Nouveau endpoint data-api.ecb.europa.eu (l'ancien sdw-wsrest a été retiré en oct. 2025)
 async function getOatRecentFromECB() {
   try {
-    console.log(`  Fetching BCE SDMX (OAT 10 ans récent)...`);
-    // startPeriod = il y a 3 ans pour couvrir largement le retard FRED
+    console.log(`  Fetching BCE (OAT 10 ans récent)...`);
     const startPeriod = new Date();
     startPeriod.setFullYear(startPeriod.getFullYear() - 3);
-    const startStr = startPeriod.toISOString().substring(0, 7); // "2023-03"
+    const startStr = startPeriod.toISOString().substring(0, 7);
 
-    const url = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0.EUR.N.Z?startPeriod=${startStr}&format=jsondata`;
+    // Clé SDMX : Fréquence=M, Pays=FR, Maturité=Long terme, Instrument=Obligations d'État 10 ans
+    const url = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0.EUR.N.Z?startPeriod=${startStr}&format=jsondata&detail=dataonly`;
     const response = await fetch(url, {
       cache: 'no-store',
       headers: { 'Accept': 'application/json' }
     });
 
     if (!response.ok) {
-      console.log(`  ⚠️ BCE HTTP ${response.status}`);
+      console.log(`  ⚠️ BCE HTTP ${response.status} — tentative format XML...`);
+      // Fallback: essayer le format XML générique
+      const urlXml = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0.EUR.N.Z?startPeriod=${startStr}`;
+      const resp2 = await fetch(urlXml, { cache: 'no-store', headers: { 'Accept': 'application/xml' } });
+      if (!resp2.ok) {
+        console.log(`  ⚠️ BCE XML HTTP ${resp2.status}`);
+        return [];
+      }
+      const xmlText = await resp2.text();
+      const observations = [];
+      const obsRegex = /TIME_PERIOD="([^"]+)"[^>]*OBS_VALUE="([^"]+)"/g;
+      let m;
+      while ((m = obsRegex.exec(xmlText)) !== null) {
+        const date = m[1].length === 7 ? `${m[1]}-01` : m[1];
+        const val = parseFloat(m[2]);
+        if (!isNaN(val)) observations.push({ date, value: parseFloat(val.toFixed(2)), timestamp: new Date(date).getTime() });
+      }
+      if (observations.length > 0) {
+        observations.sort((a, b) => a.timestamp - b.timestamp);
+        const last = observations[observations.length - 1];
+        console.log(`  ✓ BCE OAT (XML): ${observations.length} points, dernier: ${last.date} = ${last.value}%`);
+        return observations;
+      }
       return [];
     }
 
     const json = await response.json();
 
-    // Format SDMX-JSON : les périodes et valeurs sont dans des tableaux parallèles
-    const periods = json?.data?.dataSets?.[0]?.series?.['0:0:0:0:0:0:0:0:0']?.observations;
-    const allPeriods = json?.data?.structure?.dimensions?.observation?.[0]?.values;
+    // Format SDMX-JSON v2 : structure à détecter dynamiquement
+    // Les données sont dans dataSets[0].series, avec des clés comme "0:0:0:0:0:0:0:0:0"
+    const dataSet = json?.data?.dataSets?.[0] ?? json?.dataSets?.[0];
+    const structure = json?.data?.structure ?? json?.structure;
+    const allPeriods = structure?.dimensions?.observation?.[0]?.values
+      ?? structure?.dimensions?.series?.[0]?.values;
 
-    if (!periods || !allPeriods) {
-      console.log(`  ⚠️ BCE: structure JSON inattendue`);
+    if (!dataSet || !allPeriods) {
+      console.log(`  ⚠️ BCE: structure JSON inattendue`, JSON.stringify(json).substring(0, 200));
       return [];
     }
+
+    const seriesKey = Object.keys(dataSet.series ?? {})[0];
+    const periods = dataSet.series?.[seriesKey]?.observations ?? dataSet.observations ?? {};
 
     const observations = [];
     for (const [idx, obs] of Object.entries(periods)) {
       const periodObj = allPeriods[parseInt(idx)];
       if (!periodObj || obs[0] == null) continue;
-
-      const period = periodObj.id ?? periodObj.name; // ex: "2026-02"
-      const date = period.length === 7 ? `${period}-01` : period;
+      const period = periodObj.id ?? periodObj.name;
+      const date = String(period).length === 7 ? `${period}-01` : String(period);
       const numValue = parseFloat(obs[0]);
-
       if (!isNaN(numValue)) {
-        observations.push({
-          date,
-          value: parseFloat(numValue.toFixed(2)),
-          timestamp: new Date(date).getTime()
-        });
+        observations.push({ date, value: parseFloat(numValue.toFixed(2)), timestamp: new Date(date).getTime() });
       }
     }
 
