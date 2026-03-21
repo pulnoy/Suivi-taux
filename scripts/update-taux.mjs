@@ -64,10 +64,10 @@ async function fetchFredSeries(seriesId) {
 async function getOatRecentFromBDF() {
   try {
     console.log(`  Fetching Banque de France Webstat v2.1 (OAT 10 ans récent)...`);
-    // Nouvelle API REST OpenDataSoft v2.1 — remplace l'ancienne API SDMX
-    // Dataset : FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD — OAT 10 ans France (mensuel)
-    // Récupère les 24 derniers mois pour couvrir le retard éventuel de FRED
-    const url = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD/records?limit=24&order_by=time_period%20DESC`;
+    // API OpenDataSoft v2.1 — portail Banque de France
+    // Les points du nom SDMX sont remplacés par des tirets bas dans l'ID dataset
+    // FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD → FM_M_FR_EUR_FR2_BB_FR10YT_RR_YLD
+    const url = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/FM_M_FR_EUR_FR2_BB_FR10YT_RR_YLD/records?limit=24&order_by=time_period%20DESC`;
     const response = await fetch(url, {
       cache: 'no-store',
       headers: { 'Accept': 'application/json' }
@@ -159,15 +159,21 @@ async function getOatHistory() {
 
 // ─────────────────────────────────────────────────────────────
 // 3. INFLATION FRANCE — SOURCE PRIMAIRE : API INSEE BDM
-//    Série principale  : 001761313 (IPC glissement annuel, base 2015)
-//    Série de secours  : 001763852 (IPC glissement annuel, base 2015 – révision)
-//    Fallback final    : FRED FRACPIALLMINMEI (retard ~1-2 mois)
+//
+//  Stratégie :
+//   A) Base 2025 (actuelle depuis fév. 2026) — série indice brut → glissement calculé
+//      011812231 : IPC ensemble des ménages, France entière, base 2025
+//   B) Base 2015 (archivée, jusqu'à déc. 2025) — série glissement annuel direct
+//      001761313 / 001763852
+//   C) Fallback FRED FRACPIALLMINMEI
 // ─────────────────────────────────────────────────────────────
 
+// Récupère une série INSEE BDM brute (retourne les valeurs telles quelles)
 async function fetchINSEESerie(serieId) {
   try {
-    const startYear = HISTORY_START_DATE.substring(0, 4);
-    const url = `https://www.bdm.insee.fr/series/sdmx/data/SERIES_BDM/${serieId}?startPeriod=${startYear}`;
+    // On remonte jusqu'à 1999 pour avoir 13 mois avant HISTORY_START_DATE
+    // et pouvoir calculer le glissement annuel dès janvier 2000
+    const url = `https://www.bdm.insee.fr/series/sdmx/data/SERIES_BDM/${serieId}?startPeriod=1999`;
     console.log(`  Fetching INSEE BDM série ${serieId}...`);
 
     const response = await fetch(url, {
@@ -185,7 +191,7 @@ async function fetchINSEESerie(serieId) {
 
     const observations = [];
 
-    // Format 1 : TIME_PERIOD="2025-12" OBS_VALUE="0.8"
+    // Format 1 : TIME_PERIOD="2025-12" OBS_VALUE="99.8"
     const obsRegex = /TIME_PERIOD="([^"]+)"[^>]*OBS_VALUE="([^"]+)"/g;
     let match;
     while ((match = obsRegex.exec(xmlText)) !== null) {
@@ -195,13 +201,13 @@ async function fetchINSEESerie(serieId) {
       if (!isNaN(numValue)) {
         observations.push({
           date,
-          value: parseFloat(numValue.toFixed(2)),
+          value: parseFloat(numValue.toFixed(4)),
           timestamp: new Date(date).getTime()
         });
       }
     }
 
-    // Format 2 : <generic:ObsValue value="..."> précédé de <generic:Value id="TIME_PERIOD" value="...">
+    // Format 2 : <generic:Value id="TIME_PERIOD" value="..."> + <generic:ObsValue value="...">
     if (observations.length === 0) {
       const timeRegex = /<(?:generic:)?Value[^>]*id="TIME_PERIOD"[^>]*value="([^"]+)"/g;
       const valueRegex = /<(?:generic:)?ObsValue[^>]*value="([^"]+)"/g;
@@ -216,7 +222,7 @@ async function fetchINSEESerie(serieId) {
         if (!isNaN(numValue)) {
           observations.push({
             date,
-            value: parseFloat(numValue.toFixed(2)),
+            value: parseFloat(numValue.toFixed(4)),
             timestamp: new Date(date).getTime()
           });
         }
@@ -226,7 +232,7 @@ async function fetchINSEESerie(serieId) {
     if (observations.length > 0) {
       observations.sort((a, b) => a.timestamp - b.timestamp);
       const last = observations[observations.length - 1];
-      console.log(`  ✓ INSEE ${serieId}: ${observations.length} points, dernier: ${last.date} = ${last.value}%`);
+      console.log(`  ✓ INSEE ${serieId}: ${observations.length} points, dernier: ${last.date} = ${last.value}`);
       return observations;
     }
 
@@ -236,6 +242,52 @@ async function fetchINSEESerie(serieId) {
     console.error(`  ⚠️ Erreur INSEE ${serieId}:`, error.message);
     return [];
   }
+}
+
+// Calcule le glissement annuel (%) depuis un tableau d'indices bruts
+// glissement[i] = (indice[i] / indice[i-12] - 1) * 100
+function computeGlissementAnnuel(rawSeries) {
+  if (rawSeries.length < 13) return [];
+
+  // Indexer par date pour lookup rapide
+  const byDate = {};
+  for (const pt of rawSeries) byDate[pt.date] = pt.value;
+
+  const result = [];
+  for (const pt of rawSeries) {
+    // Date il y a 12 mois
+    const d = new Date(pt.date);
+    d.setFullYear(d.getFullYear() - 1);
+    const prevDate = d.toISOString().split('T')[0];
+
+    const prevVal = byDate[prevDate];
+    if (prevVal == null || prevVal === 0) continue;
+
+    const glissement = parseFloat(((pt.value / prevVal - 1) * 100).toFixed(2));
+
+    // Ne garder que les points à partir de HISTORY_START_DATE
+    if (pt.date >= HISTORY_START_DATE) {
+      result.push({
+        date: pt.date,
+        value: glissement,
+        timestamp: pt.timestamp
+      });
+    }
+  }
+
+  if (result.length > 0) {
+    const last = result[result.length - 1];
+    console.log(`  ✓ Glissement annuel calculé: ${result.length} points, dernier: ${last.date} = ${last.value}%`);
+  }
+  return result;
+}
+
+// Récupère la série IPC base 2025 et calcule le glissement annuel
+async function getInflationBase2025() {
+  // Série IPC ensemble des ménages, France entière, base 2025
+  const raw = await fetchINSEESerie('011812231');
+  if (raw.length === 0) return [];
+  return computeGlissementAnnuel(raw);
 }
 
 async function getInflationFromFRED() {
@@ -267,21 +319,13 @@ async function getInflationFromFRED() {
 }
 
 async function getInflationFromIndex() {
-  // ⚠️ IMPORTANT : depuis février 2026, l'INSEE a migré vers la base 2025.
-  // Les séries base 2015 (001761313, 001763852) sont arrêtées à décembre 2025.
-  // Les nouvelles séries base 2025 sont rétropolées depuis 1996.
+  // ⚠️ Depuis fév. 2026 : séries base 2015 arrêtées → utiliser base 2025
 
-  // 1. NOUVELLE série INSEE base 2025 — IPC glissement annuel, ensemble des ménages, France
-  //    Source : https://www.insee.fr/fr/statistiques/serie/011812231
-  let data = await fetchINSEESerie('011812231');
+  // 1. Base 2025 : indice brut → glissement annuel calculé (couvre 1996 → aujourd'hui)
+  let data = await getInflationBase2025();
   if (data.length > 0) return data;
 
-  // 2. Série de secours base 2025 — IPCH glissement annuel
-  console.log(`  ⚠️ Série 011812231 indisponible, tentative série 011812232...`);
-  data = await fetchINSEESerie('011812232');
-  if (data.length > 0) return data;
-
-  // 3. Anciennes séries base 2015 (historique jusqu'à déc. 2025 uniquement)
+  // 2. Base 2015 glissement direct (dernier point = déc. 2025, pour fallback historique)
   console.log(`  ⚠️ Base 2025 indisponible, tentative base 2015 (001761313)...`);
   data = await fetchINSEESerie('001761313');
   if (data.length > 0) return data;
@@ -290,12 +334,12 @@ async function getInflationFromIndex() {
   data = await fetchINSEESerie('001763852');
   if (data.length > 0) return data;
 
-  // 4. Fallback FRED
+  // 3. Fallback FRED
   console.log(`  ⚠️ INSEE indisponible, tentative FRED...`);
   data = await getInflationFromFRED();
   if (data.length > 0) return data;
 
-  // 5. Fallback données existantes
+  // 4. Fallback données existantes
   if (existingData?.indices?.inflation?.historique?.length > 0) {
     console.log(`  ⚠️ Inflation France: utilisation des données existantes`);
     return existingData.indices.inflation.historique;
