@@ -19,7 +19,6 @@ const HISTORY_START_DATE = '2000-01-01';
 // --- FONCTIONS UTILITAIRES ---
 
 // 1. Récupération FRED - Historique maximum depuis 2000
-// Mapping des series IDs vers les clés d'indices dans le fichier JSON
 const FRED_SERIES_MAP = {
   'IRLTLT01FRM156N': 'oat',
   'ECBESTRVOLWGTTRMDMNRT': 'estr'
@@ -27,7 +26,6 @@ const FRED_SERIES_MAP = {
 
 async function fetchFredSeries(seriesId) {
   if (!FRED_API_KEY) {
-    // Fallback: utiliser les données existantes
     const indiceKey = FRED_SERIES_MAP[seriesId];
     if (existingData?.indices?.[indiceKey]?.historique?.length > 0) {
       console.log(`  ⚠️ FRED ${seriesId}: utilisation des données existantes (pas de clé API)`);
@@ -36,10 +34,9 @@ async function fetchFredSeries(seriesId) {
     console.log(`  ❌ FRED ${seriesId}: pas de clé API et pas de données existantes`);
     return [];
   }
-  
+
   try {
     const timestamp = new Date().getTime();
-    // Récupération depuis 2000 pour avoir ~25 ans d'historique
     const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&observation_start=${HISTORY_START_DATE}&_t=${timestamp}`;
     const response = await fetch(url, { cache: 'no-store' });
     const data = await response.json();
@@ -59,28 +56,36 @@ async function fetchFredSeries(seriesId) {
   return [];
 }
 
-// 2. Inflation France - SOURCE PRIMAIRE: API INSEE BDM (pas de clé API requise)
-// Série 001761313: IPC Glissement annuel (variation sur 1 an)
-// Note: L'API FRED FRACPIALLMINMEI a un retard de ~1 an, donc on utilise INSEE en priorité
-async function getInflationFromINSEE() {
+// ─────────────────────────────────────────────────────────────
+// 2. OAT 10 ANS — SOURCE COMPLÉMENTAIRE : Banque de France Webstat
+//    Série FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD (mensuelle, quasi temps réel)
+//    Utilisée pour compléter les données FRED avec les mois récents manquants
+// ─────────────────────────────────────────────────────────────
+async function getOatRecentFromBDF() {
   try {
-    console.log(`  Fetching INSEE BDM (série 001761313)...`);
-    // API INSEE BDM - Glissement annuel IPC France
-    // Format SDMX XML, pas de clé API requise pour les données publiques
-    const url = `https://www.bdm.insee.fr/series/sdmx/data/SERIES_BDM/001761313?startPeriod=${HISTORY_START_DATE.substring(0,4)}`;
-    const response = await fetch(url, { 
+    console.log(`  Fetching Banque de France Webstat (OAT 10 ans récent)...`);
+    // API publique Webstat – pas de clé requise pour les séries publiques
+    const url = `https://webstat.banque-france.fr/fr/api/series/sdmx/data/FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD?startPeriod=2025-01`;
+    const response = await fetch(url, {
       cache: 'no-store',
-      headers: { 'Accept': 'application/xml' }
+      headers: { 'Accept': 'application/xml, application/json' }
     });
-    const xmlText = await response.text();
-    
-    // Parser le XML SDMX pour extraire les observations
+
+    if (!response.ok) {
+      console.log(`  ⚠️ BDF Webstat HTTP ${response.status}`);
+      return [];
+    }
+
+    const text = await response.text();
+
+    // Parser XML SDMX — deux formats possibles selon la version de l'API
     const observations = [];
-    const obsRegex = /TIME_PERIOD="([^"]+)"[^>]*OBS_VALUE="([^"]+)"/g;
+
+    // Format 1 : TIME_PERIOD="2025-01" OBS_VALUE="3.12"
+    const regex1 = /TIME_PERIOD="([^"]+)"[^>]*OBS_VALUE="([^"]+)"/g;
     let match;
-    while ((match = obsRegex.exec(xmlText)) !== null) {
+    while ((match = regex1.exec(text)) !== null) {
       const [_, period, value] = match;
-      // Convertir "2025-12" en "2025-12-01" pour cohérence
       const date = period.length === 7 ? `${period}-01` : period;
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
@@ -91,34 +96,168 @@ async function getInflationFromINSEE() {
         });
       }
     }
-    
+
+    // Format 2 : <ObsValue value="3.12"/> précédé de <ObsDimension value="2025-01"/>
+    if (observations.length === 0) {
+      const dimRegex = /<ObsDimension[^>]*value="([^"]+)"/g;
+      const valRegex = /<ObsValue[^>]*value="([^"]+)"/g;
+      const dims = [], vals = [];
+      let m;
+      while ((m = dimRegex.exec(text)) !== null) dims.push(m[1]);
+      while ((m = valRegex.exec(text)) !== null) vals.push(m[1]);
+      for (let i = 0; i < Math.min(dims.length, vals.length); i++) {
+        const period = dims[i];
+        const date = period.length === 7 ? `${period}-01` : period;
+        const numValue = parseFloat(vals[i]);
+        if (!isNaN(numValue)) {
+          observations.push({
+            date,
+            value: parseFloat(numValue.toFixed(2)),
+            timestamp: new Date(date).getTime()
+          });
+        }
+      }
+    }
+
     if (observations.length > 0) {
-      // Trier par date (les données INSEE sont en ordre inverse)
       observations.sort((a, b) => a.timestamp - b.timestamp);
-      console.log(`  ✓ INSEE Inflation: ${observations.length} points, ${observations[0]?.date} → ${observations[observations.length-1]?.date}`);
+      console.log(`  ✓ BDF Webstat OAT: ${observations.length} points récents, dernier: ${observations[observations.length-1]?.date} = ${observations[observations.length-1]?.value}%`);
       return observations;
     }
-  } catch (error) {
-    console.error(`  ⚠️ Erreur INSEE:`, error.message);
-  }
-  return [];
-}
 
-// Fallback: API FRED (retard d'environ 1 an)
-async function getInflationFromFRED() {
-  if (!FRED_API_KEY) {
+    console.log(`  ⚠️ BDF Webstat: aucune observation parsée (${text.length} chars reçus)`);
+    return [];
+  } catch (error) {
+    console.error(`  ⚠️ Erreur BDF Webstat:`, error.message);
     return [];
   }
-  
+}
+
+// Fusion FRED (historique long) + BDF (données récentes)
+async function getOatHistory() {
+  // 1. Récupérer l'historique long depuis FRED
+  const fredData = await fetchFredSeries('IRLTLT01FRM156N');
+
+  // 2. Récupérer les données récentes depuis la Banque de France
+  const bdfData = await getOatRecentFromBDF();
+
+  if (fredData.length === 0 && bdfData.length === 0) {
+    // Fallback sur données existantes
+    if (existingData?.indices?.oat?.historique?.length > 0) {
+      console.log(`  ⚠️ OAT: utilisation des données existantes`);
+      return existingData.indices.oat.historique;
+    }
+    return [];
+  }
+
+  if (bdfData.length === 0) return fredData;
+  if (fredData.length === 0) return bdfData;
+
+  // Fusionner : garder FRED comme base, compléter avec BDF pour les mois manquants
+  const lastFredDate = fredData[fredData.length - 1].date;
+  const newBdfPoints = bdfData.filter(d => d.date > lastFredDate);
+
+  if (newBdfPoints.length > 0) {
+    const merged = [...fredData, ...newBdfPoints];
+    console.log(`  ✓ OAT fusionné: ${merged.length} points (FRED jusqu'au ${lastFredDate}, +${newBdfPoints.length} points BDF jusqu'au ${newBdfPoints[newBdfPoints.length-1].date})`);
+    return merged;
+  }
+
+  console.log(`  ℹ️ OAT: BDF n'apporte pas de nouveaux points au-delà de FRED (${lastFredDate})`);
+  return fredData;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 3. INFLATION FRANCE — SOURCE PRIMAIRE : API INSEE BDM
+//    Série principale  : 001761313 (IPC glissement annuel, base 2015)
+//    Série de secours  : 001763852 (IPC glissement annuel, base 2015 – révision)
+//    Fallback final    : FRED FRACPIALLMINMEI (retard ~1-2 mois)
+// ─────────────────────────────────────────────────────────────
+
+async function fetchINSEESerie(serieId) {
+  try {
+    const startYear = HISTORY_START_DATE.substring(0, 4);
+    const url = `https://www.bdm.insee.fr/series/sdmx/data/SERIES_BDM/${serieId}?startPeriod=${startYear}`;
+    console.log(`  Fetching INSEE BDM série ${serieId}...`);
+
+    const response = await fetch(url, {
+      cache: 'no-store',
+      headers: { 'Accept': 'application/xml' }
+    });
+
+    if (!response.ok) {
+      console.log(`  ⚠️ INSEE ${serieId}: HTTP ${response.status}`);
+      return [];
+    }
+
+    const xmlText = await response.text();
+    console.log(`  INSEE ${serieId}: ${xmlText.length} chars reçus`);
+
+    const observations = [];
+
+    // Format 1 : TIME_PERIOD="2025-12" OBS_VALUE="0.8"
+    const obsRegex = /TIME_PERIOD="([^"]+)"[^>]*OBS_VALUE="([^"]+)"/g;
+    let match;
+    while ((match = obsRegex.exec(xmlText)) !== null) {
+      const [_, period, value] = match;
+      const date = period.length === 7 ? `${period}-01` : period;
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue)) {
+        observations.push({
+          date,
+          value: parseFloat(numValue.toFixed(2)),
+          timestamp: new Date(date).getTime()
+        });
+      }
+    }
+
+    // Format 2 : <generic:ObsValue value="..."> précédé de <generic:Value id="TIME_PERIOD" value="...">
+    if (observations.length === 0) {
+      const timeRegex = /<(?:generic:)?Value[^>]*id="TIME_PERIOD"[^>]*value="([^"]+)"/g;
+      const valueRegex = /<(?:generic:)?ObsValue[^>]*value="([^"]+)"/g;
+      const times = [], values = [];
+      let m;
+      while ((m = timeRegex.exec(xmlText)) !== null) times.push(m[1]);
+      while ((m = valueRegex.exec(xmlText)) !== null) values.push(m[1]);
+      for (let i = 0; i < Math.min(times.length, values.length); i++) {
+        const period = times[i];
+        const date = period.length === 7 ? `${period}-01` : period;
+        const numValue = parseFloat(values[i]);
+        if (!isNaN(numValue)) {
+          observations.push({
+            date,
+            value: parseFloat(numValue.toFixed(2)),
+            timestamp: new Date(date).getTime()
+          });
+        }
+      }
+    }
+
+    if (observations.length > 0) {
+      observations.sort((a, b) => a.timestamp - b.timestamp);
+      const last = observations[observations.length - 1];
+      console.log(`  ✓ INSEE ${serieId}: ${observations.length} points, dernier: ${last.date} = ${last.value}%`);
+      return observations;
+    }
+
+    console.log(`  ⚠️ INSEE ${serieId}: aucune observation parsée`);
+    return [];
+  } catch (error) {
+    console.error(`  ⚠️ Erreur INSEE ${serieId}:`, error.message);
+    return [];
+  }
+}
+
+async function getInflationFromFRED() {
+  if (!FRED_API_KEY) return [];
+
   try {
     console.log(`  Fetching FRED FRACPIALLMINMEI (fallback)...`);
     const timestamp = new Date().getTime();
-    // FRACPIALLMINMEI: Consumer Price Index France (OECD)
-    // units=pc1: Percent Change from Year Ago (variation sur 1 an)
     const url = `https://api.stlouisfed.org/fred/series/observations?series_id=FRACPIALLMINMEI&api_key=${FRED_API_KEY}&file_type=json&observation_start=${HISTORY_START_DATE}&units=pc1&_t=${timestamp}`;
     const response = await fetch(url, { cache: 'no-store' });
     const data = await response.json();
-    
+
     if (data.observations) {
       const result = data.observations
         .map(obs => ({
@@ -131,70 +270,71 @@ async function getInflationFromFRED() {
       console.log(`  ✓ FRED Inflation: ${result.length} points, ${result[0]?.date} → ${result[result.length-1]?.date}`);
       return result;
     }
-  } catch (error) { 
-    console.error(`  ⚠️ Erreur FRED Inflation:`, error.message); 
+  } catch (error) {
+    console.error(`  ⚠️ Erreur FRED Inflation:`, error.message);
   }
   return [];
 }
 
-// Fonction principale: essaie INSEE d'abord, puis FRED, puis données existantes
 async function getInflationFromIndex() {
-  // 1. Essayer l'API INSEE (source primaire, données plus récentes)
-  let inseeData = await getInflationFromINSEE();
-  if (inseeData.length > 0) {
-    return inseeData;
-  }
-  
-  // 2. Fallback sur FRED si INSEE échoue
+  // 1. Série principale INSEE
+  let data = await fetchINSEESerie('001761313');
+  if (data.length > 0) return data;
+
+  // 2. Série de secours INSEE (révision base 2015)
+  console.log(`  ⚠️ Série 001761313 indisponible, tentative série 001763852...`);
+  data = await fetchINSEESerie('001763852');
+  if (data.length > 0) return data;
+
+  // 3. Fallback FRED
   console.log(`  ⚠️ INSEE indisponible, tentative FRED...`);
-  let fredData = await getInflationFromFRED();
-  if (fredData.length > 0) {
-    return fredData;
-  }
-  
-  // 3. Fallback sur données existantes
+  data = await getInflationFromFRED();
+  if (data.length > 0) return data;
+
+  // 4. Fallback données existantes
   if (existingData?.indices?.inflation?.historique?.length > 0) {
-    console.log(`  ⚠️ Inflation France: utilisation des données existantes (APIs indisponibles)`);
+    console.log(`  ⚠️ Inflation France: utilisation des données existantes`);
     return existingData.indices.inflation.historique;
   }
-  
+
   console.log(`  ❌ Inflation France: aucune source disponible`);
   return [];
 }
 
-// 3. Yahoo Finance - Historique maximum avec données hybrides (hebdo historique + quotidien récent)
+// ─────────────────────────────────────────────────────────────
+// 4. Yahoo Finance — Historique maximum avec données hybrides
+// ─────────────────────────────────────────────────────────────
+
 async function fetchYahooHistory(ticker, useWeekly = true) {
   try {
     const now = Math.floor(Date.now() / 1000);
-    // Début : 1er janvier 2000 (timestamp Unix)
-    const period1 = 946684800; // 2000-01-01 00:00:00 UTC
-    // Pour certains actifs récents, ajuster la date de début
-    const interval = useWeekly ? '1wk' : '1d'; // Hebdomadaire pour réduire les points
-    
+    const period1 = 946684800; // 2000-01-01
+    const interval = useWeekly ? '1wk' : '1d';
+
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${period1}&period2=${now}&interval=${interval}`;
     console.log(`  Fetching ${ticker} (${interval})...`);
-    
-    const response = await fetch(url, { 
-      headers: { 
+
+    const response = await fetch(url, {
+      headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json'
-      }, 
-      cache: 'no-store' 
+      },
+      cache: 'no-store'
     });
-    
+
     const data = await response.json();
-    
+
     if (data.chart?.error) {
       console.error(`  Erreur API Yahoo (${ticker}):`, data.chart.error.description);
       return [];
     }
-    
+
     const result = data.chart?.result?.[0];
     if (result && result.timestamp && result.indicators?.quote?.[0]?.close) {
       const dates = result.timestamp;
       const prices = result.indicators.quote[0].close;
       const history = [];
-      
+
       for (let i = 0; i < dates.length; i++) {
         if (prices[i] != null && !isNaN(prices[i])) {
           history.push({
@@ -204,40 +344,39 @@ async function fetchYahooHistory(ticker, useWeekly = true) {
           });
         }
       }
-      
-      console.log(`  ✓ ${ticker}: ${history.length} points, ${history[0]?.date || 'N/A'} → ${history[history.length-1]?.date || 'N/A'}`);
+
+      console.log(`  ✓ ${ticker}: ${history.length} points, ${history[0]?.date} → ${history[history.length-1]?.date}`);
       return history;
     }
-  } catch (error) { 
-    console.error(`Erreur Yahoo (${ticker}):`, error.message); 
+  } catch (error) {
+    console.error(`Erreur Yahoo (${ticker}):`, error.message);
   }
   return [];
 }
 
-// 3a. Récupérer les données quotidiennes récentes (derniers 30 jours) pour mise à jour
 async function fetchYahooRecentDaily(ticker) {
   try {
     const now = Math.floor(Date.now() / 1000);
     const thirtyDaysAgo = now - (30 * 24 * 60 * 60);
-    
+
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${thirtyDaysAgo}&period2=${now}&interval=1d`;
-    
-    const response = await fetch(url, { 
-      headers: { 
+
+    const response = await fetch(url, {
+      headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json'
-      }, 
-      cache: 'no-store' 
+      },
+      cache: 'no-store'
     });
-    
+
     const data = await response.json();
     const result = data.chart?.result?.[0];
-    
+
     if (result?.timestamp?.length > 0) {
       const dates = result.timestamp;
       const prices = result.indicators.quote[0].close;
       const history = [];
-      
+
       for (let i = 0; i < dates.length; i++) {
         if (prices[i] != null && !isNaN(prices[i])) {
           history.push({
@@ -255,32 +394,28 @@ async function fetchYahooRecentDaily(ticker) {
   return [];
 }
 
-// 3b. Yahoo Finance avec fallback et mise à jour quotidienne récente
 async function fetchYahooHistoryWithFallback(ticker) {
-  // D'abord essayer hebdomadaire pour avoir 20+ ans
   let history = await fetchYahooHistory(ticker, true);
-  
-  // Si pas assez de données (ETF récents par ex.), essayer quotidien sur 10 ans
+
   if (history.length < 100) {
     console.log(`  Fallback vers données quotidiennes pour ${ticker}...`);
     const now = Math.floor(Date.now() / 1000);
-    const period1 = now - (10 * 365 * 24 * 60 * 60); // 10 ans en arrière
-    
+    const period1 = now - (10 * 365 * 24 * 60 * 60);
+
     try {
       const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${period1}&period2=${now}&interval=1d`;
-      const response = await fetch(url, { 
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, 
-        cache: 'no-store' 
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        cache: 'no-store'
       });
       const data = await response.json();
       const result = data.chart?.result?.[0];
-      
+
       if (result?.timestamp?.length > history.length) {
         const dates = result.timestamp;
         const prices = result.indicators.quote[0].close;
         history = [];
-        
-        // Échantillonner une valeur par semaine pour réduire la taille
+
         let lastWeek = null;
         for (let i = 0; i < dates.length; i++) {
           if (prices[i] != null && !isNaN(prices[i])) {
@@ -301,29 +436,26 @@ async function fetchYahooHistoryWithFallback(ticker) {
       console.error(`Erreur fallback Yahoo (${ticker}):`, error.message);
     }
   }
-  
-  // Ajouter les données quotidiennes récentes pour avoir les derniers jours
+
   const recentDaily = await fetchYahooRecentDaily(ticker);
   if (recentDaily.length > 0 && history.length > 0) {
-    // Trouver la dernière date dans l'historique hebdo
     const lastHistoDate = history[history.length - 1].date;
-    
-    // Ajouter les données quotidiennes plus récentes que la dernière hebdo
     const newDailyData = recentDaily.filter(d => d.date > lastHistoDate);
-    
+
     if (newDailyData.length > 0) {
       history = [...history, ...newDailyData];
       console.log(`  + ${ticker}: ajout de ${newDailyData.length} points quotidiens récents jusqu'au ${newDailyData[newDailyData.length - 1].date}`);
     }
   }
-  
+
   return history;
 }
 
-// 4. SCPI - Historique étendu (données ASPIM/IEIF)
+// ─────────────────────────────────────────────────────────────
+// 5. SCPI — Données historiques approximatives ASPIM/IEIF
+// ─────────────────────────────────────────────────────────────
 function getScpiHistory() {
   return [
-    // Données historiques approximatives basées sur les rapports IEIF/ASPIM
     { date: "2000-01-01", value: 7.20 },
     { date: "2001-01-01", value: 7.10 },
     { date: "2002-01-01", value: 6.90 },
@@ -348,64 +480,70 @@ function getScpiHistory() {
     { date: "2021-01-01", value: 4.49 },
     { date: "2022-01-01", value: 4.53 },
     { date: "2023-01-01", value: 4.52 },
-    { date: "2024-01-01", value: 4.52 }, 
+    { date: "2024-01-01", value: 4.52 },
     { date: "2025-01-01", value: 4.55 },
-    { date: "2026-01-01", value: 4.58 }, // Estimation prévisionnelle
+    { date: "2026-01-01", value: 4.58 },
   ];
 }
 
-// --- MAIN ---
+// ─────────────────────────────────────────────────────────────
+// MAIN
+// ─────────────────────────────────────────────────────────────
 async function main() {
   console.log("═══════════════════════════════════════════════════════════");
   console.log("  MISE À JOUR TAUX.JSON - HISTORIQUE 20+ ANS");
   console.log("═══════════════════════════════════════════════════════════\n");
-  
+
   if (!FRED_API_KEY) {
     console.log("⚠️  FRED_API_KEY non définie - les données FRED seront conservées depuis le fichier existant");
     console.log("   Pour obtenir une clé gratuite: https://fred.stlouisfed.org/docs/api/api_key.html\n");
   }
 
-  // MACRO - Données FRED
-  console.log("📊 Récupération des données FRED...");
-  const historyOat = await fetchFredSeries('IRLTLT01FRM156N'); 
+  // OAT 10 ans : FRED + Banque de France pour les mois récents
+  console.log("📊 Récupération OAT 10 ans (FRED + Banque de France)...");
+  const historyOat = await getOatHistory();
+
+  // Inflation : INSEE BDM (série principale + secours) puis FRED
+  console.log("\n📊 Récupération Inflation France (INSEE BDM)...");
   const historyInflation = await getInflationFromIndex();
+
+  // €STR : FRED
+  console.log("\n📊 Récupération €STR (FRED)...");
   const historyEstr = await fetchFredSeries('ECBESTRVOLWGTTRMDMNRT');
-  
-  // MACRO - Yahoo Finance
+
+  // Devises
   console.log("\n📈 Récupération des données Yahoo Finance...");
   const historyEurUsd = await fetchYahooHistoryWithFallback('EURUSD=X');
 
-  // ACTIONS - Indices majeurs
+  // Indices boursiers
   console.log("\n📊 Récupération des indices boursiers...");
-  const historyCac40 = await fetchYahooHistoryWithFallback('%5EFCHI'); 
-  const historyCacMid = await fetchYahooHistoryWithFallback('C6E.PA'); 
-  const historyStoxx50 = await fetchYahooHistoryWithFallback('%5ESTOXX50E'); 
-  const historySP500 = await fetchYahooHistoryWithFallback('%5EGSPC'); 
-  const historyNasdaq = await fetchYahooHistoryWithFallback('%5ENDX'); 
-  const historyWorld = await fetchYahooHistoryWithFallback('URTH'); 
-  const historyEmerging = await fetchYahooHistoryWithFallback('EEM'); 
+  const historyCac40    = await fetchYahooHistoryWithFallback('%5EFCHI');
+  const historyCacMid   = await fetchYahooHistoryWithFallback('C6E.PA');
+  const historyStoxx50  = await fetchYahooHistoryWithFallback('%5ESTOXX50E');
+  const historySP500    = await fetchYahooHistoryWithFallback('%5EGSPC');
+  const historyNasdaq   = await fetchYahooHistoryWithFallback('%5ENDX');
+  const historyWorld    = await fetchYahooHistoryWithFallback('URTH');
+  const historyEmerging = await fetchYahooHistoryWithFallback('EEM');
 
-  // DIVERS & CRYPTO
+  // Matières premières & crypto
   console.log("\n💰 Récupération matières premières et crypto...");
-  const historyBrent = await fetchYahooHistoryWithFallback('BZ=F'); 
-  const historyGold = await fetchYahooHistoryWithFallback('GC=F'); 
-  const historyBtc = await fetchYahooHistoryWithFallback('BTC-USD');
-  const historyScpi = getScpiHistory(); 
+  const historyBrent = await fetchYahooHistoryWithFallback('BZ=F');
+  const historyGold  = await fetchYahooHistoryWithFallback('GC=F');
+  const historyBtc   = await fetchYahooHistoryWithFallback('BTC-USD');
+  const historyScpi  = getScpiHistory();
 
   const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : 0;
 
-  // Fonction pour calculer la performance annualisée sur une période donnée
   const calculateAnnualizedPerformance = (historique, years) => {
     if (!historique || historique.length < 2) return null;
-    
+
     const now = new Date();
     const targetDate = new Date(now);
     targetDate.setFullYear(targetDate.getFullYear() - years);
-    
-    // Trouver le point le plus proche de la date cible
+
     const currentValue = historique[historique.length - 1]?.value;
     let pastValue = null;
-    
+
     for (let i = historique.length - 1; i >= 0; i--) {
       const pointDate = new Date(historique[i].date);
       if (pointDate <= targetDate) {
@@ -413,49 +551,33 @@ async function main() {
         break;
       }
     }
-    
-    // Si on n'a pas trouvé de point assez ancien, prendre le premier
+
     if (pastValue === null && historique.length > 0) {
       const firstPoint = historique[0];
       const firstDate = new Date(firstPoint.date);
       const actualYears = (now - firstDate) / (365.25 * 24 * 60 * 60 * 1000);
-      
-      if (actualYears < years * 0.5) return null; // Pas assez de données
-      
+      if (actualYears < years * 0.5) return null;
       pastValue = firstPoint.value;
-      years = actualYears; // Utiliser la période réelle
+      years = actualYears;
     }
-    
+
     if (!pastValue || !currentValue || pastValue <= 0 || currentValue <= 0) return null;
-    
-    // Formule performance annualisée: (Vfinal/Vinitial)^(1/n) - 1
+
     const performance = (Math.pow(currentValue / pastValue, 1 / years) - 1) * 100;
-    
     return parseFloat(performance.toFixed(2));
   };
 
-  // Fonction pour créer les données d'un indice avec performances
   const createIndexData = (titre, valeur, suffixe, historique) => {
-    const data = {
-      titre,
-      valeur,
-      suffixe,
-      historique
-    };
-    
-    // Calculer les performances annualisées pour les indices non-taux
+    const data = { titre, valeur, suffixe, historique };
+
     if (suffixe !== '%' && historique && historique.length > 0) {
-      const perf1an = calculateAnnualizedPerformance(historique, 1);
-      const perf3ans = calculateAnnualizedPerformance(historique, 3);
-      const perf5ans = calculateAnnualizedPerformance(historique, 5);
-      
       data.performances = {
-        annualisee_1an: perf1an,
-        annualisee_3ans: perf3ans,
-        annualisee_5ans: perf5ans
+        annualisee_1an:  calculateAnnualizedPerformance(historique, 1),
+        annualisee_3ans: calculateAnnualizedPerformance(historique, 3),
+        annualisee_5ans: calculateAnnualizedPerformance(historique, 5)
       };
     }
-    
+
     return data;
   };
 
@@ -463,35 +585,40 @@ async function main() {
     date_mise_a_jour: new Date().toISOString(),
     indices: {
       // Taux (pas de performance annualisée)
-      oat: { titre: "OAT 10 ans", valeur: getLast(historyOat), suffixe: "%", historique: historyOat },
+      oat:       { titre: "OAT 10 ans",       valeur: getLast(historyOat),       suffixe: "%", historique: historyOat },
       inflation: { titre: "Inflation France", valeur: getLast(historyInflation), suffixe: "%", historique: historyInflation },
-      estr: { titre: "€STR", valeur: getLast(historyEstr), suffixe: "%", historique: historyEstr },
-      
+      estr:      { titre: "€STR",             valeur: getLast(historyEstr),      suffixe: "%", historique: historyEstr },
+
       // Devises et indices avec performances annualisées
-      eurusd: createIndexData("Euro / Dollar", getLast(historyEurUsd), "$", historyEurUsd),
+      eurusd:   createIndexData("Euro / Dollar",    getLast(historyEurUsd),   "$",   historyEurUsd),
+      cac40:    createIndexData("CAC 40",           getLast(historyCac40),    "pts", historyCac40),
+      cacmid:   createIndexData("CAC Mid 60",       getLast(historyCacMid),   "pts", historyCacMid),
+      stoxx50:  createIndexData("Euro Stoxx 50",    getLast(historyStoxx50),  "pts", historyStoxx50),
+      sp500:    createIndexData("S&P 500",          getLast(historySP500),    "pts", historySP500),
+      nasdaq:   createIndexData("Nasdaq 100",       getLast(historyNasdaq),   "pts", historyNasdaq),
+      world:    createIndexData("MSCI World",       getLast(historyWorld),    "$",   historyWorld),
+      emerging: createIndexData("Émergents",        getLast(historyEmerging), "$",   historyEmerging),
+      brent:    createIndexData("Pétrole (Brent)",  getLast(historyBrent),    "$",   historyBrent),
+      gold:     createIndexData("Or (Once)",        getLast(historyGold),     "$",   historyGold),
+      btc:      createIndexData("Bitcoin",          getLast(historyBtc),      "$",   historyBtc),
 
-      cac40: createIndexData("CAC 40", getLast(historyCac40), "pts", historyCac40),
-      cacmid: createIndexData("CAC Mid 60", getLast(historyCacMid), "pts", historyCacMid),
-      stoxx50: createIndexData("Euro Stoxx 50", getLast(historyStoxx50), "pts", historyStoxx50),
-
-      sp500: createIndexData("S&P 500", getLast(historySP500), "pts", historySP500),
-      nasdaq: createIndexData("Nasdaq 100", getLast(historyNasdaq), "pts", historyNasdaq),
-      world: createIndexData("MSCI World", getLast(historyWorld), "$", historyWorld),
-      emerging: createIndexData("Émergents", getLast(historyEmerging), "$", historyEmerging),
-
-      brent: createIndexData("Pétrole (Brent)", getLast(historyBrent), "$", historyBrent),
-      gold: createIndexData("Or (Once)", getLast(historyGold), "$", historyGold),
-      btc: createIndexData("Bitcoin", getLast(historyBtc), "$", historyBtc),
-      
       // SCPI (taux, pas de performance)
       scpi: { titre: "Moyenne SCPI", valeur: getLast(historyScpi), suffixe: "%", historique: historyScpi },
     }
   };
 
+  // Résumé final
+  console.log("\n═══════════════════════════════════════════════════════════");
+  console.log("  RÉSUMÉ DES DONNÉES");
+  console.log("═══════════════════════════════════════════════════════════");
+  console.log(`  OAT 10 ans   : ${nouvellesDonnees.indices.oat.valeur}% (dernier: ${historyOat[historyOat.length-1]?.date ?? 'N/A'})`);
+  console.log(`  Inflation    : ${nouvellesDonnees.indices.inflation.valeur}% (dernier: ${historyInflation[historyInflation.length-1]?.date ?? 'N/A'})`);
+  console.log(`  €STR         : ${nouvellesDonnees.indices.estr.valeur}% (dernier: ${historyEstr[historyEstr.length-1]?.date ?? 'N/A'})`);
+
   const dir = path.dirname(FILE_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(FILE_PATH, JSON.stringify(nouvellesDonnees, null, 2));
-  console.log("Fichier JSON généré avec succès.");
+  console.log("\n✅ Fichier taux.json généré avec succès.\n");
 }
 
 main();
