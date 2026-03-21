@@ -72,7 +72,7 @@ async function getOatRecentFromECB() {
     const startStr = startPeriod.toISOString().substring(0, 7);
 
     // Clé SDMX : Fréquence=M, Pays=FR, Maturité=Long terme, Instrument=Obligations d'État 10 ans
-    const url = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0.EUR.N.Z?startPeriod=${startStr}&format=jsondata&detail=dataonly`;
+    const url = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0000.EUR.N.Z?startPeriod=${startStr}&format=jsondata&detail=dataonly`;
     const response = await fetch(url, {
       cache: 'no-store',
       headers: { 'Accept': 'application/json' }
@@ -81,7 +81,7 @@ async function getOatRecentFromECB() {
     if (!response.ok) {
       console.log(`  ⚠️ BCE HTTP ${response.status} — tentative format XML...`);
       // Fallback: essayer le format XML générique
-      const urlXml = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0.EUR.N.Z?startPeriod=${startStr}`;
+      const urlXml = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0000.EUR.N.Z?startPeriod=${startStr}`;
       const resp2 = await fetch(urlXml, { cache: 'no-store', headers: { 'Accept': 'application/xml' } });
       if (!resp2.ok) {
         console.log(`  ⚠️ BCE XML HTTP ${resp2.status}`);
@@ -107,27 +107,24 @@ async function getOatRecentFromECB() {
 
     const json = await response.json();
 
-    // Format SDMX-JSON v2 : structure à détecter dynamiquement
-    // Les données sont dans dataSets[0].series, avec des clés comme "0:0:0:0:0:0:0:0:0"
-    const dataSet = json?.data?.dataSets?.[0] ?? json?.dataSets?.[0];
-    const structure = json?.data?.structure ?? json?.structure;
-    const allPeriods = structure?.dimensions?.observation?.[0]?.values
-      ?? structure?.dimensions?.series?.[0]?.values;
+    // Format SDMX-JSON BCE :
+    // - Les observations sont dans dataSets[0].series["0:0:0:0:0:0:0:0:0"].observations
+    //   sous forme d'objet { "0": [valeur,...], "1": [valeur,...], ... }
+    // - Les périodes correspondantes sont dans structure.dimensions.observation[0].values
+    const seriesObs = json?.dataSets?.[0]?.series?.['0:0:0:0:0:0:0:0:0']?.observations;
+    const allPeriods = json?.structure?.dimensions?.observation?.[0]?.values;
 
-    if (!dataSet || !allPeriods) {
-      console.log(`  ⚠️ BCE: structure JSON inattendue`, JSON.stringify(json).substring(0, 200));
+    if (!seriesObs || !allPeriods) {
+      console.log(`  ⚠️ BCE: structure JSON inattendue`);
       return [];
     }
 
-    const seriesKey = Object.keys(dataSet.series ?? {})[0];
-    const periods = dataSet.series?.[seriesKey]?.observations ?? dataSet.observations ?? {};
-
     const observations = [];
-    for (const [idx, obs] of Object.entries(periods)) {
+    for (const [idx, obs] of Object.entries(seriesObs)) {
       const periodObj = allPeriods[parseInt(idx)];
       if (!periodObj || obs[0] == null) continue;
-      const period = periodObj.id ?? periodObj.name;
-      const date = String(period).length === 7 ? `${period}-01` : String(period);
+      const period = periodObj.id; // ex: "2026-02"
+      const date = `${period}-01`;
       const numValue = parseFloat(obs[0]);
       if (!isNaN(numValue)) {
         observations.push({ date, value: parseFloat(numValue.toFixed(2)), timestamp: new Date(date).getTime() });
