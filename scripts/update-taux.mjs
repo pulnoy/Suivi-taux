@@ -540,13 +540,17 @@ async function getLivretAHistory() {
       const url = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=series_key='MIR1.M.FR.B.L23FRLA.D.R.A.2230U6.EUR.O'&order_by=time_period_start ASC&limit=100&offset=0&apikey=${WEBSTAT_API_KEY}`;
 
       // L'API limite à 100 par page — on pagine pour tout récupérer
+      const WEBSTAT_HEADERS = {
+        'Authorization': `Apikey ${WEBSTAT_API_KEY}`,
+        'Accept': 'application/json'
+      };
       let allObs = [];
       let offset = 0;
       let total = null;
 
       while (total === null || offset < total) {
-        const pageUrl = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=series_key='MIR1.M.FR.B.L23FRLA.D.R.A.2230U6.EUR.O'&order_by=time_period_start ASC&limit=100&offset=${offset}&apikey=${WEBSTAT_API_KEY}`;
-        const resp = await fetch(pageUrl, { cache: 'no-store' });
+        const pageUrl = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=series_key='MIR1.M.FR.B.L23FRLA.D.R.A.2230U6.EUR.O'&order_by=time_period_start ASC&limit=100&offset=${offset}`;
+        const resp = await fetch(pageUrl, { cache: 'no-store', headers: WEBSTAT_HEADERS });
         if (!resp.ok) { console.log(`  ⚠️ Webstat HTTP ${resp.status}`); break; }
         const json = await resp.json();
         if (total === null) total = json.total_count;
@@ -628,13 +632,17 @@ async function getPrixImmobilierHistory() {
     try {
       console.log(`  Fetching prix immobilier (Webstat BdF RPP)...`);
       // Série trimestrielle — 120 points environ depuis 1996
+      const WEBSTAT_HEADERS = {
+        'Authorization': `Apikey ${WEBSTAT_API_KEY}`,
+        'Accept': 'application/json'
+      };
       let allObs = [];
       let offset = 0;
       let total = null;
 
       while (total === null || offset < total) {
-        const pageUrl = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=series_key='RPP.Q.FR.N.ED.00.1.00'&order_by=time_period_start ASC&limit=100&offset=${offset}&apikey=${WEBSTAT_API_KEY}`;
-        const resp = await fetch(pageUrl, { cache: 'no-store' });
+        const pageUrl = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=series_key='RPP.Q.FR.N.ED.00.1.00'&order_by=time_period_start ASC&limit=100&offset=${offset}`;
+        const resp = await fetch(pageUrl, { cache: 'no-store', headers: WEBSTAT_HEADERS });
         if (!resp.ok) { console.log(`  ⚠️ Webstat RPP HTTP ${resp.status}`); break; }
         const json = await resp.json();
         if (total === null) total = json.total_count;
