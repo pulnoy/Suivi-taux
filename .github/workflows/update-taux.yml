@@ -33,6 +33,7 @@ jobs:
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          WEBSTAT_API_KEY: ${{ secrets.WEBSTAT_API_KEY }}
         run: node scripts/update-taux.mjs
 
       # --- Push direct sur main si des modifications ont été générées ---
