@@ -1,5 +1,5 @@
 {
-  "date_mise_a_jour": "2026-03-22T10:32:42.756Z",
+  "date_mise_a_jour": "2026-03-22T10:35:00.984Z",
   "indices": {
     "oat": {
       "titre": "OAT 10 ans",
@@ -70148,7 +70148,7 @@
     },
     "btc": {
       "titre": "Bitcoin",
-      "valeur": 68721.13,
+      "valeur": 68754.48,
       "suffixe": "$",
       "historique": [
         {
@@ -73158,14 +73158,14 @@
         },
         {
           "date": "2026-03-22",
-          "value": 68721.13,
-          "timestamp": 1774175400000
+          "value": 68754.48,
+          "timestamp": 1774175520000
         }
       ],
       "performances": {
-        "annualisee_1an": -20.14,
-        "annualisee_3ans": 34.9,
-        "annualisee_5ans": 4.2
+        "annualisee_1an": -20.1,
+        "annualisee_3ans": 34.92,
+        "annualisee_5ans": 4.21
       }
     },
     "scpi": {
