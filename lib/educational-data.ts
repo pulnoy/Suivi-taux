@@ -380,6 +380,58 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     sourceUrl: 'https://finance.yahoo.com/quote/BZ=F'
   },
   
+  livreta: {
+    title: 'Livret A',
+    shortDescription: 'Produit d\'épargne réglementé, garanti par l\'État. Taux fixé par arrêté ministériel deux fois par an.',
+    fullDescription: `Le Livret A est le produit d'épargne le plus répandu en France, avec plus de 55 millions de détenteurs. Son taux est fixé par le gouvernement sur proposition de la Banque de France, selon une formule tenant compte de l'inflation et de l'€STR. Les intérêts sont exonérés d'impôt et de prélèvements sociaux. Le plafond est de 22 950 € pour un particulier.`,
+    importance: `C'est le taux plancher de référence pour l'épargne sans risque en France. Il influence directement les arbitrages entre épargne liquide et placements financiers. Un Livret A à 1.7% face à une inflation à 1% donne un rendement réel positif, ce qui est rare historiquement.`,
+    factors: [
+      'Inflation française (IPC)',
+      'Taux €STR de la BCE',
+      'Décision politique du gouvernement (arrondi)',
+      'Rôle de financement du logement social (CDC)',
+      'Concurrence avec autres produits d\'épargne réglementée'
+    ],
+    insights: [
+      'Taux révisé le 1er février et le 1er août',
+      'Plafond : 22 950 € (particulier), 76 500 € (associations)',
+      'Référence pour comparer tout placement sans risque'
+    ],
+    color: '#0ea5e9',
+    bgColor: '#e0f2fe',
+    darkBgColor: '#0c4a6e',
+    category: 'rates',
+    categoryLabel: 'Épargne',
+    source: 'Banque de France / Ministère des Finances',
+    sourceUrl: 'https://www.banque-france.fr/fr/statistiques/taux-et-cours/taux-livret-a'
+  },
+
+  prixImmo: {
+    title: 'Prix immo (var. annuelle)',
+    shortDescription: 'Variation annuelle des prix des logements anciens en France métropolitaine. Source officielle : Banque de France / INSEE.',
+    fullDescription: `L'indice des prix des logements anciens est calculé conjointement par l'INSEE et les notaires de France à partir des actes de vente. Il couvre l'ensemble des logements anciens (appartements et maisons) en France métropolitaine, avec une base 100 en 2015. La variation annuelle mesure l'évolution sur 4 trimestres glissants.`,
+    importance: `C'est l'indicateur de référence pour suivre le marché immobilier résidentiel. Il est directement lié aux taux de crédit immobilier, à l'inflation et aux politiques monétaires. Essentiel pour évaluer la performance des SCPI et l'immobilier en portefeuille.`,
+    factors: [
+      'Taux des crédits immobiliers',
+      'Politique monétaire BCE',
+      'Démographie et demande de logements',
+      'Normes HCSF (taux d\'endettement)',
+      'Offre de logements neufs'
+    ],
+    insights: [
+      'Donnée trimestrielle — délai de publication ~3 mois',
+      'Fortement corrélé (avec décalage) aux taux de crédit',
+      'Base 100 = moyenne annuelle 2015'
+    ],
+    color: '#7c3aed',
+    bgColor: '#f5f3ff',
+    darkBgColor: '#2e1065',
+    category: 'rates',
+    categoryLabel: 'Immobilier',
+    source: 'Banque de France / INSEE-Notaires',
+    sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/rpp/RPP.Q.FR.N.ED.00.1.00'
+  },
+
   btc: {
     title: 'Bitcoin',
     shortDescription: 'Cryptomonnaie décentralisée. Actif numérique volatile.',
