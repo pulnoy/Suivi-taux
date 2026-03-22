@@ -29,7 +29,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CalendarIcon, TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb } from 'lucide-react';
+import { CalendarIcon, TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -264,54 +264,132 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     { value: 'MAX', label: 'Max' },
   ];
 
+  // Grouper les indices par catégorie
+  const CATEGORY_ORDER = [
+    { id: 'rates',        label: 'Taux & Épargne',     icon: '📊' },
+    { id: 'real_estate',  label: 'Immobilier',          icon: '🏢' },
+    { id: 'stocks',       label: 'Actions',             icon: '📈' },
+    { id: 'forex',        label: 'Devises',             icon: '💱' },
+    { id: 'commodities',  label: 'Matières premières',  icon: '🛢️' },
+    { id: 'crypto',       label: 'Crypto',              icon: '₿'  },
+  ];
+
+  const indicesByCategory = useMemo(() => {
+    const groups: Record<string, string[]> = {};
+    for (const key of Object.keys(indices)) {
+      const cat = INDEX_EDUCATION[key]?.category ?? 'rates';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(key);
+    }
+    return groups;
+  }, [indices]);
+
   return (
     <div className="space-y-6">
-      {/* Index Selection */}
+      {/* Index Selection — par catégories */}
       <div className="bg-card rounded-xl border border-border p-4">
-        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-          <BarChart3 className="h-4 w-4" />
-          Sélection des indices (max 5)
-        </h3>
-        <div className="flex flex-wrap gap-3">
-          {availableIndices.map(key => {
-            const index = indices[key];
-            const education = INDEX_EDUCATION[key];
-            const isSelected = selectedKeys.includes(key);
-            
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Sélection des indices
+          </h3>
+          <span className={cn(
+            "text-xs font-medium px-2 py-0.5 rounded-full",
+            selectedKeys.length >= 5
+              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+              : "bg-muted text-muted-foreground"
+          )}>
+            {selectedKeys.length}/5 sélectionnés
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {CATEGORY_ORDER.map(cat => {
+            const keys = indicesByCategory[cat.id];
+            if (!keys || keys.length === 0) return null;
+
             return (
-              <TooltipProvider key={key}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => toggleIndex(key)}
-                      disabled={!isSelected && selectedKeys.length >= 5}
-                      className={cn(
-                        'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all',
-                        'border',
-                        isSelected
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-border bg-muted/50 text-muted-foreground hover:bg-muted',
-                        !isSelected && selectedKeys.length >= 5 && 'opacity-50 cursor-not-allowed'
-                      )}
-                    >
-                      <span 
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: education?.color || '#64748b' }}
-                      />
-                      {index.titre}
-                      {isSelected && (
-                        <X className="h-3 w-3 ml-1 hover:text-destructive" />
-                      )}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-xs">
-                    <p className="text-sm">{education?.shortDescription || index.titre}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <div
+                key={cat.id}
+                className="rounded-lg border border-border bg-muted/30 p-3"
+              >
+                {/* Header catégorie */}
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <span>{cat.icon}</span>
+                  {cat.label}
+                </p>
+                {/* Boutons de la catégorie */}
+                <div className="flex flex-wrap gap-1.5">
+                  {keys.map(key => {
+                    const index = indices[key];
+                    const education = INDEX_EDUCATION[key];
+                    const isSelected = selectedKeys.includes(key);
+                    const isDisabled = !isSelected && selectedKeys.length >= 5;
+
+                    return (
+                      <TooltipProvider key={key}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => toggleIndex(key)}
+                              disabled={isDisabled}
+                              className={cn(
+                                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all border',
+                                isSelected
+                                  ? 'text-white shadow-sm'
+                                  : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+                                isDisabled && 'opacity-40 cursor-not-allowed'
+                              )}
+                              style={isSelected ? {
+                                backgroundColor: education?.color ?? '#3b82f6',
+                                borderColor: education?.color ?? '#3b82f6',
+                              } : {}}
+                            >
+                              {index.titre}
+                              {isSelected && <X className="h-2.5 w-2.5 ml-0.5 opacity-80" />}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-xs">
+                            <p className="text-xs font-medium mb-0.5">{index.titre}</p>
+                            <p className="text-xs text-muted-foreground">{education?.shortDescription || ''}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
+
+        {/* Résumé des sélectionnés */}
+        {selectedKeys.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-border flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Sélectionnés :</span>
+            {selectedKeys.map(key => {
+              const edu = INDEX_EDUCATION[key];
+              return (
+                <span
+                  key={key}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                  style={{ backgroundColor: edu?.color ?? '#3b82f6' }}
+                >
+                  {indices[key]?.titre}
+                  <button onClick={() => toggleIndex(key)} className="ml-0.5 hover:opacity-70">
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              );
+            })}
+            <button
+              onClick={() => onKeysChange([])}
+              className="text-xs text-muted-foreground hover:text-destructive transition-colors ml-1"
+            >
+              Tout effacer
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Period Selection */}
