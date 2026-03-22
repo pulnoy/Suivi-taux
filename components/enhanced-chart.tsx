@@ -126,26 +126,45 @@ export function EnhancedChart({
     
     if (sortedDates.length === 0) return [];
 
-    // Build chart data with real values only
+    // Pré-indexer chaque dataset par timestamp pour lookup rapide de la valeur la plus proche
+    const MAX_GAP_MS = 45 * 24 * 60 * 60 * 1000; // 45 jours max d'écart accepté
+    const indexedDatasets = datasets.map(ds => ({
+      ...ds,
+      sorted: [...ds.data].sort((a, b) => a.date.localeCompare(b.date))
+    }));
+
+    const findClosest = (sorted: typeof indexedDatasets[0]['sorted'], targetDate: string): number | undefined => {
+      const targetTs = new Date(targetDate).getTime();
+      let best: { value: number; gap: number } | null = null;
+      for (const pt of sorted) {
+        const gap = Math.abs(new Date(pt.date).getTime() - targetTs);
+        if (gap > MAX_GAP_MS) continue;
+        if (!best || gap < best.gap) best = { value: pt.value, gap };
+        else if (gap > best.gap) break; // les données sont triées, on peut sortir
+      }
+      return best?.value;
+    };
+
+    // Build chart data — valeur exacte si dispo, sinon valeur la plus proche (évite NA tooltip)
     const data = sortedDates.map(date => {
       const point: Record<string, any> = { date };
       
-      datasets.forEach(ds => {
-        const dataPoint = ds.data.find(d => d.date === date);
-        
-        if (dataPoint) {
+      indexedDatasets.forEach(ds => {
+        const exactPoint = ds.data.find(d => d.date === date);
+        const rawValue = exactPoint ? exactPoint.value : findClosest(ds.sorted, date);
+
+        if (rawValue !== undefined) {
           if (mode === 'percent') {
             const firstPoint = ds.data[0];
             const baseValue = firstPoint?.value || 1;
             const isRate = ds.suffix === '%';
-            
             if (isRate) {
-              point[ds.key] = dataPoint.value - baseValue;
+              point[ds.key] = rawValue - baseValue;
             } else {
-              point[ds.key] = ((dataPoint.value - baseValue) / Math.abs(baseValue)) * 100;
+              point[ds.key] = ((rawValue - baseValue) / Math.abs(baseValue)) * 100;
             }
           } else {
-            point[ds.key] = dataPoint.value;
+            point[ds.key] = rawValue;
           }
         }
       });
@@ -268,12 +287,14 @@ export function EnhancedChart({
     setBrushDomain(null);
   }, []);
 
-  // Custom tooltip - Affiche TOUS les indices, même si valeur manquante
+  // Custom tooltip - Affiche TOUS les indices sans NA
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !label) return null;
     
-    // Trouver le point de données pour cette date
     const dataPoint = maData.find(d => d.date === label);
+    
+    // Vérifier si la valeur est exacte ou interpolée pour chaque dataset
+    const isExactDate = (ds: DatasetConfig) => ds.data.some(d => d.date === label);
     
     return (
       <div className="bg-popover border border-border rounded-lg shadow-xl p-3 min-w-[200px]">
@@ -285,20 +306,20 @@ export function EnhancedChart({
           })}
         </p>
         <div className="space-y-1.5">
-          {/* Afficher TOUS les datasets, pas seulement ceux dans payload */}
           {datasets.map((ds) => {
             const value = dataPoint?.[ds.key];
             const ma50Value = dataPoint?.[`${ds.key}_ma50`];
             const ma200Value = dataPoint?.[`${ds.key}_ma200`];
             const isRate = ds.suffix === '%';
             const hasValue = value !== undefined && value !== null;
+            const isApprox = hasValue && !isExactDate(ds);
             
             return (
               <div key={ds.key} className="space-y-1">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <span 
-                      className="w-3 h-3 rounded-full" 
+                      className="w-3 h-3 rounded-full flex-shrink-0" 
                       style={{ backgroundColor: ds.color }}
                     />
                     <span className="text-sm font-medium text-foreground">
@@ -306,23 +327,27 @@ export function EnhancedChart({
                     </span>
                   </div>
                   {hasValue ? (
-                    <span className={cn(
-                      "text-sm font-bold",
-                      mode === 'percent' 
-                        ? value >= 0 ? 'text-green-600' : 'text-red-600'
-                        : 'text-foreground'
-                    )}>
-                      {mode === 'percent' && value >= 0 ? '+' : ''}
-                      {formatNumber(value, 2)}
-                      {mode === 'percent' ? (isRate ? ' pts' : '%') : ` ${ds.suffix || ''}`}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      {isApprox && (
+                        <span className="text-xs text-muted-foreground opacity-60" title="Valeur approchée (données mensuelles)">≈</span>
+                      )}
+                      <span className={cn(
+                        "text-sm font-bold",
+                        mode === 'percent' 
+                          ? value >= 0 ? 'text-green-600' : 'text-red-600'
+                          : 'text-foreground'
+                      )}>
+                        {mode === 'percent' && value >= 0 ? '+' : ''}
+                        {formatNumber(value, 2)}
+                        {mode === 'percent' ? (isRate ? ' pts' : '%') : ` ${ds.suffix || ''}`}
+                      </span>
+                    </div>
                   ) : (
-                    <span className="text-sm text-muted-foreground italic">
-                      N/A
+                    <span className="text-xs text-muted-foreground italic opacity-50">
+                      hors période
                     </span>
                   )}
                 </div>
-                {/* Afficher les MA si activées et disponibles */}
                 {showMA50 && ma50Value !== undefined && (
                   <div className="flex items-center justify-between gap-4 pl-5 text-xs text-muted-foreground">
                     <span>└ MM 50j</span>
