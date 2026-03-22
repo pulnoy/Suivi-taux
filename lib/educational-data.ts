@@ -380,6 +380,110 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     sourceUrl: 'https://finance.yahoo.com/quote/BZ=F'
   },
   
+  tec10: {
+    title: 'TEC 10 ans',
+    shortDescription: 'Taux de l\'Échéance Constante à 10 ans. Taux journalier officiel de la Banque de France, plus réactif que l\'OAT.',
+    fullDescription: `Le TEC 10 (Taux de l'Échéance Constante à 10 ans) est calculé quotidiennement par la Banque de France par interpolation sur la courbe des OAT du marché secondaire. Il représente le rendement d'une obligation fictive de maturité exactement 10 ans. Contrairement à l'OAT publiée avec retard par FRED, le TEC 10 est disponible le lendemain.`,
+    importance: `C'est la référence la plus précise et la plus à jour du coût de l'emprunt souverain français à 10 ans. Utilisé comme taux de référence dans de nombreux contrats financiers, notamment les crédits à taux révisable indexés sur le TEC.`,
+    factors: [
+      'Politique monétaire de la BCE',
+      'Anticipations d\'inflation',
+      'Appétit pour le risque des investisseurs',
+      'Déficit et dette publique française',
+      'Contexte géopolitique et économique'
+    ],
+    insights: [
+      'Données journalières — plus réactif que l\'OAT mensuelle FRED',
+      'Référence pour les crédits immobiliers à taux variable',
+      'Très proche de l\'OAT 10 ans mais calculé différemment'
+    ],
+    color: '#059669',
+    bgColor: '#ecfdf5',
+    darkBgColor: '#022c22',
+    category: 'rates',
+    categoryLabel: 'Taux État',
+    source: 'Banque de France (Webstat)',
+    sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/fm/FM.D.FR.EUR.FR2.BB.FRMOYTEC10.HSTA'
+  },
+
+  tauxDepotBCE: {
+    title: 'Taux dépôt BCE',
+    shortDescription: 'Facilité de dépôt de la BCE. Taux plancher du système financier européen, principal levier de politique monétaire.',
+    fullDescription: `La facilité de dépôt est le taux auquel les banques commerciales peuvent déposer leurs excédents de liquidités auprès de la BCE pour une nuit. C'est le principal taux directeur de la BCE depuis 2022, devenu négatif entre 2014 et 2022 pour stimuler l'économie, puis fortement relevé pour lutter contre l'inflation.`,
+    importance: `Ce taux est le moteur de toute la politique monétaire européenne. Son évolution influence directement l'€STR, le Livret A, les taux de crédit et les marchés obligataires. Indispensable pour comprendre le contexte macro-financier en clientèle.`,
+    factors: [
+      'Décisions du Conseil des gouverneurs de la BCE',
+      'Inflation dans la zone euro (objectif 2%)',
+      'Croissance économique de la zone euro',
+      'Stabilité financière',
+      'Taux des autres grandes banques centrales'
+    ],
+    insights: [
+      'Taux négatif de -0.5% entre 2019 et 2022',
+      'Monté à 4% en 2023 — pic historique',
+      'En baisse depuis juin 2024 (désinflation)'
+    ],
+    color: '#dc2626',
+    bgColor: '#fef2f2',
+    darkBgColor: '#450a0a',
+    category: 'rates',
+    categoryLabel: 'Banque Centrale',
+    source: 'Banque de France (Webstat)',
+    sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/fm/FM.D.U2.EUR.4F.KR.DFR.LEV'
+  },
+
+  pel: {
+    title: 'PEL',
+    shortDescription: 'Plan d\'Épargne Logement. Taux de rémunération des nouveaux PEL, fixé par arrêté ministériel.',
+    fullDescription: `Le Plan d'Épargne Logement (PEL) est un produit d'épargne réglementé permettant de constituer une épargne en vue d'un prêt immobilier. Son taux est fixé à l'ouverture et garanti pendant toute la durée du plan (4 à 10 ans). Les intérêts sont soumis aux prélèvements sociaux et à l'impôt depuis 2018.`,
+    importance: `Le PEL est un indicateur clé de la rémunération de l'épargne réglementée à moyen terme. Son taux actuel de 1.75% depuis 2024 le rend moins attractif que le Livret A pour les nouvelles ouvertures, mais les anciens PEL à 2.5% ou 3.5% restent très avantageux.`,
+    factors: [
+      'Décisions ministérielles (fixé par arrêté)',
+      'Niveau des taux d\'intérêt du marché',
+      'Politique de logement du gouvernement',
+      'Concurrence avec autres produits d\'épargne',
+      'Taux du Livret A'
+    ],
+    insights: [
+      'Taux garanti à l\'ouverture pendant toute la durée',
+      'Droit à prêt immobilier associé (taux fixé à l\'ouverture + 1.2%)',
+      'Plafond : 61 200 € de versements'
+    ],
+    color: '#7c3aed',
+    bgColor: '#f5f3ff',
+    darkBgColor: '#2e1065',
+    category: 'rates',
+    categoryLabel: 'Épargne',
+    source: 'Banque de France (Webstat)',
+    sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/mir1/MIR1.M.FR.B.L22FRSP.H.R.A.2250U6.EUR.N'
+  },
+
+  tauxImmo: {
+    title: 'Taux crédit immo',
+    shortDescription: 'Taux moyen des nouveaux crédits immobiliers à plus d\'un an en France. Source officielle Banque de France.',
+    fullDescription: `Ce taux représente le taux d'intérêt annuel moyen des nouveaux crédits accordés aux particuliers pour l'habitat, d'une durée initiale supérieure à 1 an. Il est calculé par la Banque de France à partir des remontées mensuelles des établissements de crédit.`,
+    importance: `C'est l'indicateur de référence pour mesurer l'accessibilité au crédit immobilier. Son écart avec l'OAT ou le TEC 10 (spread bancaire) reflète la marge des banques et leur appétit pour le risque. Essentiel pour conseiller les clients sur le timing de leur emprunt.`,
+    factors: [
+      'TEC 10 ans / OAT (coût de refinancement)',
+      'Politique de crédit des banques',
+      'Normes HCSF (taux d\'endettement 35%)',
+      'Concurrence interbancaire',
+      'Politique monétaire BCE'
+    ],
+    insights: [
+      'Spread historique vs OAT : +1% à +1.5%',
+      'Pic à ~4.2% fin 2023 — en baisse depuis',
+      'Fortement corrélé au TEC 10 avec 3-6 mois de décalage'
+    ],
+    color: '#0891b2',
+    bgColor: '#ecfeff',
+    darkBgColor: '#082f49',
+    category: 'rates',
+    categoryLabel: 'Immobilier',
+    source: 'Banque de France (Webstat)',
+    sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/mir1/MIR1.M.FR.B.A22.K.R.A.2254U6.EUR.N'
+  },
+
   livreta: {
     title: 'Livret A',
     shortDescription: 'Produit d\'épargne réglementé, garanti par l\'État. Taux fixé par arrêté ministériel deux fois par an.',
