@@ -712,7 +712,126 @@ async function getPrixImmobilierHistory() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 7. SCPI — Données historiques approximatives ASPIM/IEIF
+// FONCTION GÉNÉRIQUE WEBSTAT — récupère n'importe quelle série
+// avec pagination automatique et gestion d'authentification
+// ─────────────────────────────────────────────────────────────
+async function fetchWebstatSerie(seriesKey, label, startDate = '2000-01-01') {
+  if (!WEBSTAT_API_KEY) {
+    console.log(`  ⚠️ WEBSTAT_API_KEY non définie — ${label} indisponible`);
+    return [];
+  }
+  try {
+    console.log(`  Fetching ${label} (Webstat BdF)...`);
+    const headers = { 'Authorization': `Apikey ${WEBSTAT_API_KEY}`, 'Accept': 'application/json' };
+    const whereClause = encodeURIComponent(`series_key='${seriesKey}' AND time_period_start>='${startDate}'`);
+    let allObs = [], offset = 0, total = null;
+
+    while (total === null || offset < total) {
+      const url = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=${whereClause}&order_by=time_period_start ASC&limit=100&offset=${offset}`;
+      const resp = await fetch(url, { cache: 'no-store', headers });
+      if (!resp.ok) { console.log(`  ⚠️ Webstat ${label} HTTP ${resp.status}`); break; }
+      const json = await resp.json();
+      if (total === null) total = json.total_count;
+      const results = json.results ?? [];
+      if (results.length === 0) break;
+      allObs = allObs.concat(results);
+      offset += results.length;
+      if (results.length < 100) break;
+    }
+
+    if (allObs.length > 0) {
+      const history = allObs
+        .filter(r => r.obs_value != null && r.time_period_start)
+        .map(r => ({
+          date: r.time_period_start.substring(0, 10),
+          value: parseFloat(parseFloat(r.obs_value).toFixed(3)),
+          timestamp: new Date(r.time_period_start).getTime()
+        }))
+        .sort((a, b) => a.timestamp - b.timestamp);
+      const last = history[history.length - 1];
+      console.log(`  ✓ ${label}: ${history.length} points, dernier: ${last.date} = ${last.value}%`);
+      return history;
+    }
+    console.log(`  ⚠️ ${label}: aucune observation retournée`);
+  } catch (error) {
+    console.error(`  ⚠️ Erreur Webstat ${label}:`, error.message);
+  }
+  return [];
+}
+
+// ─────────────────────────────────────────────────────────────
+// 8. TEC 10 ANS — Taux de l'Échéance Constante 10 ans
+//    Série FM.D.FR.EUR.FR2.BB.FRMOYTEC10.HSTA (quotidienne, J+1)
+//    Source officielle BdF, plus à jour que l'OAT FRED mensuelle
+// ─────────────────────────────────────────────────────────────
+async function getTec10History() {
+  const data = await fetchWebstatSerie(
+    'FM.D.FR.EUR.FR2.BB.FRMOYTEC10.HSTA',
+    'TEC 10 ans',
+    '2000-01-01'
+  );
+  // Fallback sur données existantes
+  if (data.length === 0 && existingData?.indices?.tec10?.historique?.length > 0) {
+    console.log(`  ⚠️ TEC 10: utilisation données existantes`);
+    return existingData.indices.tec10.historique;
+  }
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 9. TAUX CRÉDIT IMMOBILIER — nouveaux crédits habitat, > 1 an
+//    Série MIR1.M.FR.B.A22.K.R.A.2254U6.EUR.N (mensuelle)
+//    Remplace le fallback BCE MIR qui ne fonctionnait pas
+// ─────────────────────────────────────────────────────────────
+async function getTauxCreditImmoHistory() {
+  const data = await fetchWebstatSerie(
+    'MIR1.M.FR.B.A22.K.R.A.2254U6.EUR.N',
+    'Taux crédit immo',
+    '2003-01-01'
+  );
+  if (data.length === 0 && existingData?.indices?.tauxImmo?.historique?.length > 0) {
+    console.log(`  ⚠️ Taux crédit immo: utilisation données existantes`);
+    return existingData.indices.tauxImmo.historique;
+  }
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 10. TAUX PEL — Plan d'Épargne Logement (nouveaux PEL)
+//     Série MIR1.M.FR.B.L22FRSP.H.R.A.2250U6.EUR.N (mensuelle)
+// ─────────────────────────────────────────────────────────────
+async function getTauxPelHistory() {
+  const data = await fetchWebstatSerie(
+    'MIR1.M.FR.B.L22FRSP.H.R.A.2250U6.EUR.N',
+    'Taux PEL',
+    '2000-01-01'
+  );
+  if (data.length === 0 && existingData?.indices?.pel?.historique?.length > 0) {
+    console.log(`  ⚠️ Taux PEL: utilisation données existantes`);
+    return existingData.indices.pel.historique;
+  }
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 11. TAUX DE DÉPÔT BCE — Facilité de dépôt (taux plancher)
+//     Série FM.D.U2.EUR.4F.KR.DFR.LEV (quotidienne, J+1)
+// ─────────────────────────────────────────────────────────────
+async function getTauxDepotBCEHistory() {
+  const data = await fetchWebstatSerie(
+    'FM.D.U2.EUR.4F.KR.DFR.LEV',
+    'Taux dépôt BCE',
+    '2000-01-01'
+  );
+  if (data.length === 0 && existingData?.indices?.tauxDepotBCE?.historique?.length > 0) {
+    console.log(`  ⚠️ Taux dépôt BCE: utilisation données existantes`);
+    return existingData.indices.tauxDepotBCE.historique;
+  }
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 12. SCPI — Données historiques approximatives ASPIM/IEIF
 // ─────────────────────────────────────────────────────────────
 function getScpiHistory() {
   return [
@@ -790,10 +909,14 @@ async function main() {
   const historyBrent = await fetchYahooHistoryWithFallback('BZ=F');
   const historyGold  = await fetchYahooHistoryWithFallback('GC=F');
   const historyBtc   = await fetchYahooHistoryWithFallback('BTC-USD');
-  // Livret A & Prix immobilier
-  console.log("\n🏦 Récupération Livret A et prix immobilier (Webstat BdF)...");
-  const historyLivretA   = await getLivretAHistory();
-  const historyPrixImmo  = await getPrixImmobilierHistory();
+  // Livret A, Prix immobilier + nouvelles séries Webstat
+  console.log("\n🏦 Récupération données Webstat BdF...");
+  const historyLivretA      = await getLivretAHistory();
+  const historyPrixImmo     = await getPrixImmobilierHistory();
+  const historyTec10        = await getTec10History();
+  const historyTauxImmo     = await getTauxCreditImmoHistory();
+  const historyPel          = await getTauxPelHistory();
+  const historyTauxDepotBCE = await getTauxDepotBCEHistory();
   const historyScpi  = getScpiHistory();
 
   const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : 0;
@@ -849,11 +972,15 @@ async function main() {
     date_mise_a_jour: new Date().toISOString(),
     indices: {
       // Taux (pas de performance annualisée)
-      oat:       { titre: "OAT 10 ans",       valeur: getLast(historyOat),       suffixe: "%", historique: historyOat },
-      inflation: { titre: "Inflation France", valeur: getLast(historyInflation), suffixe: "%", historique: historyInflation },
-      estr:      { titre: "€STR",             valeur: getLast(historyEstr),      suffixe: "%", historique: historyEstr },
-      livreta:   { titre: "Livret A",           valeur: getLast(historyLivretA),   suffixe: "%", historique: historyLivretA },
-      prixImmo:  { titre: "Prix immo (var. annuelle)", valeur: getLast(historyPrixImmo), suffixe: "%", historique: historyPrixImmo },
+      oat:          { titre: "OAT 10 ans",            valeur: getLast(historyOat),          suffixe: "%", historique: historyOat },
+      tec10:        { titre: "TEC 10 ans",             valeur: getLast(historyTec10),         suffixe: "%", historique: historyTec10 },
+      inflation:    { titre: "Inflation France",       valeur: getLast(historyInflation),     suffixe: "%", historique: historyInflation },
+      estr:         { titre: "€STR",                   valeur: getLast(historyEstr),          suffixe: "%", historique: historyEstr },
+      tauxDepotBCE: { titre: "Taux dépôt BCE",         valeur: getLast(historyTauxDepotBCE),  suffixe: "%", historique: historyTauxDepotBCE },
+      livreta:      { titre: "Livret A",               valeur: getLast(historyLivretA),       suffixe: "%", historique: historyLivretA },
+      pel:          { titre: "PEL",                    valeur: getLast(historyPel),           suffixe: "%", historique: historyPel },
+      tauxImmo:     { titre: "Taux crédit immo",       valeur: getLast(historyTauxImmo),      suffixe: "%", historique: historyTauxImmo },
+      prixImmo:     { titre: "Prix immo (var. an.)",   valeur: getLast(historyPrixImmo),      suffixe: "%", historique: historyPrixImmo },
 
       // Devises et indices avec performances annualisées
       eurusd:   createIndexData("Euro / Dollar",    getLast(historyEurUsd),   "$",   historyEurUsd),
@@ -878,8 +1005,12 @@ async function main() {
   console.log("  RÉSUMÉ DES DONNÉES");
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`  OAT 10 ans   : ${nouvellesDonnees.indices.oat.valeur}% (dernier: ${historyOat[historyOat.length-1]?.date ?? 'N/A'})`);
+  console.log(`  TEC 10 ans   : ${nouvellesDonnees.indices.tec10.valeur}% (dernier: ${historyTec10[historyTec10.length-1]?.date ?? 'N/A'})`);
   console.log(`  Inflation    : ${nouvellesDonnees.indices.inflation.valeur}% (dernier: ${historyInflation[historyInflation.length-1]?.date ?? 'N/A'})`);
+  console.log(`  Taux dépôt   : ${nouvellesDonnees.indices.tauxDepotBCE.valeur}% (dernier: ${historyTauxDepotBCE[historyTauxDepotBCE.length-1]?.date ?? 'N/A'})`);
   console.log(`  Livret A     : ${nouvellesDonnees.indices.livreta.valeur}% (dernier: ${historyLivretA[historyLivretA.length-1]?.date ?? 'N/A'})`);
+  console.log(`  PEL          : ${nouvellesDonnees.indices.pel.valeur}% (dernier: ${historyPel[historyPel.length-1]?.date ?? 'N/A'})`);
+  console.log(`  Taux immo    : ${nouvellesDonnees.indices.tauxImmo.valeur}% (dernier: ${historyTauxImmo[historyTauxImmo.length-1]?.date ?? 'N/A'})`);
   console.log(`  Prix immo    : ${nouvellesDonnees.indices.prixImmo.valeur}% var/an (dernier: ${historyPrixImmo[historyPrixImmo.length-1]?.date ?? 'N/A'})`);
   console.log(`  €STR         : ${nouvellesDonnees.indices.estr.valeur}% (dernier: ${historyEstr[historyEstr.length-1]?.date ?? 'N/A'})`);
 
