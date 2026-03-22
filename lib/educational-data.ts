@@ -277,29 +277,63 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
   },
   
   eurusd: {
-    title: 'EUR/USD',
+    title: 'EUR / USD',
     shortDescription: 'Taux de change Euro/Dollar. Combien de dollars pour 1 euro.',
     fullDescription: `La paire EUR/USD est le taux de change le plus échangé au monde. Elle indique combien de dollars sont nécessaires pour acheter un euro. Un EUR/USD à 1.10 signifie qu'1€ = 1.10$.`,
     importance: `Impacte directement le pouvoir d'achat des Européens pour les biens importés (pétrole, tech) et la compétitivité des exportations européennes. Crucial pour les voyages et investissements internationaux.`,
-    factors: [
-      'Différentiel de taux d\'intérêt BCE/Fed',
-      'Croissance économique relative',
-      'Flux commerciaux entre zones',
-      'Politique monétaire des deux banques centrales',
-      'Géopolitique et stabilité'
-    ],
-    insights: [
-      'Paire de devises la plus échangée au monde',
-      'Moyenne historique : ~1.15-1.20',
-      'Euro fort = importations moins chères'
-    ],
-    color: '#0ea5e9',
-    bgColor: '#e0f2fe',
-    darkBgColor: '#082f49',
-    category: 'forex',
-    categoryLabel: 'Change',
-    source: 'Marchés des changes',
-    sourceUrl: 'https://finance.yahoo.com/quote/EURUSD=X'
+    factors: ['Différentiel de taux BCE/Fed', 'Croissance économique relative', 'Flux commerciaux', 'Géopolitique'],
+    insights: ['Paire la plus échangée au monde', 'Moyenne historique : ~1.15-1.20', 'Euro fort = importations moins chères'],
+    color: '#0ea5e9', bgColor: '#e0f2fe', darkBgColor: '#082f49',
+    category: 'forex', categoryLabel: 'Change',
+    source: 'Marchés des changes', sourceUrl: 'https://finance.yahoo.com/quote/EURUSD=X'
+  },
+
+  eurgbp: {
+    title: 'EUR / GBP',
+    shortDescription: 'Taux de change Euro/Livre sterling. Combien de livres pour 1 euro.',
+    fullDescription: `La paire EUR/GBP mesure la valeur relative de l'euro face à la livre britannique. Depuis le Brexit (2020), cette paire est particulièrement sensible aux négociations commerciales UE/Royaume-Uni et aux divergences de politique monétaire entre la BCE et la Banque d'Angleterre.`,
+    importance: `Essentiel pour les clients ayant des actifs ou des transactions au Royaume-Uni. La livre est souvent vue comme un indicateur de confiance dans l'économie britannique post-Brexit.`,
+    factors: ['Politique monétaire BCE vs BoE', 'Relations commerciales UE/UK post-Brexit', 'Inflation au Royaume-Uni', 'Stabilité politique britannique'],
+    insights: ['Fortement impacté par le Brexit depuis 2016', 'BoE souvent plus hawkish que BCE', 'Livre = devise refuge traditionnelle'],
+    color: '#7c3aed', bgColor: '#f5f3ff', darkBgColor: '#2e1065',
+    category: 'forex', categoryLabel: 'Change',
+    source: 'Marchés des changes', sourceUrl: 'https://finance.yahoo.com/quote/EURGBP=X'
+  },
+
+  eurjpy: {
+    title: 'EUR / JPY',
+    shortDescription: 'Taux de change Euro/Yen japonais. Indicateur du sentiment de risque mondial.',
+    fullDescription: `La paire EUR/JPY est un indicateur clé du sentiment de risque sur les marchés. Le yen est une devise refuge : il s'apprécie en période de crise et se déprécie quand les investisseurs prennent des risques (carry trade). La Banque du Japon maintient des taux historiquement bas.`,
+    importance: `Reflète les divergences de politique monétaire entre la BCE et la Banque du Japon. Utile pour évaluer l'appétit pour le risque mondial et les flux de carry trade.`,
+    factors: ['Politique de la Banque du Japon (taux ultra-bas)', 'Appétit pour le risque mondial', 'Carry trade EUR/JPY', 'Inflation japonaise'],
+    insights: ['Yen = valeur refuge en période de stress', 'Carry trade massif avant 2024', 'BOJ commence à normaliser sa politique'],
+    color: '#dc2626', bgColor: '#fef2f2', darkBgColor: '#450a0a',
+    category: 'forex', categoryLabel: 'Change',
+    source: 'Marchés des changes', sourceUrl: 'https://finance.yahoo.com/quote/EURJPY=X'
+  },
+
+  eurchf: {
+    title: 'EUR / CHF',
+    shortDescription: 'Taux de change Euro/Franc suisse. Le franc suisse est la devise refuge européenne par excellence.',
+    fullDescription: `La paire EUR/CHF mesure la valeur de l'euro face au franc suisse. Le franc suisse est historiquement une valeur refuge en période de turbulences en Europe. La BNS (Banque nationale suisse) intervient régulièrement pour éviter une trop forte appréciation du franc.`,
+    importance: `Indicateur clé de la confiance dans l'économie européenne. Un EUR/CHF bas (franc fort) signale une aversion au risque européen. Important pour les clients exposés à la Suisse ou aux actifs libellés en CHF.`,
+    factors: ['Crises de la zone euro', 'Politique de la BNS', 'Flux de capitaux vers la sécurité', 'Inflation suisse'],
+    insights: ['CHF = valeur refuge européenne historique', 'BNS intervient pour éviter le franc trop fort', 'Taux BNS souvent en territoire négatif'],
+    color: '#16a34a', bgColor: '#f0fdf4', darkBgColor: '#052e16',
+    category: 'forex', categoryLabel: 'Change',
+    source: 'Marchés des changes', sourceUrl: 'https://finance.yahoo.com/quote/EURCHF=X'
+  },
+
+  eurcny: {
+    title: 'EUR / CNY',
+    shortDescription: 'Taux de change Euro/Yuan chinois. Indicateur des relations économiques Europe-Chine.',
+    fullDescription: `La paire EUR/CNY mesure la valeur de l'euro face au yuan renminbi chinois. Le yuan est partiellement contrôlé par la Banque populaire de Chine (PBOC), ce qui le rend moins volatil que les autres devises. La Chine est le premier partenaire commercial de l'UE.`,
+    importance: `Pertinent pour suivre la compétitivité des exportations européennes vers la Chine et l'évolution des relations commerciales sino-européennes. Le yuan s'internationalise progressivement dans les paiements mondiaux.`,
+    factors: ['Politique de la PBOC', 'Balance commerciale Chine/UE', 'Tensions géopolitiques', 'Internationalisation du yuan'],
+    insights: ['Yuan partiellement contrôlé par la PBOC', 'Chine = 1er partenaire commercial de l\'UE', 'Progression du yuan dans les réserves mondiales'],
+    color: '#f59e0b', bgColor: '#fffbeb', darkBgColor: '#451a03',
+    category: 'forex', categoryLabel: 'Change',
+    source: 'Marchés des changes', sourceUrl: 'https://finance.yahoo.com/quote/EURCNY=X'
   },
   
   scpi: {
@@ -436,7 +470,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     title: 'PEL',
     shortDescription: 'Plan d\'Épargne Logement. Taux de rémunération des nouveaux PEL, fixé par arrêté ministériel.',
     fullDescription: `Le Plan d'Épargne Logement (PEL) est un produit d'épargne réglementé permettant de constituer une épargne en vue d'un prêt immobilier. Son taux est fixé à l'ouverture et garanti pendant toute la durée du plan (4 à 10 ans). Les intérêts sont soumis aux prélèvements sociaux et à l'impôt depuis 2018.`,
-    importance: `Le PEL est un indicateur clé de la rémunération de l'épargne réglementée à moyen terme. Son taux actuel de 1.75% depuis 2024 le rend moins attractif que le Livret A pour les nouvelles ouvertures, mais les anciens PEL à 2.5% ou 3.5% restent très avantageux.`,
+    importance: `Le PEL est un indicateur clé de la rémunération de l'épargne réglementée à moyen terme. Depuis le 1er janvier 2026, le taux est passé à 2%. Les anciens PEL à 2.5% ou 3.5% restent très avantageux.`,
     factors: [
       'Décisions ministérielles (fixé par arrêté)',
       'Niveau des taux d\'intérêt du marché',
@@ -446,7 +480,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     ],
     insights: [
       'Taux garanti à l\'ouverture pendant toute la durée',
-      'Droit à prêt immobilier associé (taux fixé à l\'ouverture + 1.2%)',
+      'Passé à 2% le 1er janvier 2026 (vs 1.75% avant)',
       'Plafond : 61 200 € de versements'
     ],
     color: '#7c3aed',
@@ -456,6 +490,33 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     categoryLabel: 'Épargne',
     source: 'Banque de France (Webstat)',
     sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/mir1/MIR1.M.FR.B.L22FRSP.H.R.A.2250U6.EUR.N'
+  },
+
+  fondsEuros: {
+    title: 'Fonds euros (moy.)',
+    shortDescription: 'Taux moyen annuel des fonds euros en assurance-vie. Source : France Assureurs / ACPR. Capital garanti, effet cliquet.',
+    fullDescription: `Les fonds euros sont le support garanti de l'assurance-vie. Composés principalement d'obligations d'État (80-90%), ils offrent une garantie du capital et un effet cliquet (les gains sont définitivement acquis chaque année). Le taux moyen est publié annuellement par France Assureurs et l'ACPR (Autorité de Contrôle Prudentiel et de Résolution). Il cache de fortes disparités : certains fonds servent 1.5% quand d'autres dépassent 4%.`,
+    importance: `Référence incontournable en conseil patrimonial. Les fonds euros représentent 70% des 2 000 milliards d'€ d'encours d'assurance-vie en France. Après des années de baisse (1.28% en 2021), la remontée des taux obligataires a permis une revalorisation notable depuis 2022. À comparer systématiquement avec le Livret A, le PEL et l'OAT pour argumenter l'allocation d'épargne.`,
+    factors: [
+      'Taux obligataires (OAT) — 80-90% du fonds investi en oblig.',
+      'Provision pour Participation aux Bénéfices (PPB)',
+      'Concurrence avec le Livret A',
+      'Stratégie de distribution de chaque assureur',
+      'Politique monétaire BCE'
+    ],
+    insights: [
+      'Taux 2024 : 2.60% (France Assureurs / ACPR)',
+      'Taux 2025 : ~2.50% estimé (en cours d\'annonce)',
+      'Capital garanti + effet cliquet = aucune perte possible',
+      'Publié avec 1 an de décalage (annonce en janvier-mars)'
+    ],
+    color: '#d97706',
+    bgColor: '#fffbeb',
+    darkBgColor: '#451a03',
+    category: 'rates',
+    categoryLabel: 'Épargne',
+    source: 'France Assureurs / ACPR',
+    sourceUrl: 'https://www.franceassureurs.fr/nos-publications/chiffres-marche-assurance-vie'
   },
 
   tauxImmo: {
@@ -478,7 +539,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     color: '#0891b2',
     bgColor: '#ecfeff',
     darkBgColor: '#082f49',
-    category: 'rates',
+    category: 'real_estate',
     categoryLabel: 'Immobilier',
     source: 'Banque de France (Webstat)',
     sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/mir1/MIR1.M.FR.B.A22.K.R.A.2254U6.EUR.N'
@@ -530,7 +591,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     color: '#7c3aed',
     bgColor: '#f5f3ff',
     darkBgColor: '#2e1065',
-    category: 'rates',
+    category: 'real_estate',
     categoryLabel: 'Immobilier',
     source: 'Banque de France / INSEE-Notaires',
     sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/rpp/RPP.Q.FR.N.ED.00.1.00'
@@ -541,26 +602,48 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     shortDescription: 'Cryptomonnaie décentralisée. Actif numérique volatile.',
     fullDescription: `Le Bitcoin (BTC) est la première et plus importante cryptomonnaie. Créé en 2009, il fonctionne sur une blockchain décentralisée avec une offre limitée à 21 millions d'unités. Il est considéré par certains comme "l'or numérique".`,
     importance: `Le Bitcoin représente une nouvelle classe d'actifs avec un potentiel de rendement élevé mais une volatilité extrême. Son adoption croissante par les institutions en fait un sujet incontournable.`,
-    factors: [
-      'Adoption institutionnelle (ETF, entreprises)',
-      'Régulation gouvernementale',
-      'Halving (division des récompenses mineurs)',
-      'Sentiment du marché crypto',
-      'Politique monétaire (liquidité)'
-    ],
-    insights: [
-      'Offre limitée à 21 millions d\'unités',
-      'Très volatil (+/- 50% par an possible)',
-      'Corrélation variable avec les actifs traditionnels'
-    ],
-    color: '#f7931a',
-    bgColor: '#fff7ed',
-    darkBgColor: '#431407',
-    category: 'crypto',
-    categoryLabel: 'Crypto',
-    source: 'Marchés crypto',
-    sourceUrl: 'https://finance.yahoo.com/quote/BTC-USD'
-  }
+    factors: ['Adoption institutionnelle (ETF, entreprises)', 'Régulation gouvernementale', 'Halving (division des récompenses mineurs)', 'Sentiment du marché crypto', 'Politique monétaire (liquidité)'],
+    insights: ['Offre limitée à 21 millions d\'unités', 'Très volatil (+/- 50% par an possible)', 'Corrélation variable avec les actifs traditionnels'],
+    color: '#f7931a', bgColor: '#fff7ed', darkBgColor: '#431407',
+    category: 'crypto', categoryLabel: 'Crypto',
+    source: 'Marchés crypto', sourceUrl: 'https://finance.yahoo.com/quote/BTC-USD'
+  },
+
+  eth: {
+    title: 'Ethereum',
+    shortDescription: 'Deuxième cryptomonnaie mondiale. Plateforme de smart contracts et DeFi.',
+    fullDescription: `Ethereum (ETH) est la deuxième cryptomonnaie par capitalisation. Contrairement au Bitcoin, Ethereum est une plateforme programmable permettant les smart contracts, la DeFi (finance décentralisée) et les NFT. Depuis 2022, Ethereum utilise un mécanisme de preuve d'enjeu (Proof of Stake) beaucoup moins énergivore.`,
+    importance: `Ethereum est l'infrastructure de la majorité des applications décentralisées (DApps). Son cours est lié à l'activité sur sa blockchain et à l'adoption de la DeFi. Souvent corrélé au Bitcoin mais avec une volatilité plus élevée.`,
+    factors: ['Activité DeFi et NFT', 'Mises à jour du protocole', 'Corrélation avec Bitcoin', 'Adoption institutionnelle', 'Rendement du staking'],
+    insights: ['Passage au Proof of Stake en 2022 (The Merge)', 'Base de la finance décentralisée (DeFi)', 'Corrélé à BTC mais avec une beta plus élevée'],
+    color: '#627eea', bgColor: '#eef0ff', darkBgColor: '#1e1b4b',
+    category: 'crypto', categoryLabel: 'Crypto',
+    source: 'Marchés crypto', sourceUrl: 'https://finance.yahoo.com/quote/ETH-USD'
+  },
+
+  sol: {
+    title: 'Solana',
+    shortDescription: 'Blockchain haute performance. Concurrent rapide et peu coûteux d\'Ethereum.',
+    fullDescription: `Solana (SOL) est une blockchain de haute performance capable de traiter des milliers de transactions par seconde à des frais très faibles. Lancée en 2020, elle est devenue l'une des blockchains les plus utilisées pour les NFT et la DeFi grâce à sa rapidité.`,
+    importance: `Solana représente la nouvelle génération de blockchains scalables. Son cours reflète l'adoption de son écosystème et la concurrence avec Ethereum. Actif très volatil, considéré comme un actif à haut risque/rendement dans la crypto.`,
+    factors: ['Adoption de l\'écosystème Solana', 'Concurrence avec Ethereum', 'Incidents techniques (pannes réseau)', 'Sentiment crypto global', 'Memecoins et NFT sur Solana'],
+    insights: ['Transactions très rapides (~400ms) et peu coûteuses', 'A connu plusieurs pannes réseau', 'Forte croissance de l\'écosystème memecoins'],
+    color: '#9945ff', bgColor: '#f5f0ff', darkBgColor: '#2e1065',
+    category: 'crypto', categoryLabel: 'Crypto',
+    source: 'Marchés crypto', sourceUrl: 'https://finance.yahoo.com/quote/SOL-USD'
+  },
+
+  xrp: {
+    title: 'XRP',
+    shortDescription: 'Cryptomonnaie de Ripple. Conçue pour les paiements et transferts internationaux rapides.',
+    fullDescription: `XRP est la cryptomonnaie native du réseau Ripple, conçue pour faciliter les paiements et transferts internationaux rapides et peu coûteux entre institutions financières. Contrairement aux autres cryptos, XRP n'est pas minée et sa distribution est contrôlée par Ripple Labs.`,
+    importance: `XRP est particulièrement suivie dans le secteur financier en raison de ses partenariats avec des banques et institutions. Son cours a été très impacté par le procès SEC (2020-2023) qui s'est terminé en sa faveur partielle.`,
+    factors: ['Partenariats bancaires et institutionnels', 'Régulation (procès SEC)', 'Adoption des paiements transfrontaliers', 'Distribution contrôlée par Ripple', 'Sentiment crypto global'],
+    insights: ['Conçu pour remplacer SWIFT dans les paiements interbancaires', 'Procès SEC résolu partiellement en 2023', 'Pas de minage — distribution par Ripple Labs'],
+    color: '#00aae4', bgColor: '#e0f7fe', darkBgColor: '#082f49',
+    category: 'crypto', categoryLabel: 'Crypto',
+    source: 'Marchés crypto', sourceUrl: 'https://finance.yahoo.com/quote/XRP-USD'
+  },
 };
 
 export const CATEGORY_CONFIG = {
