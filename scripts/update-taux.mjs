@@ -3,6 +3,7 @@ import path from 'path';
 
 // --- CONFIGURATION ---
 const FRED_API_KEY = process.env.FRED_API_KEY;
+const WEBSTAT_API_KEY = process.env.WEBSTAT_API_KEY;
 const FILE_PATH = path.join(process.cwd(), 'public', 'taux.json');
 
 // Charger les données existantes pour fallback si FRED_API_KEY non disponible
@@ -523,7 +524,187 @@ async function fetchYahooHistoryWithFallback(ticker) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 5. SCPI — Données historiques approximatives ASPIM/IEIF
+// ─────────────────────────────────────────────────────────────
+// 5. LIVRET A — Banque de France Webstat (source officielle)
+//    Série MIR1.M.FR.B.L23FRLA.D.R.A.2230U6.EUR.O
+//    Données depuis 1966, mises à jour en temps réel
+//    Fallback : historique hardcodé si pas de clé API
+// ─────────────────────────────────────────────────────────────
+async function getLivretAHistory() {
+  const WEBSTAT_API_KEY = process.env.WEBSTAT_API_KEY;
+
+  if (WEBSTAT_API_KEY) {
+    try {
+      console.log(`  Fetching Livret A (Webstat BdF)...`);
+      // 723 observations depuis 1966 — on les récupère toutes en une passe
+      const url = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=series_key='MIR1.M.FR.B.L23FRLA.D.R.A.2230U6.EUR.O'&order_by=time_period_start ASC&limit=100&offset=0&apikey=${WEBSTAT_API_KEY}`;
+
+      // L'API limite à 100 par page — on pagine pour tout récupérer
+      let allObs = [];
+      let offset = 0;
+      let total = null;
+
+      while (total === null || offset < total) {
+        const pageUrl = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=series_key='MIR1.M.FR.B.L23FRLA.D.R.A.2230U6.EUR.O'&order_by=time_period_start ASC&limit=100&offset=${offset}&apikey=${WEBSTAT_API_KEY}`;
+        const resp = await fetch(pageUrl, { cache: 'no-store' });
+        if (!resp.ok) { console.log(`  ⚠️ Webstat HTTP ${resp.status}`); break; }
+        const json = await resp.json();
+        if (total === null) total = json.total_count;
+        const results = json.results ?? [];
+        if (results.length === 0) break;
+        allObs = allObs.concat(results);
+        offset += results.length;
+        if (results.length < 100) break;
+      }
+
+      if (allObs.length > 0) {
+        const history = allObs
+          .filter(r => r.obs_value != null && r.time_period_start)
+          .map(r => ({
+            date: r.time_period_start.substring(0, 10),
+            value: parseFloat(parseFloat(r.obs_value).toFixed(2)),
+            timestamp: new Date(r.time_period_start).getTime()
+          }))
+          .sort((a, b) => a.timestamp - b.timestamp);
+        const last = history[history.length - 1];
+        console.log(`  ✓ Livret A Webstat: ${history.length} points, ${history[0].date} → ${last.date} = ${last.value}%`);
+        return history;
+      }
+    } catch (error) {
+      console.error(`  ⚠️ Erreur Webstat Livret A:`, error.message);
+    }
+  } else {
+    console.log(`  ⚠️ WEBSTAT_API_KEY non définie — fallback historique Livret A`);
+  }
+
+  // Fallback : historique hardcodé officiel (Banque de France)
+  const changes = [
+    { date: "1966-01-01", value: 3.00 }, { date: "1968-01-01", value: 3.50 },
+    { date: "1969-06-01", value: 4.00 }, { date: "1970-01-01", value: 4.25 },
+    { date: "1974-01-01", value: 6.00 }, { date: "1974-07-01", value: 6.50 },
+    { date: "1975-01-01", value: 7.50 }, { date: "1976-01-01", value: 6.50 },
+    { date: "1980-04-01", value: 7.50 }, { date: "1981-10-16", value: 8.50 },
+    { date: "1983-08-01", value: 7.50 }, { date: "1984-08-16", value: 6.50 },
+    { date: "1985-07-01", value: 6.00 }, { date: "1986-05-16", value: 4.50 },
+    { date: "1996-02-27", value: 3.50 }, { date: "1998-06-07", value: 3.00 },
+    { date: "1999-07-23", value: 2.25 }, { date: "2000-06-29", value: 3.00 },
+    { date: "2003-08-01", value: 2.25 }, { date: "2005-08-01", value: 2.00 },
+    { date: "2006-02-01", value: 2.25 }, { date: "2006-08-01", value: 2.75 },
+    { date: "2007-08-01", value: 3.00 }, { date: "2008-02-01", value: 3.50 },
+    { date: "2008-08-01", value: 4.00 }, { date: "2009-02-01", value: 2.50 },
+    { date: "2009-05-01", value: 1.75 }, { date: "2009-08-01", value: 1.25 },
+    { date: "2010-08-01", value: 1.75 }, { date: "2011-02-01", value: 2.00 },
+    { date: "2011-08-01", value: 2.25 }, { date: "2013-02-01", value: 1.75 },
+    { date: "2013-08-01", value: 1.25 }, { date: "2014-08-01", value: 1.00 },
+    { date: "2015-08-01", value: 0.75 }, { date: "2020-02-01", value: 0.50 },
+    { date: "2022-02-01", value: 1.00 }, { date: "2022-08-01", value: 2.00 },
+    { date: "2023-02-01", value: 3.00 }, { date: "2024-02-01", value: 3.00 },
+    { date: "2025-02-01", value: 2.40 }, { date: "2025-08-01", value: 1.70 },
+    { date: "2026-02-01", value: 1.50 },
+  ];
+  const result = [];
+  const start = new Date("2000-01-01");
+  const end = new Date();
+  let currentRate = changes.filter(c => c.date <= "2000-01-01").slice(-1)[0]?.value ?? 3.00;
+  let hIdx = changes.findIndex(c => c.date > "2000-01-01");
+  for (let d = new Date(start); d <= end; d.setMonth(d.getMonth() + 1)) {
+    const dateStr = d.toISOString().split('T')[0].substring(0, 7) + '-01';
+    while (hIdx < changes.length && dateStr >= changes[hIdx].date) { currentRate = changes[hIdx].value; hIdx++; }
+    result.push({ date: dateStr, value: currentRate, timestamp: new Date(dateStr).getTime() });
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 6. PRIX IMMOBILIER — Banque de France Webstat
+//    Série RPP.Q.FR.N.ED.00.1.00
+//    Indice des prix des logements anciens, France entière, base 100 = 2015
+//    Données trimestrielles, glissement annuel calculé
+// ─────────────────────────────────────────────────────────────
+async function getPrixImmobilierHistory() {
+  const WEBSTAT_API_KEY = process.env.WEBSTAT_API_KEY;
+
+  if (WEBSTAT_API_KEY) {
+    try {
+      console.log(`  Fetching prix immobilier (Webstat BdF RPP)...`);
+      // Série trimestrielle — 120 points environ depuis 1996
+      let allObs = [];
+      let offset = 0;
+      let total = null;
+
+      while (total === null || offset < total) {
+        const pageUrl = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=series_key='RPP.Q.FR.N.ED.00.1.00'&order_by=time_period_start ASC&limit=100&offset=${offset}&apikey=${WEBSTAT_API_KEY}`;
+        const resp = await fetch(pageUrl, { cache: 'no-store' });
+        if (!resp.ok) { console.log(`  ⚠️ Webstat RPP HTTP ${resp.status}`); break; }
+        const json = await resp.json();
+        if (total === null) total = json.total_count;
+        const results = json.results ?? [];
+        if (results.length === 0) break;
+        allObs = allObs.concat(results);
+        offset += results.length;
+        if (results.length < 100) break;
+      }
+
+      if (allObs.length > 0) {
+        // Calculer le glissement annuel sur l'indice brut
+        const rawPoints = allObs
+          .filter(r => r.obs_value != null && r.time_period_start)
+          .map(r => ({
+            date: r.time_period_start.substring(0, 10),
+            value: parseFloat(r.obs_value),
+            timestamp: new Date(r.time_period_start).getTime()
+          }))
+          .sort((a, b) => a.timestamp - b.timestamp);
+
+        // Glissement annuel = (indice_T / indice_T-4 - 1) * 100
+        const byDate = {};
+        for (const p of rawPoints) byDate[p.date] = p.value;
+
+        const glissement = [];
+        for (const p of rawPoints) {
+          const dPrev = new Date(p.date);
+          dPrev.setFullYear(dPrev.getFullYear() - 1);
+          const prevDate = dPrev.toISOString().split('T')[0];
+          const prevVal = byDate[prevDate];
+          if (prevVal == null || prevVal === 0) continue;
+          const variation = parseFloat(((p.value / prevVal - 1) * 100).toFixed(2));
+          if (p.date >= '2000-01-01') {
+            glissement.push({ date: p.date, value: variation, timestamp: p.timestamp });
+          }
+        }
+
+        if (glissement.length > 0) {
+          const last = glissement[glissement.length - 1];
+          console.log(`  ✓ Prix immo Webstat: ${glissement.length} points (glissement annuel), dernier: ${last.date} = ${last.value}%`);
+          return glissement;
+        }
+      }
+    } catch (error) {
+      console.error(`  ⚠️ Erreur Webstat RPP:`, error.message);
+    }
+  } else {
+    console.log(`  ⚠️ WEBSTAT_API_KEY non définie — fallback prix immobilier`);
+  }
+
+  // Fallback données existantes
+  if (existingData?.indices?.prixImmo?.historique?.length > 0) {
+    console.log(`  ⚠️ Prix immo: utilisation données existantes`);
+    return existingData.indices.prixImmo.historique;
+  }
+
+  // Fallback historique minimal
+  return [
+    { date: "2000-01-01", value: 8.5 }, { date: "2005-01-01", value: 12.0 },
+    { date: "2010-01-01", value: 3.5 }, { date: "2012-01-01", value: -1.5 },
+    { date: "2015-01-01", value: -1.0 }, { date: "2017-01-01", value: 3.5 },
+    { date: "2020-01-01", value: 5.5 }, { date: "2022-01-01", value: 5.0 },
+    { date: "2023-01-01", value: -4.0 }, { date: "2024-01-01", value: -3.5 },
+    { date: "2025-01-01", value: 2.0 },
+  ].map(p => ({ ...p, timestamp: new Date(p.date).getTime() }));
+}
+
+// ─────────────────────────────────────────────────────────────
+// 7. SCPI — Données historiques approximatives ASPIM/IEIF
 // ─────────────────────────────────────────────────────────────
 function getScpiHistory() {
   return [
@@ -601,6 +782,10 @@ async function main() {
   const historyBrent = await fetchYahooHistoryWithFallback('BZ=F');
   const historyGold  = await fetchYahooHistoryWithFallback('GC=F');
   const historyBtc   = await fetchYahooHistoryWithFallback('BTC-USD');
+  // Livret A & Prix immobilier
+  console.log("\n🏦 Récupération Livret A et prix immobilier (Webstat BdF)...");
+  const historyLivretA   = await getLivretAHistory();
+  const historyPrixImmo  = await getPrixImmobilierHistory();
   const historyScpi  = getScpiHistory();
 
   const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : 0;
@@ -659,6 +844,8 @@ async function main() {
       oat:       { titre: "OAT 10 ans",       valeur: getLast(historyOat),       suffixe: "%", historique: historyOat },
       inflation: { titre: "Inflation France", valeur: getLast(historyInflation), suffixe: "%", historique: historyInflation },
       estr:      { titre: "€STR",             valeur: getLast(historyEstr),      suffixe: "%", historique: historyEstr },
+      livreta:   { titre: "Livret A",           valeur: getLast(historyLivretA),   suffixe: "%", historique: historyLivretA },
+      prixImmo:  { titre: "Prix immo (var. annuelle)", valeur: getLast(historyPrixImmo), suffixe: "%", historique: historyPrixImmo },
 
       // Devises et indices avec performances annualisées
       eurusd:   createIndexData("Euro / Dollar",    getLast(historyEurUsd),   "$",   historyEurUsd),
@@ -684,6 +871,8 @@ async function main() {
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`  OAT 10 ans   : ${nouvellesDonnees.indices.oat.valeur}% (dernier: ${historyOat[historyOat.length-1]?.date ?? 'N/A'})`);
   console.log(`  Inflation    : ${nouvellesDonnees.indices.inflation.valeur}% (dernier: ${historyInflation[historyInflation.length-1]?.date ?? 'N/A'})`);
+  console.log(`  Livret A     : ${nouvellesDonnees.indices.livreta.valeur}% (dernier: ${historyLivretA[historyLivretA.length-1]?.date ?? 'N/A'})`);
+  console.log(`  Prix immo    : ${nouvellesDonnees.indices.prixImmo.valeur}% var/an (dernier: ${historyPrixImmo[historyPrixImmo.length-1]?.date ?? 'N/A'})`);
   console.log(`  €STR         : ${nouvellesDonnees.indices.estr.valeur}% (dernier: ${historyEstr[historyEstr.length-1]?.date ?? 'N/A'})`);
 
   const dir = path.dirname(FILE_PATH);
