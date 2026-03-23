@@ -574,6 +574,18 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         </Alert>
       )}
 
+      {/* Bandeau explicatif simulation de placement */}
+      {mode === 'percent' && selectedKeys.some(k => ['livreta', 'pel', 'fondsEuros', 'scpi', 'estr', 'tauxDepotBCE', 'oat', 'tec10', 'tauxImmo'].includes(k)) && (
+        <Alert className="py-2 border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-900">
+          <AlertDescription className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
+            <Lightbulb className="h-4 w-4 flex-shrink-0 text-blue-600" />
+            <span>
+              <strong>Simulation de placement :</strong> Les produits d'épargne sont convertis en performance cumulée de <strong>100€ investis</strong> selon leurs règles officielles — capitalisation annuelle (Livret A, PEL, Fonds euros), trimestrielle (SCPI) ou mensuelle (OAT, taux marché). Les changements de taux sont pris en compte à leur date exacte.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Chart */}
       {selectedKeys.length > 0 && (
         <EnhancedChart
