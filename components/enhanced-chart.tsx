@@ -115,6 +115,19 @@ export function EnhancedChart({
   // Get date ranges for each dataset (for showing in legend)
   const dateRanges = useMemo(() => getDatasetDateRanges(datasets), [datasets]);
 
+  // Trouve le snapshot capitalisé le plus proche pour une date donnée
+  const findClosestSnapshot = (snapshots: Record<string, number>, targetDate: string): number | undefined => {
+    const keys = Object.keys(snapshots).sort();
+    if (keys.length === 0) return undefined;
+    // Cherche le dernier snapshot <= targetDate
+    let best: string | undefined;
+    for (const k of keys) {
+      if (k <= targetDate) best = k;
+      else break;
+    }
+    return best ? snapshots[best] : snapshots[keys[0]];
+  };
+
   // Process data for chart (simple - no projections)
   const chartData = useMemo(() => {
     if (!datasets || datasets.length === 0) return [];
@@ -145,6 +158,154 @@ export function EnhancedChart({
       return best?.value;
     };
 
+    // ─────────────────────────────────────────────────────────────
+    // Simulation de placement 100€ — règles officielles par produit
+    //
+    // Livret A / PEL / LEP : intérêts calculés par quinzaine,
+    //   capitalisés UNE FOIS PAR AN le 31 décembre.
+    //   En cours d'année : on accumule les intérêts acquis sans les capitaliser.
+    //   Changements de taux pris en compte à leur date exacte.
+    //
+    // Fonds euros (assurance-vie) : participation aux bénéfices
+    //   versée UNE FOIS PAR AN (créditée début janvier N+1).
+    //   Taux appliqué = taux de l'année civile écoulée.
+    //
+    // SCPI : revenus distribués TRIMESTRIELLEMENT (rendement annuel / 4).
+    //
+    // OAT / TEC10 / Taux immo : capitalisation mensuelle (convention marché obligataire).
+    // ─────────────────────────────────────────────────────────────
+
+    // Définition des règles de capitalisation par produit
+    type CompoundingRule = 'annual' | 'quarterly' | 'monthly';
+    const COMPOUNDING_RULES: Record<string, CompoundingRule> = {
+      livreta:      'annual',
+      pel:          'annual',
+      fondsEuros:   'annual',
+      scpi:         'quarterly',
+      oat:          'monthly',
+      tec10:        'monthly',
+      tauxImmo:     'monthly',
+      tauxDepotBCE: 'monthly',
+      estr:         'monthly',
+    };
+
+    const capitalizedCache: Record<string, Record<string, number>> = {};
+
+    // Trouve le snapshot le plus proche dans le cache (pour les dates sans snapshot exact)
+    const findClosestSnapshot = (snapshots: Record<string, number>, targetDate: string): number | undefined => {
+      const targetTs = new Date(targetDate).getTime();
+      let best: { value: number; gap: number } | null = null;
+      for (const [date, value] of Object.entries(snapshots)) {
+        const gap = Math.abs(new Date(date).getTime() - targetTs);
+        if (!best || gap < best.gap) best = { value, gap };
+      }
+      return best?.value;
+    };
+
+    if (mode === 'percent') {
+      indexedDatasets.forEach(ds => {
+        if (ds.suffix !== '%') return;
+        const rule = COMPOUNDING_RULES[ds.key];
+        if (!rule) return;
+
+        // Construire la liste chronologique des taux avec leurs dates de début
+        // (depuis les données brutes du dataset, pas les sortedDates fusionnées)
+        const rateChanges = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
+        if (rateChanges.length === 0) return;
+
+        // Date de début = premier point disponible
+        const startDate = new Date(rateChanges[0].date);
+        const endDate = new Date();
+
+        // Fonction pour obtenir le taux en vigueur à une date donnée
+        const getRateAt = (date: Date): number => {
+          const dateStr = date.toISOString().split('T')[0];
+          let rate = rateChanges[0].value;
+          for (const pt of rateChanges) {
+            if (pt.date <= dateStr) rate = pt.value;
+            else break;
+          }
+          return rate;
+        };
+
+        // Simulation jour par jour en avançant par périodes selon la règle
+        let capital = 100;
+        const snapshots: Record<string, number> = {};
+
+        if (rule === 'annual') {
+          // Livret A / PEL / Fonds euros : capitalisation annuelle le 31 décembre
+          // On accumule les intérêts par quinzaine (simplification : quotidien)
+          // puis on capitalise au 31/12
+          let pendingInterests = 0;
+          let currentYear = startDate.getFullYear();
+          const cursor = new Date(startDate);
+
+          while (cursor <= endDate) {
+            const year = cursor.getFullYear();
+
+            // Changement d'année → capitaliser les intérêts accumulés
+            if (year > currentYear) {
+              capital += pendingInterests;
+              pendingInterests = 0;
+              currentYear = year;
+            }
+
+            // Intérêt du jour = capital * taux_annuel / 365
+            const dailyRate = getRateAt(cursor) / 100 / 365;
+            pendingInterests += capital * dailyRate;
+
+            // Snapshot mensuel (1er du mois)
+            if (cursor.getDate() === 1) {
+              const dateStr = cursor.toISOString().split('T')[0];
+              snapshots[dateStr] = parseFloat((capital + pendingInterests).toFixed(4));
+            }
+
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          // Capitaliser les intérêts de l'année en cours
+          capital += pendingInterests;
+          const todayStr = endDate.toISOString().split('T')[0].substring(0, 7) + '-01';
+          snapshots[todayStr] = parseFloat(capital.toFixed(4));
+
+        } else if (rule === 'quarterly') {
+          // SCPI : distribution trimestrielle = taux_annuel / 4
+          const cursor = new Date(startDate);
+          let quarter = Math.floor(cursor.getMonth() / 3);
+
+          while (cursor <= endDate) {
+            const currentQuarter = Math.floor(cursor.getMonth() / 3);
+
+            if (currentQuarter !== quarter) {
+              // Fin de trimestre : distribuer les revenus
+              const rate = getRateAt(cursor) / 100 / 4;
+              capital = capital * (1 + rate);
+              quarter = currentQuarter;
+            }
+
+            if (cursor.getDate() === 1) {
+              const dateStr = cursor.toISOString().split('T')[0];
+              snapshots[dateStr] = parseFloat(capital.toFixed(4));
+            }
+
+            cursor.setMonth(cursor.getMonth() + 1);
+          }
+
+        } else {
+          // monthly : capitalisation mensuelle (obligations, taux marché)
+          const cursor = new Date(startDate);
+          while (cursor <= endDate) {
+            const dateStr = cursor.toISOString().split('T')[0];
+            const monthlyRate = getRateAt(cursor) / 100 / 12;
+            capital = capital * (1 + monthlyRate);
+            snapshots[dateStr] = parseFloat(capital.toFixed(4));
+            cursor.setMonth(cursor.getMonth() + 1);
+          }
+        }
+
+        capitalizedCache[ds.key] = snapshots;
+      });
+    }
+
     // Build chart data — valeur exacte si dispo, sinon valeur la plus proche (évite NA tooltip)
     const data = sortedDates.map(date => {
       const point: Record<string, any> = { date };
@@ -155,12 +316,25 @@ export function EnhancedChart({
 
         if (rawValue !== undefined) {
           if (mode === 'percent') {
-            const firstPoint = ds.data[0];
-            const baseValue = firstPoint?.value || 1;
             const isRate = ds.suffix === '%';
-            if (isRate) {
+
+            if (isRate && capitalizedCache[ds.key]) {
+              // Taux d'épargne/placement : simulation de 100€
+              // On cherche le snapshot le plus proche
+              const capVal = capitalizedCache[ds.key][date]
+                ?? findClosestSnapshot(capitalizedCache[ds.key], date);
+              if (capVal !== undefined) {
+                point[ds.key] = parseFloat((capVal - 100).toFixed(2));
+              }
+            } else if (isRate) {
+              // Taux non-épargne (inflation, prix immo) : variation en points
+              const firstPoint = ds.data[0];
+              const baseValue = firstPoint?.value || 1;
               point[ds.key] = rawValue - baseValue;
             } else {
+              // Actifs (CAC, Or, BTC...) : variation en % par rapport au premier point
+              const firstPoint = ds.data[0];
+              const baseValue = firstPoint?.value || 1;
               point[ds.key] = ((rawValue - baseValue) / Math.abs(baseValue)) * 100;
             }
           } else {
@@ -292,12 +466,28 @@ export function EnhancedChart({
     if (!active || !label) return null;
     
     const dataPoint = maData.find(d => d.date === label);
-    
-    // Vérifier si la valeur est exacte ou interpolée pour chaque dataset
     const isExactDate = (ds: DatasetConfig) => ds.data.some(d => d.date === label);
+
+    const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros', 'estr', 'tauxDepotBCE', 'oat', 'tec10', 'tauxImmo', 'scpi'];
+
+    // Détermine le suffixe à afficher selon le type de série et le mode
+    const getValueSuffix = (ds: DatasetConfig) => {
+      if (mode !== 'percent') return ` ${ds.suffix || ''}`;
+      const isRate = ds.suffix === '%';
+      if (isRate && SAVINGS_KEYS.includes(ds.key)) return '%'; // gain sur 100€
+      if (isRate) return ' pts';
+      return '%';
+    };
+
+    // Label explicatif sous le titre en mode percent pour les taux épargne
+    const getSavingsLabel = (ds: DatasetConfig, value: number) => {
+      if (mode !== 'percent' || ds.suffix !== '%' || !SAVINGS_KEYS.includes(ds.key)) return null;
+      const total = 100 + value;
+      return `≈ ${total.toFixed(2)}€ pour 100€ investis`;
+    };
     
     return (
-      <div className="bg-popover border border-border rounded-lg shadow-xl p-3 min-w-[200px]">
+      <div className="bg-popover border border-border rounded-lg shadow-xl p-3 min-w-[220px]">
         <p className="text-sm font-semibold text-muted-foreground mb-2 pb-2 border-b border-border">
           {new Date(label).toLocaleDateString('fr-FR', { 
             day: 'numeric', 
@@ -310,12 +500,12 @@ export function EnhancedChart({
             const value = dataPoint?.[ds.key];
             const ma50Value = dataPoint?.[`${ds.key}_ma50`];
             const ma200Value = dataPoint?.[`${ds.key}_ma200`];
-            const isRate = ds.suffix === '%';
             const hasValue = value !== undefined && value !== null;
             const isApprox = hasValue && !isExactDate(ds);
+            const savingsLabel = hasValue ? getSavingsLabel(ds, value) : null;
             
             return (
-              <div key={ds.key} className="space-y-1">
+              <div key={ds.key} className="space-y-0.5">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <span 
@@ -329,25 +519,27 @@ export function EnhancedChart({
                   {hasValue ? (
                     <div className="flex items-center gap-1">
                       {isApprox && (
-                        <span className="text-xs text-muted-foreground opacity-60" title="Valeur approchée (données mensuelles)">≈</span>
+                        <span className="text-xs text-muted-foreground opacity-60" title="Valeur approchée">≈</span>
                       )}
                       <span className={cn(
                         "text-sm font-bold",
-                        mode === 'percent' 
+                        mode === 'percent'
                           ? value >= 0 ? 'text-green-600' : 'text-red-600'
                           : 'text-foreground'
                       )}>
                         {mode === 'percent' && value >= 0 ? '+' : ''}
                         {formatNumber(value, 2)}
-                        {mode === 'percent' ? (isRate ? ' pts' : '%') : ` ${ds.suffix || ''}`}
+                        {getValueSuffix(ds)}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-xs text-muted-foreground italic opacity-50">
-                      hors période
-                    </span>
+                    <span className="text-xs text-muted-foreground italic opacity-50">hors période</span>
                   )}
                 </div>
+                {/* Label explicatif pour les taux épargne */}
+                {savingsLabel && (
+                  <p className="text-xs text-muted-foreground pl-5 opacity-70">{savingsLabel}</p>
+                )}
                 {showMA50 && ma50Value !== undefined && (
                   <div className="flex items-center justify-between gap-4 pl-5 text-xs text-muted-foreground">
                     <span>└ MM 50j</span>
