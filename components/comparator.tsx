@@ -27,7 +27,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
+import { CalendarIcon, TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 interface DataPoint {
@@ -401,25 +405,10 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         </>)}
       </div>
 
-      {/* Period Selection */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          {periodButtons.map(btn => (
-            <Button
-              key={btn.value}
-              variant={period === btn.value ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setPeriod(btn.value)}
-              className="h-8 px-3"
-            >
-              {btn.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Mode buttons avec tooltip d'aide */}
-      <div className="flex items-center gap-2">
+      {/* Toolbar : Mode | Périodes | Dates personnalisées — une seule ligne */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* À gauche : Toggle Mode (Valeur absolue / Base 100) */}
+        <div className="flex items-center gap-1.5">
           <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <TooltipProvider>
               <Tooltip>
@@ -500,7 +489,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             </TooltipProvider>
           </div>
 
-          {/* Icône d'aide générale */}
+          {/* Icône d'aide */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -526,6 +515,58 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        </div>
+
+        {/* Séparateur vertical */}
+        <div className="h-8 w-px bg-border hidden sm:block" />
+
+        {/* Au centre : Boutons de périodes prédéfinies */}
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+          {periodButtons.map(btn => (
+            <Button
+              key={btn.value}
+              variant={period === btn.value ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setPeriod(btn.value)}
+              className="h-8 px-3"
+            >
+              {btn.label}
+            </Button>
+          ))}
+        </div>
+
+        {/* Séparateur vertical */}
+        <div className="h-8 w-px bg-border hidden sm:block" />
+
+        {/* À droite : Sélecteur de dates personnalisées (Du / Au) */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant={period === 'CUSTOM' ? 'default' : 'outline'}
+              size="sm"
+              className="h-8"
+            >
+              <CalendarIcon className="h-4 w-4 mr-2" />
+              {period === 'CUSTOM' && customDateRange.from && customDateRange.to
+                ? `${format(customDateRange.from, 'dd/MM/yy')} - ${format(customDateRange.to, 'dd/MM/yy')}`
+                : 'Personnalisé'}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="range"
+              selected={{ from: customDateRange.from, to: customDateRange.to }}
+              onSelect={(range) => {
+                setCustomDateRange({ from: range?.from, to: range?.to });
+                if (range?.from && range?.to) {
+                  setPeriod('CUSTOM');
+                }
+              }}
+              locale={fr}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Message d'aide contextuel */}
