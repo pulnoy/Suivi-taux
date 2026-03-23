@@ -4,14 +4,12 @@ import { useState, useEffect } from 'react';
 import { Comparator } from '@/components/comparator';
 import { TimelineCrises } from '@/components/timeline-crises';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { PresentationClient } from '@/components/presentation-client';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
   LayoutDashboard, 
   Clock,
-  RefreshCw,
-  Presentation
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -46,7 +44,6 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   
   const [activeMainTab, setActiveMainTab] = useState<'comparator' | 'timeline'>('comparator');
-  const [showPresentation, setShowPresentation] = useState(false);
   
   // Comparator state
   const [comparatorKeys, setComparatorKeys] = useState<string[]>([]);
@@ -88,16 +85,6 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Mode présentation client (plein écran) */}
-      {showPresentation && (
-        <PresentationClient
-          indices={data.indices}
-          selectedKeys={comparatorKeys}
-          dateMAJ={data.date_mise_a_jour}
-          onClose={() => setShowPresentation(false)}
-        />
-      )}
-
       {/* Header compact avec onglets intégrés */}
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-4">
@@ -115,7 +102,7 @@ export default function Dashboard() {
             </span>
           </div>
           
-          {/* Onglets de navigation + bouton présentation */}
+          {/* Onglets de navigation */}
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-muted rounded-lg p-0.5">
               <button
@@ -143,18 +130,6 @@ export default function Dashboard() {
                 <span className="hidden sm:inline">Timeline</span>
               </button>
             </div>
-
-            {/* Bouton Présentation client */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPresentation(true)}
-              className="flex items-center gap-1.5 border-[#003A7A] text-[#003A7A] hover:bg-[#003A7A] hover:text-white dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-400 dark:hover:text-white transition-colors"
-            >
-              <Presentation className="h-4 w-4" />
-              <span className="hidden sm:inline">Présentation</span>
-            </Button>
-
             <ThemeToggle />
           </div>
         </div>
