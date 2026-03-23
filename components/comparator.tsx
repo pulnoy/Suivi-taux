@@ -20,8 +20,6 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { 
   Tooltip,
   TooltipContent,
@@ -29,10 +27,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CalendarIcon, TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
 
 interface DataPoint {
   date: string;
@@ -392,51 +388,133 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         )}
       </div>
 
-      {/* Period Selection */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          {periodButtons.map(btn => (
-            <Button
-              key={btn.value}
-              variant={period === btn.value ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setPeriod(btn.value)}
-              className="h-8 px-3"
-            >
-              {btn.label}
-            </Button>
-          ))}
+      {/* Period & Date Selection — nouvelle version ergonomique */}
+      <div className="bg-card rounded-xl border border-border p-3 space-y-3">
+        {/* Ligne 1 : boutons rapides + inputs date */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Boutons rapides */}
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+            {periodButtons.map(btn => (
+              <Button
+                key={btn.value}
+                variant={period === btn.value ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => { setPeriod(btn.value); setCustomDateRange({}); }}
+                className="h-7 px-2.5 text-xs"
+              >
+                {btn.label}
+              </Button>
+            ))}
+          </div>
+
+          <span className="text-muted-foreground text-xs">ou</span>
+
+          {/* Inputs date directs */}
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 bg-muted rounded-lg px-2 py-1">
+              <span className="text-xs text-muted-foreground">Du</span>
+              <input
+                type="date"
+                value={customDateRange.from ? customDateRange.from.toISOString().split('T')[0] : ''}
+                onChange={(e) => {
+                  const from = e.target.value ? new Date(e.target.value) : undefined;
+                  setCustomDateRange(prev => ({ ...prev, from }));
+                  if (from && customDateRange.to) setPeriod('CUSTOM');
+                }}
+                className="text-xs bg-transparent border-none outline-none text-foreground w-[110px]"
+                max={customDateRange.to ? customDateRange.to.toISOString().split('T')[0] : undefined}
+              />
+            </div>
+            <span className="text-muted-foreground text-xs">→</span>
+            <div className="flex items-center gap-1 bg-muted rounded-lg px-2 py-1">
+              <span className="text-xs text-muted-foreground">Au</span>
+              <input
+                type="date"
+                value={customDateRange.to ? customDateRange.to.toISOString().split('T')[0] : ''}
+                onChange={(e) => {
+                  const to = e.target.value ? new Date(e.target.value) : undefined;
+                  setCustomDateRange(prev => ({ ...prev, to }));
+                  if (customDateRange.from && to) setPeriod('CUSTOM');
+                }}
+                className="text-xs bg-transparent border-none outline-none text-foreground w-[110px]"
+                min={customDateRange.from ? customDateRange.from.toISOString().split('T')[0] : undefined}
+              />
+            </div>
+            {period === 'CUSTOM' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setCustomDateRange({}); setPeriod('1A'); }}
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Custom date range */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant={period === 'CUSTOM' ? 'default' : 'outline'}
-              size="sm"
-              className="h-8"
-            >
-              <CalendarIcon className="h-4 w-4 mr-2" />
-              {period === 'CUSTOM' && customDateRange.from && customDateRange.to
-                ? `${format(customDateRange.from, 'dd/MM/yy')} - ${format(customDateRange.to, 'dd/MM/yy')}`
-                : 'Personnalisé'}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="range"
-              selected={{ from: customDateRange.from, to: customDateRange.to }}
-              onSelect={(range) => {
-                setCustomDateRange({ from: range?.from, to: range?.to });
-                if (range?.from && range?.to) {
+        {/* Ligne 2 : raccourcis par année */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Année :</span>
+          {Array.from({ length: new Date().getFullYear() - 1999 }, (_, i) => 2000 + i)
+            .reverse()
+            .slice(0, 15)
+            .map(year => {
+              const from = new Date(`${year}-01-01`);
+              const to = new Date(`${year}-12-31`);
+              const isActive = period === 'CUSTOM'
+                && customDateRange.from?.getFullYear() === year
+                && customDateRange.to?.getFullYear() === year;
+              return (
+                <button
+                  key={year}
+                  onClick={() => {
+                    setCustomDateRange({ from, to });
+                    setPeriod('CUSTOM');
+                  }}
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded-md border transition-all',
+                    isActive
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
+                  )}
+                >
+                  {year}
+                </button>
+              );
+            })}
+          <span className="text-xs text-muted-foreground mx-1">|</span>
+          {/* Raccourcis par période de crise */}
+          {[
+            { label: 'Crise 2008', from: '2007-01-01', to: '2010-12-31' },
+            { label: 'COVID', from: '2020-01-01', to: '2021-12-31' },
+            { label: 'Inflation', from: '2021-01-01', to: '2024-12-31' },
+          ].map(({ label, from, to }) => {
+            const fromDate = new Date(from);
+            const toDate = new Date(to);
+            const isActive = period === 'CUSTOM'
+              && customDateRange.from?.toISOString().split('T')[0] === from
+              && customDateRange.to?.toISOString().split('T')[0] === to;
+            return (
+              <button
+                key={label}
+                onClick={() => {
+                  setCustomDateRange({ from: fromDate, to: toDate });
                   setPeriod('CUSTOM');
-                }
-              }}
-              locale={fr}
-              numberOfMonths={2}
-            />
-          </PopoverContent>
-        </Popover>
+                }}
+                className={cn(
+                  'text-xs px-2 py-0.5 rounded-md border transition-all',
+                  isActive
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
         {/* Mode buttons avec tooltip d'aide */}
         <div className="flex items-center gap-2">
