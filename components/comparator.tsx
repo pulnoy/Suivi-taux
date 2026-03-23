@@ -516,8 +516,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         </div>
       </div>
 
-        {/* Mode buttons avec tooltip d'aide */}
-        <div className="flex items-center gap-2">
+      {/* Mode buttons avec tooltip d'aide */}
+      <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <TooltipProvider>
               <Tooltip>
@@ -624,7 +624,6 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-        </div>
       </div>
 
       {/* Message d'aide contextuel */}
