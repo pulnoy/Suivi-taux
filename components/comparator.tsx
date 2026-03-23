@@ -153,7 +153,8 @@ function analyzeModeCompatibility(
 export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorProps) {
   const [period, setPeriod] = useState<Period>('1A');
   const [mode, setMode] = useState<'real' | 'percent' | 'absolute'>('percent');
-  const [customDateRange, setCustomDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [showMA50, setShowMA50] = useState(false);
   const [showMA200, setShowMA200] = useState(false);
   const [userOverrodeMode, setUserOverrodeMode] = useState(false);
@@ -190,9 +191,18 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       const index = indices[key];
       if (!index) return null;
       
-      const filtered = period === 'CUSTOM' && customDateRange.from && customDateRange.to
-        ? filterDataByPeriod(index.historique, 'MAX', customDateRange.from, customDateRange.to)
-        : filterDataByPeriod(index.historique, period === 'CUSTOM' ? 'MAX' : period);
+      let filtered;
+      if (period === 'CUSTOM' && customFrom && customTo) {
+        const fromDate = new Date(customFrom);
+        const toDate = new Date(customTo);
+        if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+          filtered = filterDataByPeriod(index.historique, 'MAX', fromDate, toDate);
+        } else {
+          filtered = filterDataByPeriod(index.historique, 'MAX');
+        }
+      } else {
+        filtered = filterDataByPeriod(index.historique, period === 'CUSTOM' ? 'MAX' : period);
+      }
       
       return {
         key,
@@ -202,7 +212,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         suffix: index.suffixe
       };
     }).filter(Boolean) as { key: string; data: DataPoint[]; color: string; title: string; suffix: string }[];
-  }, [indices, selectedKeys, period, customDateRange]);
+  }, [indices, selectedKeys, period, customFrom, customTo]);
 
   // Calculate statistics for each selected index
   const statistics = useMemo(() => {
@@ -401,25 +411,10 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         </>)}
       </div>
 
-      {/* Period Selection */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          {periodButtons.map(btn => (
-            <Button
-              key={btn.value}
-              variant={period === btn.value ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setPeriod(btn.value)}
-              className="h-8 px-3"
-            >
-              {btn.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Mode buttons avec tooltip d'aide */}
-      <div className="flex items-center gap-2">
+      {/* Toolbar : Mode | Périodes | Dates personnalisées — une seule ligne */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* À gauche : Toggle Mode (Valeur absolue / Base 100) */}
+        <div className="flex items-center gap-1.5">
           <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <TooltipProvider>
               <Tooltip>
@@ -500,7 +495,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             </TooltipProvider>
           </div>
 
-          {/* Icône d'aide générale */}
+          {/* Icône d'aide */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -526,6 +521,62 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        </div>
+
+        {/* Séparateur vertical */}
+        <div className="h-8 w-px bg-border hidden sm:block" />
+
+        {/* Au centre : Boutons de périodes prédéfinies */}
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+          {periodButtons.map(btn => (
+            <Button
+              key={btn.value}
+              variant={period === btn.value ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setPeriod(btn.value)}
+              className="h-8 px-3"
+            >
+              {btn.label}
+            </Button>
+          ))}
+        </div>
+
+        {/* Séparateur vertical */}
+        <div className="h-8 w-px bg-border hidden sm:block" />
+
+        {/* À droite : Champs de saisie libre pour dates personnalisées */}
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted-foreground whitespace-nowrap">Du</label>
+          <input
+            type="date"
+            value={customFrom}
+            onChange={(e) => {
+              setCustomFrom(e.target.value);
+              if (e.target.value && customTo) {
+                setPeriod('CUSTOM');
+              }
+            }}
+            className={cn(
+              "h-8 px-2 text-sm rounded-md border bg-background text-foreground",
+              period === 'CUSTOM' ? "border-primary ring-1 ring-primary/30" : "border-border"
+            )}
+          />
+          <label className="text-xs text-muted-foreground whitespace-nowrap">Au</label>
+          <input
+            type="date"
+            value={customTo}
+            onChange={(e) => {
+              setCustomTo(e.target.value);
+              if (customFrom && e.target.value) {
+                setPeriod('CUSTOM');
+              }
+            }}
+            className={cn(
+              "h-8 px-2 text-sm rounded-md border bg-background text-foreground",
+              period === 'CUSTOM' ? "border-primary ring-1 ring-primary/30" : "border-border"
+            )}
+          />
+        </div>
       </div>
 
       {/* Message d'aide contextuel */}
