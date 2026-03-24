@@ -105,8 +105,8 @@ export function EnhancedChart({
   // Get date ranges for each dataset (for showing in legend)
   const dateRanges = useMemo(() => getDatasetDateRanges(datasets), [datasets]);
 
-  // Process data for chart
-  const chartData = useMemo(() => {
+  // ─── Pass 1 : raw chart data + capitalized values for savings ───
+  const rawChartData = useMemo(() => {
     if (!datasets || datasets.length === 0) return [];
 
     const allDates = new Set<string>();
@@ -133,7 +133,7 @@ export function EnhancedChart({
       return best?.value;
     };
 
-    // ─── Simulation de placement — règles officielles par produit ───
+    // ─── Capitalisation pour produits d'épargne (toujours calculée) ───
     type CompoundingRule = 'annual' | 'quarterly' | 'monthly';
     const COMPOUNDING_RULES: Record<string, CompoundingRule> = {
       livreta: 'annual',
@@ -148,7 +148,6 @@ export function EnhancedChart({
     };
 
     const baseAmount = placementAmount || 100;
-
     const capitalizedCache: Record<string, Record<string, number>> = {};
 
     const findClosestSnapshot = (snapshots: Record<string, number>, targetDate: string): number | undefined => {
@@ -161,87 +160,86 @@ export function EnhancedChart({
       return best?.value;
     };
 
-    if (mode === 'percent') {
-      indexedDatasets.forEach(ds => {
-        if (ds.suffix !== '%') return;
-        const rule = COMPOUNDING_RULES[ds.key];
-        if (!rule) return;
+    // Always compute capitalization (needed for percent mode + stats)
+    indexedDatasets.forEach(ds => {
+      if (ds.suffix !== '%') return;
+      const rule = COMPOUNDING_RULES[ds.key];
+      if (!rule) return;
 
-        const rateChanges = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
-        if (rateChanges.length === 0) return;
+      const rateChanges = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
+      if (rateChanges.length === 0) return;
 
-        const startDate = new Date(rateChanges[0].date);
-        const endDate = new Date();
+      const startDate = new Date(rateChanges[0].date);
+      const endDate = new Date();
 
-        const getRateAt = (date: Date): number => {
-          const dateStr = date.toISOString().split('T')[0];
-          let rate = rateChanges[0].value;
-          for (const pt of rateChanges) {
-            if (pt.date <= dateStr) rate = pt.value;
-            else break;
-          }
-          return rate;
-        };
-
-        let capital = baseAmount;
-        const snapshots: Record<string, number> = {};
-
-        if (rule === 'annual') {
-          let pendingInterests = 0;
-          let currentYear = startDate.getFullYear();
-          const cursor = new Date(startDate);
-
-          while (cursor <= endDate) {
-            const year = cursor.getFullYear();
-            if (year > currentYear) {
-              capital += pendingInterests;
-              pendingInterests = 0;
-              currentYear = year;
-            }
-            const dailyRate = getRateAt(cursor) / 100 / 365;
-            pendingInterests += capital * dailyRate;
-            if (cursor.getDate() === 1) {
-              const dateStr = cursor.toISOString().split('T')[0];
-              snapshots[dateStr] = parseFloat((capital + pendingInterests).toFixed(4));
-            }
-            cursor.setDate(cursor.getDate() + 1);
-          }
-          capital += pendingInterests;
-          const todayStr = endDate.toISOString().split('T')[0].substring(0, 7) + '-01';
-          snapshots[todayStr] = parseFloat(capital.toFixed(4));
-
-        } else if (rule === 'quarterly') {
-          const cursor = new Date(startDate);
-          let quarter = Math.floor(cursor.getMonth() / 3);
-          while (cursor <= endDate) {
-            const currentQuarter = Math.floor(cursor.getMonth() / 3);
-            if (currentQuarter !== quarter) {
-              const rate = getRateAt(cursor) / 100 / 4;
-              capital = capital * (1 + rate);
-              quarter = currentQuarter;
-            }
-            if (cursor.getDate() === 1) {
-              const dateStr = cursor.toISOString().split('T')[0];
-              snapshots[dateStr] = parseFloat(capital.toFixed(4));
-            }
-            cursor.setMonth(cursor.getMonth() + 1);
-          }
-        } else {
-          const cursor = new Date(startDate);
-          while (cursor <= endDate) {
-            const dateStr = cursor.toISOString().split('T')[0];
-            const monthlyRate = getRateAt(cursor) / 100 / 12;
-            capital = capital * (1 + monthlyRate);
-            snapshots[dateStr] = parseFloat(capital.toFixed(4));
-            cursor.setMonth(cursor.getMonth() + 1);
-          }
+      const getRateAt = (date: Date): number => {
+        const dateStr = date.toISOString().split('T')[0];
+        let rate = rateChanges[0].value;
+        for (const pt of rateChanges) {
+          if (pt.date <= dateStr) rate = pt.value;
+          else break;
         }
+        return rate;
+      };
 
-        capitalizedCache[ds.key] = snapshots;
-      });
-    }
+      let capital = baseAmount;
+      const snapshots: Record<string, number> = {};
 
-    // Build chart data
+      if (rule === 'annual') {
+        let pendingInterests = 0;
+        let currentYear = startDate.getFullYear();
+        const cursor = new Date(startDate);
+
+        while (cursor <= endDate) {
+          const year = cursor.getFullYear();
+          if (year > currentYear) {
+            capital += pendingInterests;
+            pendingInterests = 0;
+            currentYear = year;
+          }
+          const dailyRate = getRateAt(cursor) / 100 / 365;
+          pendingInterests += capital * dailyRate;
+          if (cursor.getDate() === 1) {
+            const dateStr = cursor.toISOString().split('T')[0];
+            snapshots[dateStr] = parseFloat((capital + pendingInterests).toFixed(4));
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        capital += pendingInterests;
+        const todayStr = endDate.toISOString().split('T')[0].substring(0, 7) + '-01';
+        snapshots[todayStr] = parseFloat(capital.toFixed(4));
+
+      } else if (rule === 'quarterly') {
+        const cursor = new Date(startDate);
+        let quarter = Math.floor(cursor.getMonth() / 3);
+        while (cursor <= endDate) {
+          const currentQuarter = Math.floor(cursor.getMonth() / 3);
+          if (currentQuarter !== quarter) {
+            const rate = getRateAt(cursor) / 100 / 4;
+            capital = capital * (1 + rate);
+            quarter = currentQuarter;
+          }
+          if (cursor.getDate() === 1) {
+            const dateStr = cursor.toISOString().split('T')[0];
+            snapshots[dateStr] = parseFloat(capital.toFixed(4));
+          }
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+      } else {
+        const cursor = new Date(startDate);
+        while (cursor <= endDate) {
+          const dateStr = cursor.toISOString().split('T')[0];
+          const monthlyRate = getRateAt(cursor) / 100 / 12;
+          capital = capital * (1 + monthlyRate);
+          snapshots[dateStr] = parseFloat(capital.toFixed(4));
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+      }
+
+      capitalizedCache[ds.key] = snapshots;
+    });
+
+    // Build chart data with raw values + _cap values
     const data = sortedDates.map(date => {
       const point: Record<string, any> = { date };
       
@@ -250,26 +248,15 @@ export function EnhancedChart({
         const rawValue = exactPoint ? exactPoint.value : findClosest(ds.sorted, date);
 
         if (rawValue !== undefined) {
-          if (mode === 'percent') {
-            const isRate = ds.suffix === '%';
+          point[ds.key] = rawValue;
+        }
 
-            if (isRate && capitalizedCache[ds.key]) {
-              const capVal = capitalizedCache[ds.key][date]
-                ?? findClosestSnapshot(capitalizedCache[ds.key], date);
-              if (capVal !== undefined) {
-                point[ds.key] = parseFloat(((capVal / baseAmount - 1) * 100).toFixed(2));
-              }
-            } else if (isRate) {
-              const firstPoint = ds.data[0];
-              const baseValue = firstPoint?.value || 1;
-              point[ds.key] = rawValue - baseValue;
-            } else {
-              const firstPoint = ds.data[0];
-              const baseValue = firstPoint?.value || 1;
-              point[ds.key] = ((rawValue - baseValue) / Math.abs(baseValue)) * 100;
-            }
-          } else {
-            point[ds.key] = rawValue;
+        // Store capitalized value alongside raw value
+        if (capitalizedCache[ds.key]) {
+          const capVal = capitalizedCache[ds.key][date]
+            ?? findClosestSnapshot(capitalizedCache[ds.key], date);
+          if (capVal !== undefined) {
+            point[`${ds.key}_cap`] = capVal;
           }
         }
       });
@@ -278,7 +265,58 @@ export function EnhancedChart({
     });
 
     return data;
-  }, [datasets, mode, placementAmount]);
+  }, [datasets, placementAmount]);
+
+  // ─── Pass 2 : normalisation selon le mode + position du brush ───
+  const chartData = useMemo(() => {
+    if (rawChartData.length === 0) return [];
+    // In real / absolute mode, return raw values (strip _cap keys)
+    if (mode !== 'percent') {
+      return rawChartData.map(point => {
+        const cleaned: Record<string, any> = {};
+        for (const [k, v] of Object.entries(point)) {
+          if (!k.endsWith('_cap')) cleaned[k] = v;
+        }
+        return cleaned;
+      });
+    }
+
+    // Percent mode: normalise depuis la position du brush (ou index 0 par défaut)
+    const baseIdx = brushStartIndex ?? 0;
+    const SAVINGS_SET = new Set(['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr']);
+    const baseAmount = placementAmount || 100;
+
+    return rawChartData.map(point => {
+      const newPoint: Record<string, any> = { date: point.date };
+
+      datasets.forEach(ds => {
+        const rawVal = point[ds.key];
+        const capKey = `${ds.key}_cap`;
+        const capVal = point[capKey];
+        const isRate = ds.suffix === '%';
+
+        if (isRate && SAVINGS_SET.has(ds.key) && capVal !== undefined) {
+          // Savings products: rebase capitalized value from brush start
+          const baseCap = rawChartData[baseIdx]?.[capKey];
+          if (baseCap && baseCap > 0) {
+            newPoint[ds.key] = parseFloat(((capVal / baseCap - 1) * 100).toFixed(2));
+          }
+        } else if (isRate && rawVal !== undefined) {
+          // Other rate indices: diff from brush start
+          const baseRate = rawChartData[baseIdx]?.[ds.key] ?? rawVal;
+          newPoint[ds.key] = rawVal - baseRate;
+        } else if (rawVal !== undefined) {
+          // Non-rate indices: % change from brush start
+          const baseVal = rawChartData[baseIdx]?.[ds.key];
+          if (baseVal !== undefined && baseVal !== 0) {
+            newPoint[ds.key] = ((rawVal - baseVal) / Math.abs(baseVal)) * 100;
+          }
+        }
+      });
+
+      return newPoint;
+    });
+  }, [rawChartData, mode, brushStartIndex, datasets, placementAmount]);
 
   // Vérifier si assez de données pour les moyennes mobiles
   const dataAvailability = useMemo(() => {
@@ -372,6 +410,14 @@ export function EnhancedChart({
       console.error('Export PNG failed:', error);
     }
   }, [period]);
+
+  // Fire initial brush range on data load so parent knows full range
+  useEffect(() => {
+    if (onBrushChange && rawChartData.length > 0 && brushStartIndex === null && brushEndIndex === null) {
+      onBrushChange(rawChartData[0]?.date || null, rawChartData[rawChartData.length - 1]?.date || null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawChartData.length]);
 
   // Reset zoom
   const resetZoom = useCallback(() => {

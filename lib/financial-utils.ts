@@ -344,3 +344,111 @@ export function calculateLinearRegression(points: { x: number; y: number }[]): {
   
   return { slope, intercept, rSquared };
 }
+
+
+
+// ─── Constants for savings products ───
+
+export const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr'];
+
+export const COMPOUNDING_RULES: Record<string, 'annual' | 'quarterly' | 'monthly'> = {
+  livreta: 'annual',
+  pel: 'annual',
+  fondsEuros: 'annual',
+  scpi: 'quarterly',
+  oat: 'monthly',
+  tec10: 'monthly',
+  tauxImmo: 'monthly',
+  tauxDepotBCE: 'monthly',
+  estr: 'monthly',
+};
+
+/**
+ * Compute capitalized series for savings products.
+ * Takes a rate history and returns a DataPoint[] of capital values starting from baseAmount.
+ */
+export function computeCapitalizedSeries(
+  rateHistory: DataPoint[],
+  productKey: string,
+  baseAmount: number = 100
+): DataPoint[] {
+  const rule = COMPOUNDING_RULES[productKey];
+  if (!rule || rateHistory.length === 0) return [];
+
+  const sorted = [...rateHistory].sort((a, b) => a.date.localeCompare(b.date));
+  const startDate = new Date(sorted[0].date);
+  const endDate = new Date(sorted[sorted.length - 1].date);
+
+  const getRateAt = (date: Date): number => {
+    const dateStr = date.toISOString().split('T')[0];
+    let rate = sorted[0].value;
+    for (const pt of sorted) {
+      if (pt.date <= dateStr) rate = pt.value;
+      else break;
+    }
+    return rate;
+  };
+
+  let capital = baseAmount;
+  const result: DataPoint[] = [];
+
+  if (rule === 'annual') {
+    let pendingInterests = 0;
+    let currentYear = startDate.getFullYear();
+    const cursor = new Date(startDate);
+    result.push({ date: sorted[0].date, value: baseAmount });
+
+    while (cursor <= endDate) {
+      const year = cursor.getFullYear();
+      if (year > currentYear) {
+        capital += pendingInterests;
+        pendingInterests = 0;
+        currentYear = year;
+      }
+      const dailyRate = getRateAt(cursor) / 100 / 365;
+      pendingInterests += capital * dailyRate;
+      if (cursor.getDate() === 1) {
+        const dateStr = cursor.toISOString().split('T')[0];
+        if (!result.some(r => r.date === dateStr)) {
+          result.push({ date: dateStr, value: parseFloat((capital + pendingInterests).toFixed(4)) });
+        }
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    capital += pendingInterests;
+    const lastDate = sorted[sorted.length - 1].date;
+    if (!result.some(r => r.date === lastDate)) {
+      result.push({ date: lastDate, value: parseFloat(capital.toFixed(4)) });
+    }
+  } else if (rule === 'quarterly') {
+    const cursor = new Date(startDate);
+    let quarter = Math.floor(cursor.getMonth() / 3);
+    result.push({ date: sorted[0].date, value: baseAmount });
+    cursor.setMonth(cursor.getMonth() + 1);
+    while (cursor <= endDate) {
+      const currentQuarter = Math.floor(cursor.getMonth() / 3);
+      if (currentQuarter !== quarter) {
+        const rate = getRateAt(cursor) / 100 / 4;
+        capital = capital * (1 + rate);
+        quarter = currentQuarter;
+      }
+      const dateStr = cursor.toISOString().split('T')[0];
+      result.push({ date: dateStr, value: parseFloat(capital.toFixed(4)) });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+  } else {
+    // monthly
+    const cursor = new Date(startDate);
+    result.push({ date: sorted[0].date, value: baseAmount });
+    cursor.setMonth(cursor.getMonth() + 1);
+    while (cursor <= endDate) {
+      const monthlyRate = getRateAt(cursor) / 100 / 12;
+      capital = capital * (1 + monthlyRate);
+      const dateStr = cursor.toISOString().split('T')[0];
+      result.push({ date: dateStr, value: parseFloat(capital.toFixed(4)) });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+  }
+
+  return result;
+}

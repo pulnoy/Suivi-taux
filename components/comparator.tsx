@@ -8,7 +8,9 @@ import {
   calculateCorrelation, 
   filterDataByPeriod,
   formatNumber,
-  FinancialStats
+  FinancialStats,
+  computeCapitalizedSeries,
+  SAVINGS_KEYS
 } from '@/lib/financial-utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -27,7 +29,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, DollarSign, Play, Square } from 'lucide-react';
+import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, Play, Square, Euro } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DataPoint {
@@ -143,7 +145,7 @@ function analyzeModeCompatibility(
 }
 
 export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorProps) {
-  const [period, setPeriod] = useState<Period>('1A');
+  const [period, setPeriod] = useState<Period>('MAX');
   const [mode, setMode] = useState<'real' | 'percent' | 'absolute'>('percent');
   const [showMA50, setShowMA50] = useState(false);
   const [showMA200, setShowMA200] = useState(false);
@@ -221,14 +223,34 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   }, [filteredData, brushStartDate, brushEndDate]);
 
   // Calculate statistics based on brush-filtered data
+  // For savings products (livrets, PEL, etc.), compute stats on capitalized (base 100) data
   const statistics = useMemo(() => {
     return brushFilteredData.map(ds => {
+      const isSavings = ds.suffix === '%' && SAVINGS_KEYS.includes(ds.key);
+
+      if (isSavings) {
+        // Compute capitalized series so stats reflect real performance
+        const capSeries = computeCapitalizedSeries(ds.data, ds.key, 100);
+        if (capSeries.length >= 2) {
+          const stats = calculateAllStats(capSeries);
+          return {
+            key: ds.key,
+            title: ds.title,
+            suffix: '€ (base 100)',
+            color: ds.color,
+            isSavings: true,
+            ...stats
+          };
+        }
+      }
+
       const stats = calculateAllStats(ds.data);
       return {
         key: ds.key,
         title: ds.title,
         suffix: ds.suffix,
         color: ds.color,
+        isSavings: false,
         ...stats
       };
     });
@@ -566,7 +588,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-1.5">
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  <Euro className="h-4 w-4 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground whitespace-nowrap">Placement</span>
                 </div>
               </TooltipTrigger>
@@ -661,7 +683,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       {simulationActive && effectivePlacementAmount && (
         <Alert className="py-2 border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-900">
           <AlertDescription className="flex items-center gap-2 text-sm text-green-800 dark:text-green-300">
-            <DollarSign className="h-4 w-4 flex-shrink-0 text-green-600" />
+            <Euro className="h-4 w-4 flex-shrink-0 text-green-600" />
             <span>
               <strong>Simulation active :</strong> Affichage de l'évolution de <strong>{effectivePlacementAmount.toLocaleString('fr-FR')}€</strong> investis 
               depuis le début de la période. 
