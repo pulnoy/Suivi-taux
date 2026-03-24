@@ -99,8 +99,13 @@ export function EnhancedChart({
   onBrushChange
 }: EnhancedChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const [brushStartIndex, setBrushStartIndex] = useState<number | null>(null);
-  const [brushEndIndex, setBrushEndIndex] = useState<number | null>(null);
+  // Track brush indices in a ref to avoid re-renders during drag.
+  // Only React state that changes is brushKey (for programmatic zoom remount).
+  const brushIndicesRef = useRef<{ start: number | null; end: number | null }>({ start: null, end: null });
+  const [brushKey, setBrushKey] = useState(0);
+  // Initial indices for the Brush when it remounts (set by zoom buttons)
+  const [brushInitialStart, setBrushInitialStart] = useState<number | undefined>(undefined);
+  const [brushInitialEnd, setBrushInitialEnd] = useState<number | undefined>(undefined);
 
   // Get date ranges for each dataset (for showing in legend)
   const dateRanges = useMemo(() => getDatasetDateRanges(datasets), [datasets]);
@@ -281,8 +286,11 @@ export function EnhancedChart({
       });
     }
 
-    // Percent mode: normalise depuis la position du brush (ou index 0 par défaut)
-    const baseIdx = brushStartIndex ?? 0;
+    // Percent mode: normalise depuis l'index 0 (début du dataset)
+    // NOTE: on normalise toujours depuis l'index 0 pour éviter un feedback loop
+    // avec le Brush (sinon déplacer le curseur gauche change les données du chart,
+    // ce qui re-render le Brush et bloque le curseur).
+    const baseIdx = 0;
     const SAVINGS_SET = new Set(['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr']);
     const baseAmount = placementAmount || 100;
 
@@ -296,17 +304,17 @@ export function EnhancedChart({
         const isRate = ds.suffix === '%';
 
         if (isRate && SAVINGS_SET.has(ds.key) && capVal !== undefined) {
-          // Savings products: rebase capitalized value from brush start
+          // Savings products: rebase capitalized value from start
           const baseCap = rawChartData[baseIdx]?.[capKey];
           if (baseCap && baseCap > 0) {
             newPoint[ds.key] = parseFloat(((capVal / baseCap - 1) * 100).toFixed(2));
           }
         } else if (isRate && rawVal !== undefined) {
-          // Other rate indices: diff from brush start
+          // Other rate indices: diff from start
           const baseRate = rawChartData[baseIdx]?.[ds.key] ?? rawVal;
           newPoint[ds.key] = rawVal - baseRate;
         } else if (rawVal !== undefined) {
-          // Non-rate indices: % change from brush start
+          // Non-rate indices: % change from start
           const baseVal = rawChartData[baseIdx]?.[ds.key];
           if (baseVal !== undefined && baseVal !== 0) {
             newPoint[ds.key] = ((rawVal - baseVal) / Math.abs(baseVal)) * 100;
@@ -316,7 +324,7 @@ export function EnhancedChart({
 
       return newPoint;
     });
-  }, [rawChartData, mode, brushStartIndex, datasets, placementAmount]);
+  }, [rawChartData, mode, datasets, placementAmount]);
 
   // Vérifier si assez de données pour les moyennes mobiles
   const dataAvailability = useMemo(() => {
@@ -413,7 +421,7 @@ export function EnhancedChart({
 
   // Fire initial brush range on data load so parent knows full range
   useEffect(() => {
-    if (onBrushChange && rawChartData.length > 0 && brushStartIndex === null && brushEndIndex === null) {
+    if (onBrushChange && rawChartData.length > 0 && brushIndicesRef.current.start === null && brushIndicesRef.current.end === null) {
       onBrushChange(rawChartData[0]?.date || null, rawChartData[rawChartData.length - 1]?.date || null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -421,66 +429,82 @@ export function EnhancedChart({
 
   // Reset zoom
   const resetZoom = useCallback(() => {
-    setBrushStartIndex(null);
-    setBrushEndIndex(null);
+    brushIndicesRef.current = { start: null, end: null };
+    setBrushInitialStart(undefined);
+    setBrushInitialEnd(undefined);
+    setBrushKey(k => k + 1);
     if (onBrushChange) onBrushChange(null, null);
   }, [onBrushChange]);
 
-  // Handle brush change
+  // Stable refs for the brush change handler to avoid re-creating the callback
+  const maDataRef = useRef(maData);
+  maDataRef.current = maData;
+  const onBrushChangeRef = useRef(onBrushChange);
+  onBrushChangeRef.current = onBrushChange;
+
+  // Handle brush change — update ref (no state = no re-render) + notify parent
+  // Using refs ensures this callback identity never changes → Brush never re-renders mid-drag
   const handleBrushChange = useCallback((brushState: any) => {
     if (!brushState) return;
     const { startIndex, endIndex } = brushState;
-    setBrushStartIndex(startIndex);
-    setBrushEndIndex(endIndex);
-    
-    if (onBrushChange && maData.length > 0) {
-      const startDate = maData[startIndex]?.date || null;
-      const endDate = maData[endIndex]?.date || null;
-      onBrushChange(startDate, endDate);
+    brushIndicesRef.current = { start: startIndex, end: endIndex };
+
+    const data = maDataRef.current;
+    const cb = onBrushChangeRef.current;
+    if (cb && data.length > 0) {
+      const startDate = data[startIndex]?.date || null;
+      const endDate = data[endIndex]?.date || null;
+      cb(startDate, endDate);
     }
-  }, [onBrushChange, maData]);
+  }, []); // empty deps = stable reference
 
   // Zoom In: reduce visible range by 20% from each side
   const handleZoomIn = useCallback(() => {
     const total = maData.length - 1;
     if (total <= 2) return;
-    const currentStart = brushStartIndex ?? 0;
-    const currentEnd = brushEndIndex ?? total;
+    const currentStart = brushIndicesRef.current.start ?? 0;
+    const currentEnd = brushIndicesRef.current.end ?? total;
     const range = currentEnd - currentStart;
     if (range <= 4) return; // minimum range
     const step = Math.max(1, Math.floor(range * 0.1));
     const newStart = Math.min(currentStart + step, currentEnd - 2);
     const newEnd = Math.max(currentEnd - step, newStart + 2);
-    setBrushStartIndex(newStart);
-    setBrushEndIndex(newEnd);
+    brushIndicesRef.current = { start: newStart, end: newEnd };
+    setBrushInitialStart(newStart);
+    setBrushInitialEnd(newEnd);
+    setBrushKey(k => k + 1);
     if (onBrushChange && maData.length > 0) {
       onBrushChange(maData[newStart]?.date || null, maData[newEnd]?.date || null);
     }
-  }, [brushStartIndex, brushEndIndex, maData, onBrushChange]);
+  }, [maData, onBrushChange]);
 
   // Zoom Out: expand visible range by 20% from each side
   const handleZoomOut = useCallback(() => {
     const total = maData.length - 1;
     if (total <= 0) return;
-    const currentStart = brushStartIndex ?? 0;
-    const currentEnd = brushEndIndex ?? total;
+    const currentStart = brushIndicesRef.current.start ?? 0;
+    const currentEnd = brushIndicesRef.current.end ?? total;
     const range = currentEnd - currentStart;
     const step = Math.max(1, Math.floor(range * 0.1));
     const newStart = Math.max(0, currentStart - step);
     const newEnd = Math.min(total, currentEnd + step);
     if (newStart === 0 && newEnd === total) {
       // Full range -> reset
-      setBrushStartIndex(null);
-      setBrushEndIndex(null);
+      brushIndicesRef.current = { start: null, end: null };
+      setBrushInitialStart(undefined);
+      setBrushInitialEnd(undefined);
+      setBrushKey(k => k + 1);
       if (onBrushChange) onBrushChange(null, null);
       return;
     }
-    setBrushStartIndex(newStart);
-    setBrushEndIndex(newEnd);
+    brushIndicesRef.current = { start: newStart, end: newEnd };
+    setBrushInitialStart(newStart);
+    setBrushInitialEnd(newEnd);
+    setBrushKey(k => k + 1);
     if (onBrushChange && maData.length > 0) {
       onBrushChange(maData[newStart]?.date || null, maData[newEnd]?.date || null);
     }
-  }, [brushStartIndex, brushEndIndex, maData, onBrushChange]);
+  }, [maData, onBrushChange]);
 
   const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros', 'estr', 'tauxDepotBCE', 'oat', 'tec10', 'tauxImmo', 'scpi'];
 
@@ -614,13 +638,13 @@ export function EnhancedChart({
   // Compute visible date range for display
   const visibleRange = useMemo(() => {
     if (maData.length === 0) return null;
-    const start = brushStartIndex != null ? brushStartIndex : 0;
-    const end = brushEndIndex != null ? brushEndIndex : maData.length - 1;
+    const start = brushIndicesRef.current.start ?? 0;
+    const end = brushIndicesRef.current.end ?? maData.length - 1;
     return {
       startDate: maData[start]?.date,
       endDate: maData[end]?.date
     };
-  }, [brushStartIndex, brushEndIndex, maData]);
+  }, [maData]);
 
   return (
     <TooltipProvider>
@@ -882,13 +906,15 @@ export function EnhancedChart({
 
               {/* Brush for zoom */}
               <Brush 
+                key={`brush-${brushKey}`}
                 dataKey="date" 
                 height={30} 
                 stroke="#8884d8"
+                travellerWidth={10}
                 tickFormatter={(date) => formatXAxisDate(date, period)}
                 onChange={handleBrushChange}
-                startIndex={brushStartIndex ?? undefined}
-                endIndex={brushEndIndex ?? undefined}
+                startIndex={brushInitialStart}
+                endIndex={brushInitialEnd}
               />
             </ComposedChart>
           </ResponsiveContainer>
