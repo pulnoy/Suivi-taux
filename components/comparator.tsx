@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { EnhancedChart } from './enhanced-chart';
 import { INDEX_EDUCATION } from '@/lib/educational-data';
 import { 
@@ -8,7 +8,9 @@ import {
   calculateCorrelation, 
   filterDataByPeriod,
   formatNumber,
-  FinancialStats
+  FinancialStats,
+  computeCapitalizedSeries,
+  SAVINGS_KEYS
 } from '@/lib/financial-utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -27,7 +29,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, Play, Square, Euro } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DataPoint {
@@ -75,7 +77,6 @@ function analyzeModeCompatibility(
     };
   }
 
-  // Récupérer les catégories et valeurs des indices sélectionnés
   const selectedData = selectedKeys.map(key => ({
     key,
     category: INDEX_EDUCATION[key]?.category || 'unknown',
@@ -83,16 +84,13 @@ function analyzeModeCompatibility(
     suffix: indices[key]?.suffixe || ''
   }));
 
-  // Obtenir les catégories uniques
   const categories = new Set(selectedData.map(d => d.category));
   const values = selectedData.map(d => Math.abs(d.value));
   
-  // Calculer le ratio max/min des valeurs
   const minVal = Math.min(...values.filter(v => v > 0));
   const maxVal = Math.max(...values);
   const valueRatio = minVal > 0 ? maxVal / minVal : Infinity;
 
-  // Vérifier si Bitcoin est présent avec d'autres indices
   const hasBitcoin = selectedKeys.includes('btc');
   const hasSmallValues = selectedData.some(d => 
     d.suffix === '%' || Math.abs(d.value) < 100
@@ -101,7 +99,6 @@ function analyzeModeCompatibility(
     Math.abs(d.value) > 10000
   );
 
-  // Cas 1: Bitcoin avec des taux ou indices à petites valeurs
   if (hasBitcoin && hasSmallValues) {
     return {
       recommendation: 'percent',
@@ -111,7 +108,6 @@ function analyzeModeCompatibility(
     };
   }
 
-  // Cas 2: Ratio de valeurs > 100 (ex: BTC ~50000 vs Inflation ~2)
   if (valueRatio > 100) {
     return {
       recommendation: 'percent',
@@ -121,7 +117,6 @@ function analyzeModeCompatibility(
     };
   }
 
-  // Cas 3: Catégories mixtes
   if (categories.size > 1) {
     return {
       recommendation: 'percent',
@@ -131,7 +126,6 @@ function analyzeModeCompatibility(
     };
   }
 
-  // Cas 4: Même catégorie
   const categoryName = Array.from(categories)[0];
   const categoryLabels: Record<string, string> = {
     'rates': 'taux',
@@ -151,13 +145,20 @@ function analyzeModeCompatibility(
 }
 
 export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorProps) {
-  const [period, setPeriod] = useState<Period>('1A');
+  const [period, setPeriod] = useState<Period>('MAX');
   const [mode, setMode] = useState<'real' | 'percent' | 'absolute'>('percent');
-  const [customDateRange, setCustomDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [showMA50, setShowMA50] = useState(false);
   const [showMA200, setShowMA200] = useState(false);
   const [userOverrodeMode, setUserOverrodeMode] = useState(false);
   const [showIndicesSection, setShowIndicesSection] = useState(true);
+  
+  // Brush date range from slider
+  const [brushStartDate, setBrushStartDate] = useState<string | null>(null);
+  const [brushEndDate, setBrushEndDate] = useState<string | null>(null);
+
+  // Placement simulation state
+  const [placementAmount, setPlacementAmount] = useState<string>('10000');
+  const [simulationActive, setSimulationActive] = useState(false);
 
   // Available indices for selection
   const availableIndices = Object.keys(indices);
@@ -184,15 +185,19 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     setUserOverrodeMode(false);
   }, [selectedKeys.length]);
 
+  // Handle brush change from chart
+  const handleBrushChange = useCallback((startDate: string | null, endDate: string | null) => {
+    setBrushStartDate(startDate);
+    setBrushEndDate(endDate);
+  }, []);
+
   // Filter data by period
   const filteredData = useMemo(() => {
     return selectedKeys.map(key => {
       const index = indices[key];
       if (!index) return null;
       
-      const filtered = period === 'CUSTOM' && customDateRange.from && customDateRange.to
-        ? filterDataByPeriod(index.historique, 'MAX', customDateRange.from, customDateRange.to)
-        : filterDataByPeriod(index.historique, period === 'CUSTOM' ? 'MAX' : period);
+      const filtered = filterDataByPeriod(index.historique, period === 'CUSTOM' ? 'MAX' : period);
       
       return {
         key,
@@ -202,31 +207,64 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         suffix: index.suffixe
       };
     }).filter(Boolean) as { key: string; data: DataPoint[]; color: string; title: string; suffix: string }[];
-  }, [indices, selectedKeys, period, customDateRange]);
+  }, [indices, selectedKeys, period]);
 
-  // Calculate statistics for each selected index
-  const statistics = useMemo(() => {
+  // Data filtered by brush range (for statistics recalculation)
+  const brushFilteredData = useMemo(() => {
+    if (!brushStartDate || !brushEndDate) return filteredData;
+    
     return filteredData.map(ds => {
+      const brushedData = ds.data.filter(d => d.date >= brushStartDate && d.date <= brushEndDate);
+      return {
+        ...ds,
+        data: brushedData.length > 0 ? brushedData : ds.data
+      };
+    });
+  }, [filteredData, brushStartDate, brushEndDate]);
+
+  // Calculate statistics based on brush-filtered data
+  // For savings products (livrets, PEL, etc.), compute stats on capitalized (base 100) data
+  const statistics = useMemo(() => {
+    return brushFilteredData.map(ds => {
+      const isSavings = ds.suffix === '%' && SAVINGS_KEYS.includes(ds.key);
+
+      if (isSavings) {
+        // Compute capitalized series so stats reflect real performance
+        const capSeries = computeCapitalizedSeries(ds.data, ds.key, 100);
+        if (capSeries.length >= 2) {
+          const stats = calculateAllStats(capSeries);
+          return {
+            key: ds.key,
+            title: ds.title,
+            suffix: '€ (base 100)',
+            color: ds.color,
+            isSavings: true,
+            ...stats
+          };
+        }
+      }
+
       const stats = calculateAllStats(ds.data);
       return {
         key: ds.key,
         title: ds.title,
         suffix: ds.suffix,
         color: ds.color,
+        isSavings: false,
         ...stats
       };
     });
-  }, [filteredData]);
+  }, [brushFilteredData]);
 
   // Calculate correlation matrix
   const correlationMatrix = useMemo(() => {
-    if (filteredData.length < 2) return null;
+    if (brushFilteredData.length < 2) return null;
     
     const matrix: Record<string, Record<string, number>> = {};
     
-    filteredData.forEach(ds1 => {
+    brushFilteredData.forEach(ds1 => {
       matrix[ds1.key] = {};
-      filteredData.forEach(ds2 => {
+      brushFilteredData.forEach(ds2 => {
         if (ds1.key === ds2.key) {
           matrix[ds1.key][ds2.key] = 1;
         } else {
@@ -236,7 +274,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     });
     
     return matrix;
-  }, [filteredData]);
+  }, [brushFilteredData]);
 
   // Toggle index selection
   const toggleIndex = (key: string) => {
@@ -281,6 +319,13 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     return groups;
   }, [indices]);
 
+  // Computed placement amount for the chart
+  const effectivePlacementAmount = useMemo(() => {
+    if (!simulationActive) return null;
+    const parsed = parseFloat(placementAmount);
+    return !isNaN(parsed) && parsed > 0 ? parsed : null;
+  }, [simulationActive, placementAmount]);
+
   return (
     <div className="space-y-6">
       {/* Index Selection — par catégories */}
@@ -321,12 +366,10 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 key={cat.id}
                 className="rounded-lg border border-border bg-muted/30 p-3"
               >
-                {/* Header catégorie */}
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <span>{cat.icon}</span>
                   {cat.label}
                 </p>
-                {/* Boutons de la catégorie */}
                 <div className="flex flex-wrap gap-1.5">
                   {keys.map(key => {
                     const index = indices[key];
@@ -401,25 +444,10 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         </>)}
       </div>
 
-      {/* Period Selection */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-          {periodButtons.map(btn => (
-            <Button
-              key={btn.value}
-              variant={period === btn.value ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setPeriod(btn.value)}
-              className="h-8 px-3"
-            >
-              {btn.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Mode buttons avec tooltip d'aide */}
-      <div className="flex items-center gap-2">
+      {/* Toolbar : Mode | Périodes | Simulation de placement — une seule ligne */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* À gauche : Toggle Mode (Valeur absolue / Base 100) */}
+        <div className="flex items-center gap-1.5">
           <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <TooltipProvider>
               <Tooltip>
@@ -500,7 +528,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             </TooltipProvider>
           </div>
 
-          {/* Icône d'aide générale */}
+          {/* Icône d'aide */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -526,6 +554,104 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        </div>
+
+        {/* Séparateur vertical */}
+        <div className="h-8 w-px bg-border hidden sm:block" />
+
+        {/* Au centre : Boutons de périodes prédéfinies */}
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+          {periodButtons.map(btn => (
+            <Button
+              key={btn.value}
+              variant={period === btn.value ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => {
+                setPeriod(btn.value);
+                // Reset brush when changing period
+                setBrushStartDate(null);
+                setBrushEndDate(null);
+              }}
+              className="h-8 px-3"
+            >
+              {btn.label}
+            </Button>
+          ))}
+        </div>
+
+        {/* Séparateur vertical */}
+        <div className="h-8 w-px bg-border hidden sm:block" />
+
+        {/* Simulation de placement */}
+        <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5">
+                  <Euro className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Placement</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p className="text-sm">
+                  <strong>Simulation de placement :</strong> Saisissez un montant pour simuler l'évolution d'un investissement 
+                  depuis la date de début de la période sélectionnée. Fonctionne en mode Base 100.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <input
+            type="number"
+            value={placementAmount}
+            onChange={(e) => setPlacementAmount(e.target.value)}
+            placeholder="10000"
+            min="1"
+            className={cn(
+              "h-8 w-24 px-2 text-sm rounded-md border bg-background text-foreground text-right",
+              simulationActive ? "border-primary ring-1 ring-primary/30" : "border-border"
+            )}
+          />
+          <span className="text-xs text-muted-foreground">€</span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={simulationActive ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setSimulationActive(!simulationActive);
+                    if (!simulationActive) {
+                      // Force percent mode when activating simulation
+                      setMode('percent');
+                      setUserOverrodeMode(true);
+                    }
+                  }}
+                  className={cn(
+                    "h-8 gap-1",
+                    simulationActive && "bg-green-600 hover:bg-green-700 text-white"
+                  )}
+                >
+                  {simulationActive ? (
+                    <>
+                      <Square className="h-3 w-3" />
+                      Arrêter
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3 w-3" />
+                      Simuler
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {simulationActive 
+                  ? "Désactiver la simulation de placement" 
+                  : "Activer la simulation de placement"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
 
       {/* Message d'aide contextuel */}
@@ -554,15 +680,40 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       )}
 
       {/* Bandeau explicatif simulation de placement */}
-      {mode === 'percent' && selectedKeys.some(k => ['livreta', 'pel', 'fondsEuros', 'scpi', 'estr', 'tauxDepotBCE', 'oat', 'tec10', 'tauxImmo'].includes(k)) && (
+      {simulationActive && effectivePlacementAmount && (
+        <Alert className="py-2 border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-900">
+          <AlertDescription className="flex items-center gap-2 text-sm text-green-800 dark:text-green-300">
+            <Euro className="h-4 w-4 flex-shrink-0 text-green-600" />
+            <span>
+              <strong>Simulation active :</strong> Affichage de l'évolution de <strong>{effectivePlacementAmount.toLocaleString('fr-FR')}€</strong> investis 
+              depuis le début de la période. 
+              {brushStartDate && (
+                <> Plage sélectionnée depuis le <strong>{new Date(brushStartDate).toLocaleDateString('fr-FR')}</strong>.</>
+              )}
+              {' '}Utilisez le slider sous le graphique pour ajuster la plage de dates.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {mode === 'percent' && !simulationActive && selectedKeys.some(k => ['livreta', 'pel', 'fondsEuros', 'scpi', 'estr', 'tauxDepotBCE', 'oat', 'tec10', 'tauxImmo'].includes(k)) && (
         <Alert className="py-2 border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-900">
           <AlertDescription className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
             <Lightbulb className="h-4 w-4 flex-shrink-0 text-blue-600" />
             <span>
               <strong>Simulation de placement :</strong> Les produits d'épargne sont convertis en performance cumulée de <strong>100€ investis</strong> selon leurs règles officielles — capitalisation annuelle (Livret A, PEL, Fonds euros), trimestrielle (SCPI) ou mensuelle (OAT, taux marché). Les changements de taux sont pris en compte à leur date exacte.
+              {' '}<strong>💡 Activez la simulation de placement pour un montant personnalisé.</strong>
             </span>
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* Info about slider usage */}
+      {selectedKeys.length > 0 && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+          <span>💡</span>
+          <span>Utilisez le <strong>slider</strong> sous le graphique pour sélectionner une plage de dates précise. La base 100 et les statistiques se recalculent automatiquement. Boutons <strong>+</strong> / <strong>−</strong> pour zoomer.</span>
+        </div>
       )}
 
       {/* Chart */}
@@ -575,6 +726,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           showMA200={showMA200}
           onToggleMA50={() => setShowMA50(!showMA50)}
           onToggleMA200={() => setShowMA200(!showMA200)}
+          placementAmount={effectivePlacementAmount}
+          onBrushChange={handleBrushChange}
         />
       )}
 
@@ -585,6 +738,11 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4" />
               Statistiques comparatives
+              {brushStartDate && brushEndDate && (
+                <span className="text-xs font-normal text-muted-foreground ml-2">
+                  (plage sélectionnée : {new Date(brushStartDate).toLocaleDateString('fr-FR')} → {new Date(brushEndDate).toLocaleDateString('fr-FR')})
+                </span>
+              )}
             </h3>
           </div>
           <div className="overflow-x-auto">
@@ -721,6 +879,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
               Corrélation des rendements sur la période sélectionnée
+              {brushStartDate && brushEndDate && (
+                <span> ({new Date(brushStartDate).toLocaleDateString('fr-FR')} → {new Date(brushEndDate).toLocaleDateString('fr-FR')})</span>
+              )}
             </p>
           </div>
           <div className="overflow-x-auto p-4">
@@ -728,7 +889,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[120px]"></TableHead>
-                  {filteredData.map(ds => (
+                  {brushFilteredData.map(ds => (
                     <TableHead key={ds.key} className="text-center min-w-[100px]">
                       <span className="text-xs">{ds.title}</span>
                     </TableHead>
@@ -736,7 +897,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.map(ds1 => (
+                {brushFilteredData.map(ds1 => (
                   <TableRow key={ds1.key}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
@@ -747,7 +908,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                         <span className="text-xs">{ds1.title}</span>
                       </div>
                     </TableCell>
-                    {filteredData.map(ds2 => {
+                    {brushFilteredData.map(ds2 => {
                       const corr = correlationMatrix[ds1.key][ds2.key];
                       const intensity = Math.abs(corr);
                       const bgColor = ds1.key === ds2.key 

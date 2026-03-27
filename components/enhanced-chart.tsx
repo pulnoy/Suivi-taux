@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend,
   ResponsiveContainer, ReferenceLine, Brush, Area, ComposedChart
 } from 'recharts';
-import { Download, ZoomIn, ZoomOut, RotateCcw, Image as ImageIcon, Info, HelpCircle } from 'lucide-react';
+import { Download, ZoomIn, ZoomOut, RotateCcw, Image as ImageIcon, Info, HelpCircle, Plus, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -35,6 +35,8 @@ interface EnhancedChartProps {
   showMA200?: boolean;
   onToggleMA50?: () => void;
   onToggleMA200?: () => void;
+  placementAmount?: number | null;
+  onBrushChange?: (startDate: string | null, endDate: string | null) => void;
 }
 
 // Fonction pour formater les dates selon la période
@@ -44,39 +46,24 @@ const formatXAxisDate = (dateString: string, period: string): string => {
   switch(period) {
     case '1M':
     case '3M':
-      // Format jj/mm pour court terme
       return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-    
     case '6M':
     case '1A':
     case 'YTD':
-      // Format mm/aa pour moyen terme
       return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
-    
     case '5A':
     case 'MAX':
-      // Format année pour long terme
       return date.getFullYear().toString();
-    
     default:
-      // Format par défaut mm/aa
       return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
   }
 };
 
 // Fonction pour calculer l'intervalle optimal de ticks
 const getTickInterval = (dataLength: number, period: string): number | 'preserveStartEnd' => {
-  // Nombre cible de ticks à afficher
   const targetTicks = 8;
-  
-  if (dataLength <= targetTicks) {
-    return 0; // Afficher tous les ticks
-  }
-  
-  // Calculer l'intervalle pour avoir environ targetTicks labels
-  const interval = Math.ceil(dataLength / targetTicks);
-  
-  return interval;
+  if (dataLength <= targetTicks) return 0;
+  return Math.ceil(dataLength / targetTicks);
 };
 
 // Determine date ranges for each dataset
@@ -107,40 +94,33 @@ export function EnhancedChart({
   showMA50 = false,
   showMA200 = false,
   onToggleMA50,
-  onToggleMA200
+  onToggleMA200,
+  placementAmount,
+  onBrushChange
 }: EnhancedChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const [brushDomain, setBrushDomain] = useState<[number, number] | null>(null);
+  // Track brush indices in a ref to avoid re-renders during drag.
+  // Only React state that changes is brushKey (for programmatic zoom remount).
+  const brushIndicesRef = useRef<{ start: number | null; end: number | null }>({ start: null, end: null });
+  const [brushKey, setBrushKey] = useState(0);
+  // Initial indices for the Brush when it remounts (set by zoom buttons)
+  const [brushInitialStart, setBrushInitialStart] = useState<number | undefined>(undefined);
+  const [brushInitialEnd, setBrushInitialEnd] = useState<number | undefined>(undefined);
 
   // Get date ranges for each dataset (for showing in legend)
   const dateRanges = useMemo(() => getDatasetDateRanges(datasets), [datasets]);
 
-  // Trouve le snapshot capitalisé le plus proche pour une date donnée
-  const findClosestSnapshot = (snapshots: Record<string, number>, targetDate: string): number | undefined => {
-    const keys = Object.keys(snapshots).sort();
-    if (keys.length === 0) return undefined;
-    // Cherche le dernier snapshot <= targetDate
-    let best: string | undefined;
-    for (const k of keys) {
-      if (k <= targetDate) best = k;
-      else break;
-    }
-    return best ? snapshots[best] : snapshots[keys[0]];
-  };
-
-  // Process data for chart (simple - no projections)
-  const chartData = useMemo(() => {
+  // ─── Pass 1 : raw chart data + capitalized values for savings ───
+  const rawChartData = useMemo(() => {
     if (!datasets || datasets.length === 0) return [];
 
-    // Get all unique dates and sort them
     const allDates = new Set<string>();
     datasets.forEach(ds => ds.data.forEach(d => allDates.add(d.date)));
     const sortedDates = Array.from(allDates).sort();
     
     if (sortedDates.length === 0) return [];
 
-    // Pré-indexer chaque dataset par timestamp pour lookup rapide de la valeur la plus proche
-    const MAX_GAP_MS = 45 * 24 * 60 * 60 * 1000; // 45 jours max d'écart accepté
+    const MAX_GAP_MS = 45 * 24 * 60 * 60 * 1000;
     const indexedDatasets = datasets.map(ds => ({
       ...ds,
       sorted: [...ds.data].sort((a, b) => a.date.localeCompare(b.date))
@@ -153,45 +133,28 @@ export function EnhancedChart({
         const gap = Math.abs(new Date(pt.date).getTime() - targetTs);
         if (gap > MAX_GAP_MS) continue;
         if (!best || gap < best.gap) best = { value: pt.value, gap };
-        else if (gap > best.gap) break; // les données sont triées, on peut sortir
+        else if (gap > best.gap) break;
       }
       return best?.value;
     };
 
-    // ─────────────────────────────────────────────────────────────
-    // Simulation de placement 100€ — règles officielles par produit
-    //
-    // Livret A / PEL / LEP : intérêts calculés par quinzaine,
-    //   capitalisés UNE FOIS PAR AN le 31 décembre.
-    //   En cours d'année : on accumule les intérêts acquis sans les capitaliser.
-    //   Changements de taux pris en compte à leur date exacte.
-    //
-    // Fonds euros (assurance-vie) : participation aux bénéfices
-    //   versée UNE FOIS PAR AN (créditée début janvier N+1).
-    //   Taux appliqué = taux de l'année civile écoulée.
-    //
-    // SCPI : revenus distribués TRIMESTRIELLEMENT (rendement annuel / 4).
-    //
-    // OAT / TEC10 / Taux immo : capitalisation mensuelle (convention marché obligataire).
-    // ─────────────────────────────────────────────────────────────
-
-    // Définition des règles de capitalisation par produit
+    // ─── Capitalisation pour produits d'épargne (toujours calculée) ───
     type CompoundingRule = 'annual' | 'quarterly' | 'monthly';
     const COMPOUNDING_RULES: Record<string, CompoundingRule> = {
-      livreta:      'annual',
-      pel:          'annual',
-      fondsEuros:   'annual',
-      scpi:         'quarterly',
-      oat:          'monthly',
-      tec10:        'monthly',
-      tauxImmo:     'monthly',
+      livreta: 'annual',
+      pel: 'annual',
+      fondsEuros: 'annual',
+      scpi: 'quarterly',
+      oat: 'monthly',
+      tec10: 'monthly',
+      tauxImmo: 'monthly',
       tauxDepotBCE: 'monthly',
-      estr:         'monthly',
+      estr: 'monthly',
     };
 
+    const baseAmount = placementAmount || 100;
     const capitalizedCache: Record<string, Record<string, number>> = {};
 
-    // Trouve le snapshot le plus proche dans le cache (pour les dates sans snapshot exact)
     const findClosestSnapshot = (snapshots: Record<string, number>, targetDate: string): number | undefined => {
       const targetTs = new Date(targetDate).getTime();
       let best: { value: number; gap: number } | null = null;
@@ -202,111 +165,86 @@ export function EnhancedChart({
       return best?.value;
     };
 
-    if (mode === 'percent') {
-      indexedDatasets.forEach(ds => {
-        if (ds.suffix !== '%') return;
-        const rule = COMPOUNDING_RULES[ds.key];
-        if (!rule) return;
+    // Always compute capitalization (needed for percent mode + stats)
+    indexedDatasets.forEach(ds => {
+      if (ds.suffix !== '%') return;
+      const rule = COMPOUNDING_RULES[ds.key];
+      if (!rule) return;
 
-        // Construire la liste chronologique des taux avec leurs dates de début
-        // (depuis les données brutes du dataset, pas les sortedDates fusionnées)
-        const rateChanges = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
-        if (rateChanges.length === 0) return;
+      const rateChanges = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
+      if (rateChanges.length === 0) return;
 
-        // Date de début = premier point disponible
-        const startDate = new Date(rateChanges[0].date);
-        const endDate = new Date();
+      const startDate = new Date(rateChanges[0].date);
+      const endDate = new Date();
 
-        // Fonction pour obtenir le taux en vigueur à une date donnée
-        const getRateAt = (date: Date): number => {
-          const dateStr = date.toISOString().split('T')[0];
-          let rate = rateChanges[0].value;
-          for (const pt of rateChanges) {
-            if (pt.date <= dateStr) rate = pt.value;
-            else break;
-          }
-          return rate;
-        };
-
-        // Simulation jour par jour en avançant par périodes selon la règle
-        let capital = 100;
-        const snapshots: Record<string, number> = {};
-
-        if (rule === 'annual') {
-          // Livret A / PEL / Fonds euros : capitalisation annuelle le 31 décembre
-          // On accumule les intérêts par quinzaine (simplification : quotidien)
-          // puis on capitalise au 31/12
-          let pendingInterests = 0;
-          let currentYear = startDate.getFullYear();
-          const cursor = new Date(startDate);
-
-          while (cursor <= endDate) {
-            const year = cursor.getFullYear();
-
-            // Changement d'année → capitaliser les intérêts accumulés
-            if (year > currentYear) {
-              capital += pendingInterests;
-              pendingInterests = 0;
-              currentYear = year;
-            }
-
-            // Intérêt du jour = capital * taux_annuel / 365
-            const dailyRate = getRateAt(cursor) / 100 / 365;
-            pendingInterests += capital * dailyRate;
-
-            // Snapshot mensuel (1er du mois)
-            if (cursor.getDate() === 1) {
-              const dateStr = cursor.toISOString().split('T')[0];
-              snapshots[dateStr] = parseFloat((capital + pendingInterests).toFixed(4));
-            }
-
-            cursor.setDate(cursor.getDate() + 1);
-          }
-          // Capitaliser les intérêts de l'année en cours
-          capital += pendingInterests;
-          const todayStr = endDate.toISOString().split('T')[0].substring(0, 7) + '-01';
-          snapshots[todayStr] = parseFloat(capital.toFixed(4));
-
-        } else if (rule === 'quarterly') {
-          // SCPI : distribution trimestrielle = taux_annuel / 4
-          const cursor = new Date(startDate);
-          let quarter = Math.floor(cursor.getMonth() / 3);
-
-          while (cursor <= endDate) {
-            const currentQuarter = Math.floor(cursor.getMonth() / 3);
-
-            if (currentQuarter !== quarter) {
-              // Fin de trimestre : distribuer les revenus
-              const rate = getRateAt(cursor) / 100 / 4;
-              capital = capital * (1 + rate);
-              quarter = currentQuarter;
-            }
-
-            if (cursor.getDate() === 1) {
-              const dateStr = cursor.toISOString().split('T')[0];
-              snapshots[dateStr] = parseFloat(capital.toFixed(4));
-            }
-
-            cursor.setMonth(cursor.getMonth() + 1);
-          }
-
-        } else {
-          // monthly : capitalisation mensuelle (obligations, taux marché)
-          const cursor = new Date(startDate);
-          while (cursor <= endDate) {
-            const dateStr = cursor.toISOString().split('T')[0];
-            const monthlyRate = getRateAt(cursor) / 100 / 12;
-            capital = capital * (1 + monthlyRate);
-            snapshots[dateStr] = parseFloat(capital.toFixed(4));
-            cursor.setMonth(cursor.getMonth() + 1);
-          }
+      const getRateAt = (date: Date): number => {
+        const dateStr = date.toISOString().split('T')[0];
+        let rate = rateChanges[0].value;
+        for (const pt of rateChanges) {
+          if (pt.date <= dateStr) rate = pt.value;
+          else break;
         }
+        return rate;
+      };
 
-        capitalizedCache[ds.key] = snapshots;
-      });
-    }
+      let capital = baseAmount;
+      const snapshots: Record<string, number> = {};
 
-    // Build chart data — valeur exacte si dispo, sinon valeur la plus proche (évite NA tooltip)
+      if (rule === 'annual') {
+        let pendingInterests = 0;
+        let currentYear = startDate.getFullYear();
+        const cursor = new Date(startDate);
+
+        while (cursor <= endDate) {
+          const year = cursor.getFullYear();
+          if (year > currentYear) {
+            capital += pendingInterests;
+            pendingInterests = 0;
+            currentYear = year;
+          }
+          const dailyRate = getRateAt(cursor) / 100 / 365;
+          pendingInterests += capital * dailyRate;
+          if (cursor.getDate() === 1) {
+            const dateStr = cursor.toISOString().split('T')[0];
+            snapshots[dateStr] = parseFloat((capital + pendingInterests).toFixed(4));
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        capital += pendingInterests;
+        const todayStr = endDate.toISOString().split('T')[0].substring(0, 7) + '-01';
+        snapshots[todayStr] = parseFloat(capital.toFixed(4));
+
+      } else if (rule === 'quarterly') {
+        const cursor = new Date(startDate);
+        let quarter = Math.floor(cursor.getMonth() / 3);
+        while (cursor <= endDate) {
+          const currentQuarter = Math.floor(cursor.getMonth() / 3);
+          if (currentQuarter !== quarter) {
+            const rate = getRateAt(cursor) / 100 / 4;
+            capital = capital * (1 + rate);
+            quarter = currentQuarter;
+          }
+          if (cursor.getDate() === 1) {
+            const dateStr = cursor.toISOString().split('T')[0];
+            snapshots[dateStr] = parseFloat(capital.toFixed(4));
+          }
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+      } else {
+        const cursor = new Date(startDate);
+        while (cursor <= endDate) {
+          const dateStr = cursor.toISOString().split('T')[0];
+          const monthlyRate = getRateAt(cursor) / 100 / 12;
+          capital = capital * (1 + monthlyRate);
+          snapshots[dateStr] = parseFloat(capital.toFixed(4));
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+      }
+
+      capitalizedCache[ds.key] = snapshots;
+    });
+
+    // Build chart data with raw values + _cap values
     const data = sortedDates.map(date => {
       const point: Record<string, any> = { date };
       
@@ -315,30 +253,15 @@ export function EnhancedChart({
         const rawValue = exactPoint ? exactPoint.value : findClosest(ds.sorted, date);
 
         if (rawValue !== undefined) {
-          if (mode === 'percent') {
-            const isRate = ds.suffix === '%';
+          point[ds.key] = rawValue;
+        }
 
-            if (isRate && capitalizedCache[ds.key]) {
-              // Taux d'épargne/placement : simulation de 100€
-              // On cherche le snapshot le plus proche
-              const capVal = capitalizedCache[ds.key][date]
-                ?? findClosestSnapshot(capitalizedCache[ds.key], date);
-              if (capVal !== undefined) {
-                point[ds.key] = parseFloat((capVal - 100).toFixed(2));
-              }
-            } else if (isRate) {
-              // Taux non-épargne (inflation, prix immo) : variation en points
-              const firstPoint = ds.data[0];
-              const baseValue = firstPoint?.value || 1;
-              point[ds.key] = rawValue - baseValue;
-            } else {
-              // Actifs (CAC, Or, BTC...) : variation en % par rapport au premier point
-              const firstPoint = ds.data[0];
-              const baseValue = firstPoint?.value || 1;
-              point[ds.key] = ((rawValue - baseValue) / Math.abs(baseValue)) * 100;
-            }
-          } else {
-            point[ds.key] = rawValue;
+        // Store capitalized value alongside raw value
+        if (capitalizedCache[ds.key]) {
+          const capVal = capitalizedCache[ds.key][date]
+            ?? findClosestSnapshot(capitalizedCache[ds.key], date);
+          if (capVal !== undefined) {
+            point[`${ds.key}_cap`] = capVal;
           }
         }
       });
@@ -347,7 +270,61 @@ export function EnhancedChart({
     });
 
     return data;
-  }, [datasets, mode]);
+  }, [datasets, placementAmount]);
+
+  // ─── Pass 2 : normalisation selon le mode + position du brush ───
+  const chartData = useMemo(() => {
+    if (rawChartData.length === 0) return [];
+    // In real / absolute mode, return raw values (strip _cap keys)
+    if (mode !== 'percent') {
+      return rawChartData.map(point => {
+        const cleaned: Record<string, any> = {};
+        for (const [k, v] of Object.entries(point)) {
+          if (!k.endsWith('_cap')) cleaned[k] = v;
+        }
+        return cleaned;
+      });
+    }
+
+    // Percent mode: normalise depuis l'index 0 (début du dataset)
+    // NOTE: on normalise toujours depuis l'index 0 pour éviter un feedback loop
+    // avec le Brush (sinon déplacer le curseur gauche change les données du chart,
+    // ce qui re-render le Brush et bloque le curseur).
+    const baseIdx = 0;
+    const SAVINGS_SET = new Set(['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr']);
+    const baseAmount = placementAmount || 100;
+
+    return rawChartData.map(point => {
+      const newPoint: Record<string, any> = { date: point.date };
+
+      datasets.forEach(ds => {
+        const rawVal = point[ds.key];
+        const capKey = `${ds.key}_cap`;
+        const capVal = point[capKey];
+        const isRate = ds.suffix === '%';
+
+        if (isRate && SAVINGS_SET.has(ds.key) && capVal !== undefined) {
+          // Savings products: rebase capitalized value from start
+          const baseCap = rawChartData[baseIdx]?.[capKey];
+          if (baseCap && baseCap > 0) {
+            newPoint[ds.key] = parseFloat(((capVal / baseCap - 1) * 100).toFixed(2));
+          }
+        } else if (isRate && rawVal !== undefined) {
+          // Other rate indices: diff from start
+          const baseRate = rawChartData[baseIdx]?.[ds.key] ?? rawVal;
+          newPoint[ds.key] = rawVal - baseRate;
+        } else if (rawVal !== undefined) {
+          // Non-rate indices: % change from start
+          const baseVal = rawChartData[baseIdx]?.[ds.key];
+          if (baseVal !== undefined && baseVal !== 0) {
+            newPoint[ds.key] = ((rawVal - baseVal) / Math.abs(baseVal)) * 100;
+          }
+        }
+      });
+
+      return newPoint;
+    });
+  }, [rawChartData, mode, datasets, placementAmount]);
 
   // Vérifier si assez de données pour les moyennes mobiles
   const dataAvailability = useMemo(() => {
@@ -359,7 +336,7 @@ export function EnhancedChart({
     };
   }, [chartData]);
 
-  // Calculate moving averages avec vérifications de sécurité
+  // Calculate moving averages
   const maData = useMemo(() => {
     if (!showMA50 && !showMA200) return chartData;
     if (chartData.length === 0) return chartData;
@@ -368,32 +345,23 @@ export function EnhancedChart({
       const newPoint = { ...point };
       
       datasets.forEach(ds => {
-        // Vérifier que la valeur existe pour ce dataset à cet index
-        const currentValue = point[ds.key];
-        
-        // MA 50 - seulement si assez de données et valeur existe
         if (showMA50 && dataAvailability.canShowMA50 && idx >= 49) {
           const slice = chartData.slice(idx - 49, idx + 1);
-          // Filtrer les valeurs undefined/null et calculer la moyenne
           const validValues = slice
             .map(p => p[ds.key])
             .filter((v): v is number => v !== undefined && v !== null && !isNaN(v));
-          
-          if (validValues.length >= 25) { // Au moins 50% des valeurs nécessaires
+          if (validValues.length >= 25) {
             const sum = validValues.reduce((acc, v) => acc + v, 0);
             newPoint[`${ds.key}_ma50`] = sum / validValues.length;
           }
         }
         
-        // MA 200 - seulement si assez de données et valeur existe
         if (showMA200 && dataAvailability.canShowMA200 && idx >= 199) {
           const slice = chartData.slice(idx - 199, idx + 1);
-          // Filtrer les valeurs undefined/null et calculer la moyenne
           const validValues = slice
             .map(p => p[ds.key])
             .filter((v): v is number => v !== undefined && v !== null && !isNaN(v));
-          
-          if (validValues.length >= 100) { // Au moins 50% des valeurs nécessaires
+          if (validValues.length >= 100) {
             const sum = validValues.reduce((acc, v) => acc + v, 0);
             newPoint[`${ds.key}_ma200`] = sum / validValues.length;
           }
@@ -404,29 +372,25 @@ export function EnhancedChart({
     });
   }, [chartData, datasets, showMA50, showMA200, dataAvailability]);
 
-  // Vérifier si les MA ont des données valides à afficher
+  // Vérifier si les MA ont des données valides
   const maHasData = useMemo(() => {
     if (!maData || maData.length === 0) return { ma50: false, ma200: false };
-    
     const hasMA50Data = datasets.some(ds => 
       maData.some(point => point[`${ds.key}_ma50`] !== undefined)
     );
     const hasMA200Data = datasets.some(ds => 
       maData.some(point => point[`${ds.key}_ma200`] !== undefined)
     );
-    
     return { ma50: hasMA50Data, ma200: hasMA200Data };
   }, [maData, datasets]);
 
   // Export to CSV
   const exportCSV = useCallback(() => {
     if (!chartData.length) return;
-    
     const headers = ['Date', ...datasets.map(ds => ds.title)];
     const rows = chartData.map(point => {
       return [point.date, ...datasets.map(ds => point[ds.key] ?? '')].join(',');
     });
-    
     const csv = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -440,7 +404,6 @@ export function EnhancedChart({
   // Export to PNG
   const exportPNG = useCallback(async () => {
     if (!chartRef.current) return;
-    
     try {
       const canvas = await html2canvas(chartRef.current, {
         backgroundColor: '#ffffff',
@@ -456,34 +419,115 @@ export function EnhancedChart({
     }
   }, [period]);
 
+  // Fire initial brush range on data load so parent knows full range
+  useEffect(() => {
+    if (onBrushChange && rawChartData.length > 0 && brushIndicesRef.current.start === null && brushIndicesRef.current.end === null) {
+      onBrushChange(rawChartData[0]?.date || null, rawChartData[rawChartData.length - 1]?.date || null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawChartData.length]);
+
   // Reset zoom
   const resetZoom = useCallback(() => {
-    setBrushDomain(null);
-  }, []);
+    brushIndicesRef.current = { start: null, end: null };
+    setBrushInitialStart(undefined);
+    setBrushInitialEnd(undefined);
+    setBrushKey(k => k + 1);
+    if (onBrushChange) onBrushChange(null, null);
+  }, [onBrushChange]);
 
-  // Custom tooltip - Affiche TOUS les indices sans NA
+  // Stable refs for the brush change handler to avoid re-creating the callback
+  const maDataRef = useRef(maData);
+  maDataRef.current = maData;
+  const onBrushChangeRef = useRef(onBrushChange);
+  onBrushChangeRef.current = onBrushChange;
+
+  // Handle brush change — update ref (no state = no re-render) + notify parent
+  // Using refs ensures this callback identity never changes → Brush never re-renders mid-drag
+  const handleBrushChange = useCallback((brushState: any) => {
+    if (!brushState) return;
+    const { startIndex, endIndex } = brushState;
+    brushIndicesRef.current = { start: startIndex, end: endIndex };
+
+    const data = maDataRef.current;
+    const cb = onBrushChangeRef.current;
+    if (cb && data.length > 0) {
+      const startDate = data[startIndex]?.date || null;
+      const endDate = data[endIndex]?.date || null;
+      cb(startDate, endDate);
+    }
+  }, []); // empty deps = stable reference
+
+  // Zoom In: reduce visible range by 20% from each side
+  const handleZoomIn = useCallback(() => {
+    const total = maData.length - 1;
+    if (total <= 2) return;
+    const currentStart = brushIndicesRef.current.start ?? 0;
+    const currentEnd = brushIndicesRef.current.end ?? total;
+    const range = currentEnd - currentStart;
+    if (range <= 4) return; // minimum range
+    const step = Math.max(1, Math.floor(range * 0.1));
+    const newStart = Math.min(currentStart + step, currentEnd - 2);
+    const newEnd = Math.max(currentEnd - step, newStart + 2);
+    brushIndicesRef.current = { start: newStart, end: newEnd };
+    setBrushInitialStart(newStart);
+    setBrushInitialEnd(newEnd);
+    setBrushKey(k => k + 1);
+    if (onBrushChange && maData.length > 0) {
+      onBrushChange(maData[newStart]?.date || null, maData[newEnd]?.date || null);
+    }
+  }, [maData, onBrushChange]);
+
+  // Zoom Out: expand visible range by 20% from each side
+  const handleZoomOut = useCallback(() => {
+    const total = maData.length - 1;
+    if (total <= 0) return;
+    const currentStart = brushIndicesRef.current.start ?? 0;
+    const currentEnd = brushIndicesRef.current.end ?? total;
+    const range = currentEnd - currentStart;
+    const step = Math.max(1, Math.floor(range * 0.1));
+    const newStart = Math.max(0, currentStart - step);
+    const newEnd = Math.min(total, currentEnd + step);
+    if (newStart === 0 && newEnd === total) {
+      // Full range -> reset
+      brushIndicesRef.current = { start: null, end: null };
+      setBrushInitialStart(undefined);
+      setBrushInitialEnd(undefined);
+      setBrushKey(k => k + 1);
+      if (onBrushChange) onBrushChange(null, null);
+      return;
+    }
+    brushIndicesRef.current = { start: newStart, end: newEnd };
+    setBrushInitialStart(newStart);
+    setBrushInitialEnd(newEnd);
+    setBrushKey(k => k + 1);
+    if (onBrushChange && maData.length > 0) {
+      onBrushChange(maData[newStart]?.date || null, maData[newEnd]?.date || null);
+    }
+  }, [maData, onBrushChange]);
+
+  const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros', 'estr', 'tauxDepotBCE', 'oat', 'tec10', 'tauxImmo', 'scpi'];
+
+  // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !label) return null;
     
     const dataPoint = maData.find(d => d.date === label);
     const isExactDate = (ds: DatasetConfig) => ds.data.some(d => d.date === label);
 
-    const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros', 'estr', 'tauxDepotBCE', 'oat', 'tec10', 'tauxImmo', 'scpi'];
-
-    // Détermine le suffixe à afficher selon le type de série et le mode
     const getValueSuffix = (ds: DatasetConfig) => {
       if (mode !== 'percent') return ` ${ds.suffix || ''}`;
       const isRate = ds.suffix === '%';
-      if (isRate && SAVINGS_KEYS.includes(ds.key)) return '%'; // gain sur 100€
+      if (isRate && SAVINGS_KEYS.includes(ds.key)) return '%';
       if (isRate) return ' pts';
       return '%';
     };
 
-    // Label explicatif sous le titre en mode percent pour les taux épargne
     const getSavingsLabel = (ds: DatasetConfig, value: number) => {
       if (mode !== 'percent' || ds.suffix !== '%' || !SAVINGS_KEYS.includes(ds.key)) return null;
-      const total = 100 + value;
-      return `≈ ${total.toFixed(2)}€ pour 100€ investis`;
+      const base = placementAmount || 100;
+      const total = base * (1 + value / 100);
+      return `≈ ${total.toFixed(2)}€ pour ${base}€ investis`;
     };
     
     return (
@@ -536,7 +580,6 @@ export function EnhancedChart({
                     <span className="text-xs text-muted-foreground italic opacity-50">hors période</span>
                   )}
                 </div>
-                {/* Label explicatif pour les taux épargne */}
                 {savingsLabel && (
                   <p className="text-xs text-muted-foreground pl-5 opacity-70">{savingsLabel}</p>
                 )}
@@ -575,7 +618,6 @@ export function EnhancedChart({
   // Calculate Y axis domains
   const yDomains = useMemo(() => {
     if (mode !== 'real') return null;
-    
     return datasets.map(ds => {
       const values = chartData.map(d => d[ds.key]).filter(v => v !== undefined);
       if (values.length === 0) return ['auto', 'auto'];
@@ -586,13 +628,23 @@ export function EnhancedChart({
     });
   }, [chartData, datasets, mode]);
 
-  // Déterminer le yAxisId pour un dataset donné
   const getYAxisId = (dsIndex: number): string | undefined => {
     if (mode === 'real' && datasets.length <= 2) {
       return dsIndex === 0 ? 'left' : 'right';
     }
     return undefined;
   };
+
+  // Compute visible date range for display
+  const visibleRange = useMemo(() => {
+    if (maData.length === 0) return null;
+    const start = brushIndicesRef.current.start ?? 0;
+    const end = brushIndicesRef.current.end ?? maData.length - 1;
+    return {
+      startDate: maData[start]?.date,
+      endDate: maData[end]?.date
+    };
+  }, [maData]);
 
   return (
     <TooltipProvider>
@@ -602,7 +654,7 @@ export function EnhancedChart({
           <div className="flex items-center gap-4">
             {datasets.length === 1 && onToggleMA50 && onToggleMA200 && (
               <>
-                {/* MM 50j avec tooltip explicatif */}
+                {/* MM 50j */}
                 <div className="flex items-center gap-1">
                   <label className={cn(
                     "flex items-center gap-2 text-sm cursor-pointer",
@@ -632,7 +684,7 @@ export function EnhancedChart({
                   </Tooltip>
                 </div>
 
-                {/* MM 200j avec tooltip explicatif */}
+                {/* MM 200j */}
                 <div className="flex items-center gap-1">
                   <label className={cn(
                     "flex items-center gap-2 text-sm cursor-pointer",
@@ -663,9 +715,48 @@ export function EnhancedChart({
                 </div>
               </>
             )}
+
+            {/* Visible date range indicator */}
+            {visibleRange && visibleRange.startDate && visibleRange.endDate && (
+              <div className="text-xs text-muted-foreground bg-muted/50 rounded-md px-2 py-1">
+                📅 {new Date(visibleRange.startDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                {' → '}
+                {new Date(visibleRange.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Zoom +/- buttons */}
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleZoomIn}
+                    className="h-7 w-7 p-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Zoom avant</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleZoomOut}
+                    className="h-7 w-7 p-0"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Zoom arrière</TooltipContent>
+              </Tooltip>
+            </div>
+
             <Button 
               variant="outline" 
               size="sm" 
@@ -753,13 +844,8 @@ export function EnhancedChart({
               <RechartsTooltip content={<CustomTooltip />} />
               <Legend 
                 formatter={(value) => {
-                  // Améliorer l'affichage de la légende
-                  if (value.endsWith('_ma50')) {
-                    return 'MM 50j (pointillés)';
-                  }
-                  if (value.endsWith('_ma200')) {
-                    return 'MM 200j (pointillés longs)';
-                  }
+                  if (value.endsWith('_ma50')) return 'MM 50j (pointillés)';
+                  if (value.endsWith('_ma200')) return 'MM 200j (pointillés longs)';
                   const ds = datasets.find(d => d.key === value);
                   return ds?.title || value;
                 }}
@@ -770,7 +856,7 @@ export function EnhancedChart({
                 <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="5 5" />
               )}
 
-              {/* Data lines - Real data (solid) */}
+              {/* Data lines */}
               {datasets.map((ds, idx) => (
                 <Line
                   key={ds.key}
@@ -785,7 +871,7 @@ export function EnhancedChart({
                 />
               ))}
 
-              {/* Moving averages - seulement si des données valides existent */}
+              {/* Moving averages */}
               {showMA50 && maHasData.ma50 && datasets.map((ds, idx) => (
                 <Line
                   key={`${ds.key}_ma50`}
@@ -820,10 +906,15 @@ export function EnhancedChart({
 
               {/* Brush for zoom */}
               <Brush 
+                key={`brush-${brushKey}`}
                 dataKey="date" 
                 height={30} 
                 stroke="#8884d8"
+                travellerWidth={10}
                 tickFormatter={(date) => formatXAxisDate(date, period)}
+                onChange={handleBrushChange}
+                startIndex={brushInitialStart}
+                endIndex={brushInitialEnd}
               />
             </ComposedChart>
           </ResponsiveContainer>
