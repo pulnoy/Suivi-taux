@@ -269,6 +269,13 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     });
   }, [filteredData, brushStartDate, brushEndDate]);
 
+  // Computed placement amount for the chart (must be declared before statistics)
+  const effectivePlacementAmount = useMemo(() => {
+    if (!simulationActive) return null;
+    const parsed = parseFloat(placementAmount);
+    return !isNaN(parsed) && parsed > 0 ? parsed : null;
+  }, [simulationActive, placementAmount]);
+
   // Calculate statistics based on brush-filtered data
   // In percent mode: all indices normalised to base 100 (or simulation amount) for consistent display
   const statistics = useMemo(() => {
@@ -350,13 +357,6 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     }
     return groups;
   }, [indices]);
-
-  // Computed placement amount for the chart
-  const effectivePlacementAmount = useMemo(() => {
-    if (!simulationActive) return null;
-    const parsed = parseFloat(placementAmount);
-    return !isNaN(parsed) && parsed > 0 ? parsed : null;
-  }, [simulationActive, placementAmount]);
 
   return (
     <div className="space-y-6">
