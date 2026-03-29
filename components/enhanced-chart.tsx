@@ -37,6 +37,11 @@ interface EnhancedChartProps {
   onToggleMA200?: () => void;
   placementAmount?: number | null;
   onBrushChange?: (startDate: string | null, endDate: string | null) => void;
+  /** ISO date from which chart normalises to base 100 / placement amount (debounced from slider) */
+  normalizeFromDate?: string | null;
+  /** External date range from date-input fields → moves the visual slider */
+  externalBrushStartDate?: string | null;
+  externalBrushEndDate?: string | null;
 }
 
 // Fonction pour formater les dates selon la période
@@ -96,7 +101,10 @@ export function EnhancedChart({
   onToggleMA50,
   onToggleMA200,
   placementAmount,
-  onBrushChange
+  onBrushChange,
+  normalizeFromDate,
+  externalBrushStartDate,
+  externalBrushEndDate
 }: EnhancedChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   // Track brush indices in a ref to avoid re-renders during drag.
@@ -286,11 +294,14 @@ export function EnhancedChart({
       });
     }
 
-    // Percent mode: normalise depuis l'index 0 (début du dataset)
-    // NOTE: on normalise toujours depuis l'index 0 pour éviter un feedback loop
-    // avec le Brush (sinon déplacer le curseur gauche change les données du chart,
-    // ce qui re-render le Brush et bloque le curseur).
-    const baseIdx = 0;
+    // Percent mode: normalise depuis normalizeFromDate (ou depuis le début si non défini).
+    // normalizeFromDate est déboncé depuis le slider → pas de feedback loop pendant le drag.
+    let baseIdx = 0;
+    if (normalizeFromDate) {
+      const idx = rawChartData.findIndex(d => d.date >= normalizeFromDate);
+      if (idx >= 0) baseIdx = idx;
+    }
+
     const SAVINGS_SET = new Set(['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr']);
     const baseAmount = placementAmount || 100;
 
@@ -304,27 +315,31 @@ export function EnhancedChart({
         const isRate = ds.suffix === '%';
 
         if (isRate && SAVINGS_SET.has(ds.key) && capVal !== undefined) {
-          // Savings products: rebase capitalized value from start
+          // Savings products: montant capitalisé rebased depuis baseIdx
           const baseCap = rawChartData[baseIdx]?.[capKey];
           if (baseCap && baseCap > 0) {
-            newPoint[ds.key] = parseFloat(((capVal / baseCap - 1) * 100).toFixed(2));
+            newPoint[ds.key] = parseFloat((baseAmount * capVal / baseCap).toFixed(4));
           }
         } else if (isRate && rawVal !== undefined) {
-          // Other rate indices: diff from start
+          // Other rate indices: ratio depuis baseIdx → montant
           const baseRate = rawChartData[baseIdx]?.[ds.key] ?? rawVal;
-          newPoint[ds.key] = rawVal - baseRate;
+          if (Math.abs(baseRate) > 0.001) {
+            newPoint[ds.key] = parseFloat((baseAmount * rawVal / baseRate).toFixed(4));
+          } else {
+            newPoint[ds.key] = baseAmount;
+          }
         } else if (rawVal !== undefined) {
-          // Non-rate indices: % change from start
+          // Non-rate indices: montant depuis baseIdx
           const baseVal = rawChartData[baseIdx]?.[ds.key];
           if (baseVal !== undefined && baseVal !== 0) {
-            newPoint[ds.key] = ((rawVal - baseVal) / Math.abs(baseVal)) * 100;
+            newPoint[ds.key] = parseFloat((baseAmount * (1 + (rawVal - baseVal) / Math.abs(baseVal))).toFixed(4));
           }
         }
       });
 
       return newPoint;
     });
-  }, [rawChartData, mode, datasets, placementAmount]);
+  }, [rawChartData, mode, datasets, placementAmount, normalizeFromDate]);
 
   // Vérifier si assez de données pour les moyennes mobiles
   const dataAvailability = useMemo(() => {
@@ -427,6 +442,42 @@ export function EnhancedChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawChartData.length]);
 
+  // Preserve brush position when placementAmount or normalizeFromDate changes (chart re-renders)
+  const prevPlacementRef = useRef(placementAmount);
+  const prevNormalizeRef = useRef(normalizeFromDate);
+  useEffect(() => {
+    const placementChanged = placementAmount !== prevPlacementRef.current;
+    const normalizeChanged = normalizeFromDate !== prevNormalizeRef.current;
+    prevPlacementRef.current = placementAmount;
+    prevNormalizeRef.current = normalizeFromDate;
+    if ((placementChanged || normalizeChanged) && (brushIndicesRef.current.start !== null || brushIndicesRef.current.end !== null)) {
+      const s = brushIndicesRef.current.start ?? undefined;
+      const e = brushIndicesRef.current.end ?? undefined;
+      setBrushInitialStart(s);
+      setBrushInitialEnd(e);
+      setBrushKey(k => k + 1);
+    }
+  }, [placementAmount, normalizeFromDate]);
+
+  // External brush control: date inputs → update visual slider
+  const isExternalBrushUpdate = useRef(false);
+  useEffect(() => {
+    if (!externalBrushStartDate || !externalBrushEndDate) return;
+    const startIdx = rawChartData.findIndex(d => d.date >= externalBrushStartDate);
+    let endIdx = rawChartData.length - 1;
+    for (let i = rawChartData.length - 1; i >= 0; i--) {
+      if (rawChartData[i].date <= externalBrushEndDate) { endIdx = i; break; }
+    }
+    if (startIdx >= 0 && endIdx >= startIdx) {
+      isExternalBrushUpdate.current = true;
+      brushIndicesRef.current = { start: startIdx, end: endIdx };
+      setBrushInitialStart(startIdx);
+      setBrushInitialEnd(endIdx);
+      setBrushKey(k => k + 1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalBrushStartDate, externalBrushEndDate]);
+
   // Reset zoom
   const resetZoom = useCallback(() => {
     brushIndicesRef.current = { start: null, end: null };
@@ -444,10 +495,23 @@ export function EnhancedChart({
 
   // Handle brush change — update ref (no state = no re-render) + notify parent
   // Using refs ensures this callback identity never changes → Brush never re-renders mid-drag
+  const brushStateDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const handleBrushChange = useCallback((brushState: any) => {
     if (!brushState) return;
+    // If this change came from an external (date-input) update, skip propagation to avoid loop
+    if (isExternalBrushUpdate.current) {
+      isExternalBrushUpdate.current = false;
+      return;
+    }
     const { startIndex, endIndex } = brushState;
     brushIndicesRef.current = { start: startIndex, end: endIndex };
+
+    // Debounce saving brush indices to state so Brush position survives re-renders
+    clearTimeout(brushStateDebounceRef.current);
+    brushStateDebounceRef.current = setTimeout(() => {
+      setBrushInitialStart(startIndex);
+      setBrushInitialEnd(endIndex);
+    }, 400);
 
     const data = maDataRef.current;
     const cb = onBrushChangeRef.current;
@@ -506,37 +570,34 @@ export function EnhancedChart({
     }
   }, [maData, onBrushChange]);
 
-  const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros', 'estr', 'tauxDepotBCE', 'oat', 'tec10', 'tauxImmo', 'scpi'];
+  const baseAmount = placementAmount || 100;
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !label) return null;
-    
+
     const dataPoint = maData.find(d => d.date === label);
     const isExactDate = (ds: DatasetConfig) => ds.data.some(d => d.date === label);
 
-    const getValueSuffix = (ds: DatasetConfig) => {
-      if (mode !== 'percent') return ` ${ds.suffix || ''}`;
-      const isRate = ds.suffix === '%';
-      if (isRate && SAVINGS_KEYS.includes(ds.key)) return '%';
-      if (isRate) return ' pts';
-      return '%';
+    const formatValue = (ds: DatasetConfig, value: number): string => {
+      if (mode === 'percent') {
+        return `${formatNumber(value, 2)}€`;
+      }
+      return `${formatNumber(value, 2)} ${ds.suffix || ''}`.trim();
     };
 
-    const getSavingsLabel = (ds: DatasetConfig, value: number) => {
-      if (mode !== 'percent' || ds.suffix !== '%' || !SAVINGS_KEYS.includes(ds.key)) return null;
-      const base = placementAmount || 100;
-      const total = base * (1 + value / 100);
-      return `≈ ${total.toFixed(2)}€ pour ${base}€ investis`;
+    const valueColor = (value: number): string => {
+      if (mode !== 'percent') return 'text-foreground';
+      return value >= baseAmount ? 'text-green-600' : 'text-red-600';
     };
-    
+
     return (
       <div className="bg-popover border border-border rounded-lg shadow-xl p-3 min-w-[220px]">
         <p className="text-sm font-semibold text-muted-foreground mb-2 pb-2 border-b border-border">
-          {new Date(label).toLocaleDateString('fr-FR', { 
-            day: 'numeric', 
-            month: 'short', 
-            year: 'numeric' 
+          {new Date(label).toLocaleDateString('fr-FR', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
           })}
         </p>
         <div className="space-y-1.5">
@@ -546,14 +607,13 @@ export function EnhancedChart({
             const ma200Value = dataPoint?.[`${ds.key}_ma200`];
             const hasValue = value !== undefined && value !== null;
             const isApprox = hasValue && !isExactDate(ds);
-            const savingsLabel = hasValue ? getSavingsLabel(ds, value) : null;
-            
+
             return (
               <div key={ds.key} className="space-y-0.5">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
-                    <span 
-                      className="w-3 h-3 rounded-full flex-shrink-0" 
+                    <span
+                      className="w-3 h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: ds.color }}
                     />
                     <span className="text-sm font-medium text-foreground">
@@ -565,34 +625,24 @@ export function EnhancedChart({
                       {isApprox && (
                         <span className="text-xs text-muted-foreground opacity-60" title="Valeur approchée">≈</span>
                       )}
-                      <span className={cn(
-                        "text-sm font-bold",
-                        mode === 'percent'
-                          ? value >= 0 ? 'text-green-600' : 'text-red-600'
-                          : 'text-foreground'
-                      )}>
-                        {mode === 'percent' && value >= 0 ? '+' : ''}
-                        {formatNumber(value, 2)}
-                        {getValueSuffix(ds)}
+                      <span className={cn("text-sm font-bold", valueColor(value))}>
+                        {formatValue(ds, value)}
                       </span>
                     </div>
                   ) : (
                     <span className="text-xs text-muted-foreground italic opacity-50">hors période</span>
                   )}
                 </div>
-                {savingsLabel && (
-                  <p className="text-xs text-muted-foreground pl-5 opacity-70">{savingsLabel}</p>
-                )}
                 {showMA50 && ma50Value !== undefined && (
                   <div className="flex items-center justify-between gap-4 pl-5 text-xs text-muted-foreground">
                     <span>└ MM 50j</span>
-                    <span>{formatNumber(ma50Value, 2)}</span>
+                    <span>{formatNumber(ma50Value, 2)}{mode === 'percent' ? '€' : ''}</span>
                   </div>
                 )}
                 {showMA200 && ma200Value !== undefined && (
                   <div className="flex items-center justify-between gap-4 pl-5 text-xs text-muted-foreground">
                     <span>└ MM 200j</span>
-                    <span>{formatNumber(ma200Value, 2)}</span>
+                    <span>{formatNumber(ma200Value, 2)}{mode === 'percent' ? '€' : ''}</span>
                   </div>
                 )}
               </div>
@@ -833,7 +883,7 @@ export function EnhancedChart({
                 ))
               ) : (
                 <YAxis
-                  tickFormatter={(v) => mode === 'percent' ? `${v > 0 ? '+' : ''}${formatNumber(v, 1)}%` : formatNumber(v, 2)}
+                  tickFormatter={(v) => mode === 'percent' ? `${formatNumber(v, 0)}€` : formatNumber(v, 2)}
                   className="text-xs"
                   tick={{ fill: 'currentColor' }}
                   tickLine={{ stroke: 'currentColor' }}
@@ -851,9 +901,9 @@ export function EnhancedChart({
                 }}
               />
 
-              {/* Reference line at 0 for percent mode */}
+              {/* Reference line at baseAmount for percent mode */}
               {mode === 'percent' && (
-                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="5 5" />
+                <ReferenceLine y={baseAmount} stroke="#94a3b8" strokeDasharray="5 5" />
               )}
 
               {/* Data lines */}

@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { EnhancedChart } from './enhanced-chart';
 import { INDEX_EDUCATION } from '@/lib/educational-data';
-import { 
-  calculateAllStats, 
-  calculateCorrelation, 
+import {
+  calculateAllStats,
   filterDataByPeriod,
   formatNumber,
   FinancialStats,
@@ -144,6 +143,19 @@ function analyzeModeCompatibility(
   };
 }
 
+// ─── Date format helpers (pure, outside component) ───
+function toDisplayDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+}
+function parseDisplayDate(display: string): string | null {
+  const m = display.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const day = parseInt(m[1], 10), mo = parseInt(m[2], 10), y = parseInt(m[3], 10);
+  if (mo < 1 || mo > 12 || day < 1 || day > 31) return null;
+  return `${y}-${mo.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+}
+
 export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorProps) {
   const [period, setPeriod] = useState<Period>('MAX');
   const [mode, setMode] = useState<'real' | 'percent' | 'absolute'>('percent');
@@ -156,8 +168,21 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const [brushStartDate, setBrushStartDate] = useState<string | null>(null);
   const [brushEndDate, setBrushEndDate] = useState<string | null>(null);
 
+  // Debounced brush start for chart normalisation (avoids feedback loop during drag)
+  const [normalizeFromDate, setNormalizeFromDate] = useState<string | null>(null);
+  const brushDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // External brush control (from date inputs → visual slider)
+  const [externalBrushStartDate, setExternalBrushStartDate] = useState<string | null>(null);
+  const [externalBrushEndDate, setExternalBrushEndDate] = useState<string | null>(null);
+
+  // Date input fields (dd/mm/yyyy) displayed in the stats section
+  const [startDateInput, setStartDateInput] = useState<string>('');
+  const [endDateInput, setEndDateInput] = useState<string>('');
+
   // Placement simulation state
-  const [placementAmount, setPlacementAmount] = useState<string>('10000');
+  const [placementAmount, setPlacementAmount] = useState<string>('1000');
+  const [localPlacementAmount, setLocalPlacementAmount] = useState<string>('1000');
   const [simulationActive, setSimulationActive] = useState(false);
 
   // Available indices for selection
@@ -185,11 +210,33 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     setUserOverrodeMode(false);
   }, [selectedKeys.length]);
 
-  // Handle brush change from chart
+  // Handle brush change from chart (drag or zoom)
   const handleBrushChange = useCallback((startDate: string | null, endDate: string | null) => {
     setBrushStartDate(startDate);
     setBrushEndDate(endDate);
+    if (startDate) setStartDateInput(toDisplayDate(startDate));
+    if (endDate) setEndDateInput(toDisplayDate(endDate));
+    // Debounce normalizeFromDate to avoid feedback loop during drag
+    clearTimeout(brushDebounceRef.current);
+    brushDebounceRef.current = setTimeout(() => {
+      setNormalizeFromDate(startDate);
+    }, 300);
   }, []);
+
+  // Submit date inputs → update brush + slider
+  const handleDateInputSubmit = useCallback(() => {
+    const startISO = parseDisplayDate(startDateInput);
+    const endISO = parseDisplayDate(endDateInput);
+    if (startISO) {
+      setBrushStartDate(startISO);
+      setNormalizeFromDate(startISO);
+    }
+    if (endISO) setBrushEndDate(endISO);
+    if (startISO || endISO) {
+      setExternalBrushStartDate(startISO);
+      setExternalBrushEndDate(endISO);
+    }
+  }, [startDateInput, endDateInput]);
 
   // Filter data by period
   const filteredData = useMemo(() => {
@@ -223,58 +270,43 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   }, [filteredData, brushStartDate, brushEndDate]);
 
   // Calculate statistics based on brush-filtered data
-  // For savings products (livrets, PEL, etc.), compute stats on capitalized (base 100) data
+  // In percent mode: all indices normalised to base 100 (or simulation amount) for consistent display
   const statistics = useMemo(() => {
+    const baseAmt = (simulationActive && effectivePlacementAmount) ? effectivePlacementAmount : 100;
+
     return brushFilteredData.map(ds => {
       const isSavings = ds.suffix === '%' && SAVINGS_KEYS.includes(ds.key);
 
-      if (isSavings) {
-        // Compute capitalized series so stats reflect real performance
+      if (mode === 'percent') {
+        if (isSavings) {
+          const capSeries = computeCapitalizedSeries(ds.data, ds.key, baseAmt);
+          if (capSeries.length >= 2) {
+            const stats = calculateAllStats(capSeries);
+            return { key: ds.key, title: ds.title, suffix: '€', color: ds.color, isSavings: true, ...stats };
+          }
+        } else if (ds.data.length >= 2) {
+          const startVal = ds.data[0].value;
+          if (startVal !== 0) {
+            const normalizedData = ds.data.map(d => ({
+              ...d,
+              value: baseAmt * (1 + (d.value - startVal) / Math.abs(startVal))
+            }));
+            const stats = calculateAllStats(normalizedData);
+            return { key: ds.key, title: ds.title, suffix: '€', color: ds.color, isSavings: false, ...stats };
+          }
+        }
+      } else if (isSavings) {
         const capSeries = computeCapitalizedSeries(ds.data, ds.key, 100);
         if (capSeries.length >= 2) {
           const stats = calculateAllStats(capSeries);
-          return {
-            key: ds.key,
-            title: ds.title,
-            suffix: '€ (base 100)',
-            color: ds.color,
-            isSavings: true,
-            ...stats
-          };
+          return { key: ds.key, title: ds.title, suffix: '€ (base 100)', color: ds.color, isSavings: true, ...stats };
         }
       }
 
       const stats = calculateAllStats(ds.data);
-      return {
-        key: ds.key,
-        title: ds.title,
-        suffix: ds.suffix,
-        color: ds.color,
-        isSavings: false,
-        ...stats
-      };
+      return { key: ds.key, title: ds.title, suffix: ds.suffix, color: ds.color, isSavings: false, ...stats };
     });
-  }, [brushFilteredData]);
-
-  // Calculate correlation matrix
-  const correlationMatrix = useMemo(() => {
-    if (brushFilteredData.length < 2) return null;
-    
-    const matrix: Record<string, Record<string, number>> = {};
-    
-    brushFilteredData.forEach(ds1 => {
-      matrix[ds1.key] = {};
-      brushFilteredData.forEach(ds2 => {
-        if (ds1.key === ds2.key) {
-          matrix[ds1.key][ds2.key] = 1;
-        } else {
-          matrix[ds1.key][ds2.key] = calculateCorrelation(ds1.data, ds2.data);
-        }
-      });
-    });
-    
-    return matrix;
-  }, [brushFilteredData]);
+  }, [brushFilteredData, mode, simulationActive, effectivePlacementAmount]);
 
   // Toggle index selection
   const toggleIndex = (key: string) => {
@@ -568,9 +600,13 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               size="sm"
               onClick={() => {
                 setPeriod(btn.value);
-                // Reset brush when changing period
                 setBrushStartDate(null);
                 setBrushEndDate(null);
+                setNormalizeFromDate(null);
+                setExternalBrushStartDate(null);
+                setExternalBrushEndDate(null);
+                setStartDateInput('');
+                setEndDateInput('');
               }}
               className="h-8 px-3"
             >
@@ -602,9 +638,11 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           </TooltipProvider>
           <input
             type="number"
-            value={placementAmount}
-            onChange={(e) => setPlacementAmount(e.target.value)}
-            placeholder="10000"
+            value={localPlacementAmount}
+            onChange={(e) => setLocalPlacementAmount(e.target.value)}
+            onBlur={() => setPlacementAmount(localPlacementAmount)}
+            onKeyDown={(e) => { if (e.key === 'Enter') setPlacementAmount(localPlacementAmount); }}
+            placeholder="1000"
             min="1"
             className={cn(
               "h-8 w-24 px-2 text-sm rounded-md border bg-background text-foreground text-right",
@@ -712,13 +750,14 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       {selectedKeys.length > 0 && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
           <span>💡</span>
-          <span>Utilisez le <strong>slider</strong> sous le graphique pour sélectionner une plage de dates précise. La base 100 et les statistiques se recalculent automatiquement. Boutons <strong>+</strong> / <strong>−</strong> pour zoomer.</span>
+          <span>Utilisez le <strong>slider</strong> sous le graphique ou les <strong>champs de date</strong> dans les statistiques pour sélectionner une plage précise. Les montants et statistiques se recalculent automatiquement depuis la date de début. Boutons <strong>+</strong> / <strong>−</strong> pour zoomer.</span>
         </div>
       )}
 
       {/* Chart */}
       {selectedKeys.length > 0 && (
         <EnhancedChart
+          key={period}
           datasets={filteredData}
           mode={mode}
           period={period}
@@ -728,6 +767,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           onToggleMA200={() => setShowMA200(!showMA200)}
           placementAmount={effectivePlacementAmount}
           onBrushChange={handleBrushChange}
+          normalizeFromDate={normalizeFromDate}
+          externalBrushStartDate={externalBrushStartDate}
+          externalBrushEndDate={externalBrushEndDate}
         />
       )}
 
@@ -735,15 +777,34 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       {statistics.length > 0 && (
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="p-4 border-b border-border">
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Statistiques comparatives
-              {brushStartDate && brushEndDate && (
-                <span className="text-xs font-normal text-muted-foreground ml-2">
-                  (plage sélectionnée : {new Date(brushStartDate).toLocaleDateString('fr-FR')} → {new Date(brushEndDate).toLocaleDateString('fr-FR')})
-                </span>
-              )}
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Statistiques comparatives
+              </h3>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="whitespace-nowrap">Du</span>
+                <input
+                  type="text"
+                  value={startDateInput}
+                  onChange={(e) => setStartDateInput(e.target.value)}
+                  onBlur={handleDateInputSubmit}
+                  onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
+                  placeholder="jj/mm/aaaa"
+                  className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <span className="whitespace-nowrap">au</span>
+                <input
+                  type="text"
+                  value={endDateInput}
+                  onChange={(e) => setEndDateInput(e.target.value)}
+                  onBlur={handleDateInputSubmit}
+                  onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
+                  placeholder="jj/mm/aaaa"
+                  className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <Table>
@@ -870,86 +931,6 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         </div>
       )}
 
-      {/* Correlation Matrix */}
-      {correlationMatrix && Object.keys(correlationMatrix).length > 1 && (
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
-          <div className="p-4 border-b border-border">
-            <h3 className="text-sm font-semibold text-foreground">
-              Matrice de Corrélation
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Corrélation des rendements sur la période sélectionnée
-              {brushStartDate && brushEndDate && (
-                <span> ({new Date(brushStartDate).toLocaleDateString('fr-FR')} → {new Date(brushEndDate).toLocaleDateString('fr-FR')})</span>
-              )}
-            </p>
-          </div>
-          <div className="overflow-x-auto p-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[120px]"></TableHead>
-                  {brushFilteredData.map(ds => (
-                    <TableHead key={ds.key} className="text-center min-w-[100px]">
-                      <span className="text-xs">{ds.title}</span>
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {brushFilteredData.map(ds1 => (
-                  <TableRow key={ds1.key}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <span 
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: ds1.color }}
-                        />
-                        <span className="text-xs">{ds1.title}</span>
-                      </div>
-                    </TableCell>
-                    {brushFilteredData.map(ds2 => {
-                      const corr = correlationMatrix[ds1.key][ds2.key];
-                      const intensity = Math.abs(corr);
-                      const bgColor = ds1.key === ds2.key 
-                        ? 'bg-muted'
-                        : corr > 0 
-                          ? `rgba(22, 163, 74, ${intensity * 0.5})`
-                          : `rgba(239, 68, 68, ${intensity * 0.5})`;
-                      
-                      return (
-                        <TableCell 
-                          key={ds2.key} 
-                          className="text-center font-mono text-sm"
-                          style={{ backgroundColor: ds1.key !== ds2.key ? bgColor : undefined }}
-                        >
-                          {ds1.key === ds2.key ? '—' : formatNumber(corr, 2)}
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="px-4 pb-4">
-            <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <span className="w-4 h-3 rounded" style={{ backgroundColor: 'rgba(239, 68, 68, 0.5)' }} />
-                Corrélation négative
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-4 h-3 rounded bg-muted" />
-                Neutre
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-4 h-3 rounded" style={{ backgroundColor: 'rgba(22, 163, 74, 0.5)' }} />
-                Corrélation positive
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
