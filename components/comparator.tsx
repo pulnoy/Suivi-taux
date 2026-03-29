@@ -171,6 +171,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   // Debounced brush start for chart normalisation (avoids feedback loop during drag)
   const [normalizeFromDate, setNormalizeFromDate] = useState<string | null>(null);
   const brushDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dateInputDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // External brush control (from date inputs → visual slider)
   const [externalBrushStartDate, setExternalBrushStartDate] = useState<string | null>(null);
@@ -214,10 +215,14 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const handleBrushChange = useCallback((startDate: string | null, endDate: string | null) => {
     setBrushStartDate(startDate);
     setBrushEndDate(endDate);
-    if (startDate) setStartDateInput(toDisplayDate(startDate));
-    if (endDate) setEndDateInput(toDisplayDate(endDate));
-    // Debounce normalizeFromDate (500ms > 50ms brush state save) to avoid
-    // remounting the Brush mid-drag while still re-normalising after drag ends.
+    // Debounce date-input text updates (150ms) to limit Comparator re-renders during drag.
+    // This reduces how often EnhancedChart re-renders while the user is dragging.
+    clearTimeout(dateInputDebounceRef.current);
+    dateInputDebounceRef.current = setTimeout(() => {
+      if (startDate) setStartDateInput(toDisplayDate(startDate));
+      if (endDate) setEndDateInput(toDisplayDate(endDate));
+    }, 150);
+    // Debounce normalizeFromDate (500ms) to let drag finish before renormalising chart.
     clearTimeout(brushDebounceRef.current);
     brushDebounceRef.current = setTimeout(() => {
       setNormalizeFromDate(startDate);

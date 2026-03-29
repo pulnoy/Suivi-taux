@@ -479,10 +479,12 @@ export function EnhancedChart({
   const onBrushChangeRef = useRef(onBrushChange);
   onBrushChangeRef.current = onBrushChange;
 
-  // Handle brush change — only update ref (no state → no re-render → no drag interruption).
-  // brushInitialStart/End state is ONLY updated by explicit zoom / external-date operations
-  // (followed by brushKey increment = remount). This prevents setState mid-drag from resetting
-  // the Brush via its startIndex/endIndex props.
+  // Handle brush change.
+  // Key invariant: brushInitialStart/End must ALWAYS reflect the current brush position.
+  // If the parent re-renders EnhancedChart (e.g. because it received new brush dates),
+  // the Brush receives startIndex/endIndex as props. If those are `undefined`, Recharts
+  // snaps the brush to full range. Keeping them synchronised with the actual position
+  // prevents that snap without needing a key-based remount.
   const handleBrushChange = useCallback((brushState: any) => {
     if (!brushState) return;
     // If this change came from an external (date-input) update, skip propagation to avoid loop
@@ -492,6 +494,12 @@ export function EnhancedChart({
     }
     const { startIndex, endIndex } = brushState;
     brushIndicesRef.current = { start: startIndex, end: endIndex };
+
+    // Synchronously mirror position into state (no setBrushKey → no remount).
+    // When the parent re-renders this component, the Brush receives its current
+    // position back through props → Recharts sees no change → no visual snap.
+    setBrushInitialStart(startIndex);
+    setBrushInitialEnd(endIndex);
 
     const data = maDataRef.current;
     const cb = onBrushChangeRef.current;
