@@ -53,7 +53,7 @@ export default function Dashboard() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const res = await fetch('/taux.json');
+        const res = await fetch('/api/taux');
         if (!res.ok) throw new Error('Erreur lors du chargement des données');
         const jsonData = await res.json();
         setData(jsonData);
