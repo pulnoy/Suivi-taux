@@ -216,11 +216,12 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     setBrushEndDate(endDate);
     if (startDate) setStartDateInput(toDisplayDate(startDate));
     if (endDate) setEndDateInput(toDisplayDate(endDate));
-    // Debounce normalizeFromDate to avoid feedback loop during drag
+    // Debounce normalizeFromDate (500ms > 50ms brush state save) to avoid
+    // remounting the Brush mid-drag while still re-normalising after drag ends.
     clearTimeout(brushDebounceRef.current);
     brushDebounceRef.current = setTimeout(() => {
       setNormalizeFromDate(startDate);
-    }, 300);
+    }, 500);
   }, []);
 
   // Submit date inputs → update brush + slider

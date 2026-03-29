@@ -442,22 +442,8 @@ export function EnhancedChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawChartData.length]);
 
-  // Preserve brush position when placementAmount or normalizeFromDate changes (chart re-renders)
-  const prevPlacementRef = useRef(placementAmount);
-  const prevNormalizeRef = useRef(normalizeFromDate);
-  useEffect(() => {
-    const placementChanged = placementAmount !== prevPlacementRef.current;
-    const normalizeChanged = normalizeFromDate !== prevNormalizeRef.current;
-    prevPlacementRef.current = placementAmount;
-    prevNormalizeRef.current = normalizeFromDate;
-    if ((placementChanged || normalizeChanged) && (brushIndicesRef.current.start !== null || brushIndicesRef.current.end !== null)) {
-      const s = brushIndicesRef.current.start ?? undefined;
-      const e = brushIndicesRef.current.end ?? undefined;
-      setBrushInitialStart(s);
-      setBrushInitialEnd(e);
-      setBrushKey(k => k + 1);
-    }
-  }, [placementAmount, normalizeFromDate]);
+  // Note: brush position is preserved by saving brushInitialStart/End at 50ms in handleBrushChange.
+  // By the time placementAmount or normalizeFromDate changes (≥500ms), the state is already set.
 
   // External brush control: date inputs → update visual slider
   const isExternalBrushUpdate = useRef(false);
@@ -506,12 +492,13 @@ export function EnhancedChart({
     const { startIndex, endIndex } = brushState;
     brushIndicesRef.current = { start: startIndex, end: endIndex };
 
-    // Debounce saving brush indices to state so Brush position survives re-renders
+    // Save brush indices to state quickly (50ms) so position is preserved when
+    // normalizeFromDate (500ms) or placementAmount changes cause a chart re-render.
     clearTimeout(brushStateDebounceRef.current);
     brushStateDebounceRef.current = setTimeout(() => {
       setBrushInitialStart(startIndex);
       setBrushInitialEnd(endIndex);
-    }, 400);
+    }, 50);
 
     const data = maDataRef.current;
     const cb = onBrushChangeRef.current;
