@@ -157,7 +157,7 @@ function parseDisplayDate(display: string): string | null {
 }
 
 export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorProps) {
-  const [period, setPeriod] = useState<Period>('MAX');
+  const [period, setPeriod] = useState<Period>('5A');
   const [mode, setMode] = useState<'real' | 'percent' | 'absolute'>('percent');
   const [showMA50, setShowMA50] = useState(false);
   const [showMA200, setShowMA200] = useState(false);
