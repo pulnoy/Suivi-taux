@@ -206,12 +206,17 @@ export function filterDataByPeriod(
   let startDate: Date;
   
   if (customStart && customEnd) {
-    startDate = customStart;
-    const endDate = customEnd;
-    return data.filter(d => {
-      const date = new Date(d.date);
-      return date >= startDate && date <= endDate;
-    });
+    const startDateStr = customStart.toISOString().split('T')[0];
+    const endDateStr = customEnd.toISOString().split('T')[0];
+    const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+    const filtered = sorted.filter(d => d.date >= startDateStr && d.date <= endDateStr);
+    if (filtered.length === 0 || filtered[0].date > startDateStr) {
+      const lastBefore = sorted.filter(d => d.date < startDateStr).pop();
+      if (lastBefore) {
+        return [{ ...lastBefore, date: startDateStr }, ...filtered];
+      }
+    }
+    return filtered;
   }
   
   switch (period) {
@@ -236,8 +241,21 @@ export function filterDataByPeriod(
     default:
       return data;
   }
-  
-  return data.filter(d => new Date(d.date) >= startDate);
+
+  const startDateStr = startDate.toISOString().split('T')[0];
+  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+  const filtered = sorted.filter(d => d.date >= startDateStr);
+
+  // For sparse data (e.g. rate series), inject a synthetic point at startDate
+  // carrying the last known value before the period, so the chart starts at the right date.
+  if (filtered.length === 0 || filtered[0].date > startDateStr) {
+    const lastBefore = sorted.filter(d => d.date < startDateStr).pop();
+    if (lastBefore) {
+      return [{ ...lastBefore, date: startDateStr }, ...filtered];
+    }
+  }
+
+  return filtered;
 }
 
 /**
