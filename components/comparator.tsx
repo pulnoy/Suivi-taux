@@ -9,7 +9,9 @@ import {
   formatNumber,
   FinancialStats,
   computeCapitalizedSeries,
-  SAVINGS_KEYS
+  calculateMonthlyIRR,
+  SAVINGS_KEYS,
+  COMPOUNDING_RULES
 } from '@/lib/financial-utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -185,6 +187,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const [placementAmount, setPlacementAmount] = useState<string>('1000');
   const [localPlacementAmount, setLocalPlacementAmount] = useState<string>('1000');
   const [simulationActive, setSimulationActive] = useState(false);
+  const [monthlyPayment, setMonthlyPayment] = useState<string>('100');
+  const [localMonthlyPayment, setLocalMonthlyPayment] = useState<string>('100');
 
   // Available indices for selection
   const availableIndices = Object.keys(indices);
@@ -282,14 +286,114 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     return !isNaN(parsed) && parsed > 0 ? parsed : null;
   }, [simulationActive, placementAmount]);
 
+  const effectiveMonthlyPayment = useMemo(() => {
+    if (!simulationActive) return null;
+    const parsed = parseFloat(monthlyPayment);
+    return !isNaN(parsed) && parsed >= 0 ? parsed : null;
+  }, [simulationActive, monthlyPayment]);
+
   // Calculate statistics based on brush-filtered data
   // In percent mode: all indices normalised to base 100 (or simulation amount) for consistent display
   const statistics = useMemo(() => {
     const baseAmt = (simulationActive && effectivePlacementAmount) ? effectivePlacementAmount : 100;
+    const hasDCA = !!(effectiveMonthlyPayment && effectiveMonthlyPayment > 0);
 
     return brushFilteredData.map(ds => {
       const isSavings = ds.suffix === '%' && SAVINGS_KEYS.includes(ds.key);
 
+      // ── DCA mode: compute portfolio with monthly contributions ──
+      if (hasDCA && mode === 'percent') {
+        const sortedData = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
+        if (sortedData.length < 2) return null;
+
+        const startDate = new Date(sortedData[0].date);
+        const endDate = new Date(sortedData[sortedData.length - 1].date);
+        const months = Math.max(1, Math.round(
+          (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)
+        ));
+
+        const getValAt = (dateStr: string): number => {
+          let val = sortedData[0].value;
+          for (const pt of sortedData) {
+            if (pt.date <= dateStr) val = pt.value;
+            else break;
+          }
+          return val;
+        };
+
+        // Build DCA portfolio value series
+        const dcaSeries: { date: string; value: number }[] = [];
+
+        if (isSavings) {
+          let capital = baseAmt;
+          dcaSeries.push({ date: sortedData[0].date, value: capital });
+          const cursor = new Date(startDate);
+          cursor.setMonth(cursor.getMonth() + 1);
+          while (cursor <= endDate) {
+            const dateStr = cursor.toISOString().split('T')[0];
+            const monthlyRate = getValAt(dateStr) / 100 / 12;
+            capital = capital * (1 + monthlyRate) + effectiveMonthlyPayment;
+            dcaSeries.push({ date: dateStr, value: parseFloat(capital.toFixed(4)) });
+            cursor.setMonth(cursor.getMonth() + 1);
+          }
+        } else {
+          // Price-based DCA
+          const t0Price = sortedData[0].value || 1;
+          const schedule: { date: string; cumUnits: number }[] = [];
+          let cumUnits = baseAmt / t0Price;
+          schedule.push({ date: sortedData[0].date, cumUnits });
+          const cursor = new Date(startDate);
+          cursor.setMonth(cursor.getMonth() + 1);
+          while (cursor <= endDate) {
+            const dateStr = cursor.toISOString().split('T')[0];
+            const price = getValAt(dateStr) || 1;
+            cumUnits += effectiveMonthlyPayment / price;
+            schedule.push({ date: dateStr, cumUnits });
+            cursor.setMonth(cursor.getMonth() + 1);
+          }
+          let schedIdx = 0;
+          let curUnits = 0;
+          for (const pt of sortedData) {
+            while (schedIdx < schedule.length && schedule[schedIdx].date <= pt.date) {
+              curUnits = schedule[schedIdx].cumUnits;
+              schedIdx++;
+            }
+            dcaSeries.push({ date: pt.date, value: parseFloat((curUnits * pt.value).toFixed(4)) });
+          }
+        }
+
+        if (dcaSeries.length < 2) return null;
+
+        const totalInvested = baseAmt + effectiveMonthlyPayment * months;
+        const finalValue = dcaSeries[dcaSeries.length - 1].value;
+        const totalReturn = (finalValue - totalInvested) / totalInvested * 100;
+
+        // Build IRR cash flows
+        const cashFlows: number[] = [-baseAmt];
+        for (let m = 1; m < months; m++) cashFlows.push(-effectiveMonthlyPayment);
+        cashFlows.push(finalValue);
+        const irr = calculateMonthlyIRR(cashFlows);
+
+        const portfolioStats = calculateAllStats(dcaSeries);
+
+        return {
+          key: ds.key,
+          title: ds.title,
+          suffix: '€',
+          color: ds.color,
+          isSavings,
+          startValue: baseAmt,
+          endValue: finalValue,
+          totalReturn,
+          annualizedReturn: irr,
+          volatility: portfolioStats.volatility,
+          maxDrawdown: portfolioStats.maxDrawdown,
+          sharpeRatio: portfolioStats.sharpeRatio,
+          totalInvested,
+        };
+      }
+
+      // ── Standard mode (no DCA) ──
       if (mode === 'percent') {
         if (isSavings) {
           const capSeries = computeCapitalizedSeries(ds.data, ds.key, baseAmt);
@@ -318,8 +422,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
 
       const stats = calculateAllStats(ds.data);
       return { key: ds.key, title: ds.title, suffix: ds.suffix, color: ds.color, isSavings: false, ...stats };
-    });
-  }, [brushFilteredData, mode, simulationActive, effectivePlacementAmount]);
+    }).filter(Boolean) as any[];
+  }, [brushFilteredData, mode, simulationActive, effectivePlacementAmount, effectiveMonthlyPayment]);
 
   // Toggle index selection
   const toggleIndex = (key: string) => {
@@ -659,6 +763,22 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             )}
           />
           <span className="text-xs text-muted-foreground">€</span>
+          {simulationActive && (
+            <>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">+</span>
+              <input
+                type="number"
+                value={localMonthlyPayment}
+                onChange={(e) => setLocalMonthlyPayment(e.target.value)}
+                onBlur={() => setMonthlyPayment(localMonthlyPayment)}
+                onKeyDown={(e) => { if (e.key === 'Enter') setMonthlyPayment(localMonthlyPayment); }}
+                placeholder="100"
+                min="0"
+                className="h-8 w-20 px-2 text-sm rounded-md border border-primary ring-1 ring-primary/30 bg-background text-foreground text-right"
+              />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">€/mois</span>
+            </>
+          )}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -775,6 +895,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           onToggleMA50={() => setShowMA50(!showMA50)}
           onToggleMA200={() => setShowMA200(!showMA200)}
           placementAmount={effectivePlacementAmount}
+          monthlyPayment={effectiveMonthlyPayment}
           onBrushChange={handleBrushChange}
           normalizeFromDate={normalizeFromDate}
           externalBrushStartDate={externalBrushStartDate}
@@ -821,6 +942,21 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 <TableRow>
                   <TableHead className="w-[150px]">Indice</TableHead>
                   <TableHead className="text-right">Début</TableHead>
+                  {statistics.some(s => s?.totalInvested !== undefined) && (
+                    <TableHead className="text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help underline decoration-dotted">
+                            Investi
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p className="text-sm font-semibold mb-1">Capital investi total</p>
+                            <p className="text-sm">Somme de l'apport initial et de tous les versements mensuels sur la période.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                  )}
                   <TableHead className="text-right">Fin</TableHead>
                   <TableHead className="text-right">
                     <TooltipProvider>
@@ -904,6 +1040,11 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                     <TableCell className="text-right">
                       {formatNumber(stat.startValue)} {stat.suffix}
                     </TableCell>
+                    {statistics.some(s => s?.totalInvested !== undefined) && (
+                      <TableCell className="text-right text-muted-foreground">
+                        {stat.totalInvested !== undefined ? `${formatNumber(stat.totalInvested)} €` : '—'}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
                       {formatNumber(stat.endValue)} {stat.suffix}
                     </TableCell>

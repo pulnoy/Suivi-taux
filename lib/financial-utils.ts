@@ -14,6 +14,7 @@ export interface FinancialStats {
   volatility: number;
   maxDrawdown: number;
   sharpeRatio: number;
+  totalInvested?: number;
 }
 
 /**
@@ -107,6 +108,35 @@ export function calculateSharpeRatio(data: DataPoint[]): number {
   
   // Annualized Sharpe ratio
   return (meanReturn * 252) / (stdDev * Math.sqrt(252));
+}
+
+/**
+ * Calculate annualized IRR for a series of equal-interval monthly cash flows.
+ * Cash flows: negative = outflows, positive = inflows.
+ * Uses Newton-Raphson iteration.
+ * Returns annualized IRR as a percentage.
+ */
+export function calculateMonthlyIRR(cashFlows: number[]): number {
+  if (cashFlows.length < 2) return 0;
+
+  let r = 0.005; // initial guess: 0.5% per month
+  for (let iter = 0; iter < 200; iter++) {
+    let npv = 0;
+    let dnpv = 0;
+    for (let t = 0; t < cashFlows.length; t++) {
+      const factor = Math.pow(1 + r, t);
+      npv += cashFlows[t] / factor;
+      if (t > 0) {
+        dnpv -= t * cashFlows[t] / (factor * (1 + r));
+      }
+    }
+    if (Math.abs(dnpv) < 1e-15) break;
+    const delta = npv / dnpv;
+    r -= delta;
+    if (Math.abs(delta) < 1e-12) break;
+  }
+
+  return (Math.pow(1 + r, 12) - 1) * 100;
 }
 
 /**
