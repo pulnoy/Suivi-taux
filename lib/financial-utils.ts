@@ -196,7 +196,7 @@ export function calculateAllStats(data: DataPoint[]): FinancialStats {
  */
 export function filterDataByPeriod(
   data: DataPoint[],
-  period: '1M' | '3M' | '6M' | '1A' | '5A' | 'YTD' | 'MAX',
+  period: '1M' | '3M' | '6M' | '1A' | '5A' | '10A' | '18A' | '20A' | 'YTD' | 'MAX',
   customStart?: Date,
   customEnd?: Date
 ): DataPoint[] {
@@ -234,6 +234,15 @@ export function filterDataByPeriod(
       break;
     case '5A':
       startDate = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate());
+      break;
+    case '10A':
+      startDate = new Date(now.getFullYear() - 10, now.getMonth(), now.getDate());
+      break;
+    case '18A':
+      startDate = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
+      break;
+    case '20A':
+      startDate = new Date(now.getFullYear() - 20, now.getMonth(), now.getDate());
       break;
     case 'YTD':
       startDate = new Date(now.getFullYear(), 0, 1);

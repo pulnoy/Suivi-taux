@@ -57,6 +57,9 @@ const formatXAxisDate = (dateString: string, period: string): string => {
     case 'YTD':
       return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
     case '5A':
+    case '10A':
+    case '18A':
+    case '20A':
     case 'MAX':
       return date.getFullYear().toString();
     default:

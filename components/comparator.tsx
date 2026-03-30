@@ -49,7 +49,7 @@ interface ComparatorProps {
   onKeysChange: (keys: string[]) => void;
 }
 
-type Period = '1M' | '3M' | '6M' | '1A' | '5A' | 'YTD' | 'MAX' | 'CUSTOM';
+type Period = '1M' | '3M' | '6M' | '1A' | '5A' | '10A' | '18A' | '20A' | 'YTD' | 'MAX' | 'CUSTOM';
 
 // Types pour l'analyse de compatibilité des modes
 type ModeRecommendation = 'real' | 'percent' | 'both';
@@ -340,6 +340,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     { value: '6M', label: '6M' },
     { value: '1A', label: '1A' },
     { value: '5A', label: '5A' },
+    { value: '10A', label: '10A' },
+    { value: '18A', label: '18A' },
+    { value: '20A', label: '20A' },
     { value: 'YTD', label: 'YTD' },
     { value: 'MAX', label: 'Max' },
   ];
