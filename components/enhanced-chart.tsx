@@ -36,6 +36,7 @@ interface EnhancedChartProps {
   onToggleMA50?: () => void;
   onToggleMA200?: () => void;
   placementAmount?: number | null;
+  monthlyPayment?: number | null;
   onBrushChange?: (startDate: string | null, endDate: string | null) => void;
   /** ISO date from which chart normalises to base 100 / placement amount (debounced from slider) */
   normalizeFromDate?: string | null;
@@ -57,6 +58,9 @@ const formatXAxisDate = (dateString: string, period: string): string => {
     case 'YTD':
       return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
     case '5A':
+    case '10A':
+    case '18A':
+    case '20A':
     case 'MAX':
       return date.getFullYear().toString();
     default:
@@ -101,6 +105,7 @@ export function EnhancedChart({
   onToggleMA50,
   onToggleMA200,
   placementAmount,
+  monthlyPayment,
   onBrushChange,
   normalizeFromDate,
   externalBrushStartDate,
@@ -252,10 +257,112 @@ export function EnhancedChart({
       capitalizedCache[ds.key] = snapshots;
     });
 
-    // Build chart data with raw values + _cap values
+    // ─── DCA (versements programmés mensuels) ───
+    const dcaCache: Record<string, Record<string, number>> = {};
+    if (monthlyPayment && monthlyPayment > 0) {
+      const SAVINGS_DCA = new Set(['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr']);
+
+      indexedDatasets.forEach(ds => {
+        const isSav = ds.suffix === '%' && SAVINGS_DCA.has(ds.key);
+        const sorted2 = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
+        if (sorted2.length === 0) return;
+
+        const startDate2 = new Date(sorted2[0].date);
+        // Use today as end so sparse-data products (Livret A, SCPI…) extend to the full period
+        const endDate2 = new Date();
+        const snapshots2: Record<string, number> = {};
+
+        const getValAt2 = (dateStr: string): number => {
+          let val = sorted2[0].value;
+          for (const pt of sorted2) {
+            if (pt.date <= dateStr) val = pt.value;
+            else break;
+          }
+          return val;
+        };
+
+        if (isSav) {
+          const COMPOUND_RULES: Record<string, string> = {
+            livreta: 'annual', pel: 'annual', fondsEuros: 'annual',
+            scpi: 'quarterly',
+            oat: 'monthly', tec10: 'monthly', tauxImmo: 'monthly', tauxDepotBCE: 'monthly', estr: 'monthly',
+          };
+          const rule = COMPOUND_RULES[ds.key] || 'monthly';
+          let capital = baseAmount;
+          snapshots2[sorted2[0].date] = capital;
+          const cursor = new Date(startDate2);
+
+          if (rule === 'annual') {
+            let pendingInterest = 0;
+            let currentYear = startDate2.getFullYear();
+            cursor.setMonth(cursor.getMonth() + 1);
+            while (cursor <= endDate2) {
+              const year = cursor.getFullYear();
+              if (year > currentYear) { capital += pendingInterest; pendingInterest = 0; currentYear = year; }
+              capital += monthlyPayment;
+              const accrual = getValAt2(cursor.toISOString().split('T')[0]) / 100 / 365 * 30.4375;
+              pendingInterest += capital * accrual;
+              snapshots2[cursor.toISOString().split('T')[0]] = parseFloat((capital + pendingInterest).toFixed(4));
+              cursor.setMonth(cursor.getMonth() + 1);
+            }
+          } else if (rule === 'quarterly') {
+            let quarter = Math.floor(startDate2.getMonth() / 3);
+            cursor.setMonth(cursor.getMonth() + 1);
+            while (cursor <= endDate2) {
+              const currentQuarter = Math.floor(cursor.getMonth() / 3);
+              if (currentQuarter !== quarter) {
+                const rate = getValAt2(cursor.toISOString().split('T')[0]) / 100 / 4;
+                capital = capital * (1 + rate);
+                quarter = currentQuarter;
+              }
+              capital += monthlyPayment;
+              snapshots2[cursor.toISOString().split('T')[0]] = parseFloat(capital.toFixed(4));
+              cursor.setMonth(cursor.getMonth() + 1);
+            }
+          } else {
+            cursor.setMonth(cursor.getMonth() + 1);
+            while (cursor <= endDate2) {
+              const dateStr = cursor.toISOString().split('T')[0];
+              const monthlyRate = getValAt2(dateStr) / 100 / 12;
+              capital = capital * (1 + monthlyRate) + monthlyPayment;
+              snapshots2[dateStr] = parseFloat(capital.toFixed(4));
+              cursor.setMonth(cursor.getMonth() + 1);
+            }
+          }
+        } else {
+          // Price-based: track cumulative units × current price
+          const t0Price = sorted2[0].value || 1;
+          const schedule: { date: string; cumUnits: number }[] = [];
+          let cumUnits = baseAmount / t0Price;
+          schedule.push({ date: sorted2[0].date, cumUnits });
+          const cursor = new Date(startDate2);
+          cursor.setMonth(cursor.getMonth() + 1);
+          while (cursor <= endDate2) {
+            const dateStr = cursor.toISOString().split('T')[0];
+            const price = getValAt2(dateStr) || 1;
+            cumUnits += monthlyPayment / price;
+            schedule.push({ date: dateStr, cumUnits });
+            cursor.setMonth(cursor.getMonth() + 1);
+          }
+          let schedIdx = 0;
+          let curUnits = 0;
+          for (const pt of sorted2) {
+            while (schedIdx < schedule.length && schedule[schedIdx].date <= pt.date) {
+              curUnits = schedule[schedIdx].cumUnits;
+              schedIdx++;
+            }
+            snapshots2[pt.date] = parseFloat((curUnits * pt.value).toFixed(4));
+          }
+        }
+
+        dcaCache[ds.key] = snapshots2;
+      });
+    }
+
+    // Build chart data with raw values + _cap + _dca values
     const data = sortedDates.map(date => {
       const point: Record<string, any> = { date };
-      
+
       indexedDatasets.forEach(ds => {
         const exactPoint = ds.data.find(d => d.date === date);
         const rawValue = exactPoint ? exactPoint.value : findClosest(ds.sorted, date);
@@ -272,13 +379,22 @@ export function EnhancedChart({
             point[`${ds.key}_cap`] = capVal;
           }
         }
+
+        // Store DCA portfolio value
+        if (dcaCache[ds.key]) {
+          const dcaVal = dcaCache[ds.key][date]
+            ?? findClosestSnapshot(dcaCache[ds.key], date);
+          if (dcaVal !== undefined) {
+            point[`${ds.key}_dca`] = dcaVal;
+          }
+        }
       });
-      
+
       return point;
     });
 
     return data;
-  }, [datasets, placementAmount]);
+  }, [datasets, placementAmount, monthlyPayment]);
 
   // ─── Pass 2 : normalisation selon le mode + position du brush ───
   const chartData = useMemo(() => {
@@ -288,7 +404,7 @@ export function EnhancedChart({
       return rawChartData.map(point => {
         const cleaned: Record<string, any> = {};
         for (const [k, v] of Object.entries(point)) {
-          if (!k.endsWith('_cap')) cleaned[k] = v;
+          if (!k.endsWith('_cap') && !k.endsWith('_dca')) cleaned[k] = v;
         }
         return cleaned;
       });
@@ -304,6 +420,7 @@ export function EnhancedChart({
 
     const SAVINGS_SET = new Set(['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr']);
     const baseAmount = placementAmount || 100;
+    const isDCA = !!(monthlyPayment && monthlyPayment > 0);
 
     return rawChartData.map(point => {
       const newPoint: Record<string, any> = { date: point.date };
@@ -313,6 +430,15 @@ export function EnhancedChart({
         const capKey = `${ds.key}_cap`;
         const capVal = point[capKey];
         const isRate = ds.suffix === '%';
+
+        // DCA mode: use pre-computed portfolio values directly (already in €)
+        if (isDCA) {
+          const dcaVal = point[`${ds.key}_dca`];
+          if (dcaVal !== undefined) {
+            newPoint[ds.key] = dcaVal;
+            return;
+          }
+        }
 
         if (isRate && SAVINGS_SET.has(ds.key) && capVal !== undefined) {
           // Savings products: montant capitalisé rebased depuis baseIdx
@@ -339,7 +465,7 @@ export function EnhancedChart({
 
       return newPoint;
     });
-  }, [rawChartData, mode, datasets, placementAmount, normalizeFromDate]);
+  }, [rawChartData, mode, datasets, placementAmount, monthlyPayment, normalizeFromDate]);
 
   // Vérifier si assez de données pour les moyennes mobiles
   const dataAvailability = useMemo(() => {

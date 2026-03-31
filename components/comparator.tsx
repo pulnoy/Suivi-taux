@@ -9,7 +9,9 @@ import {
   formatNumber,
   FinancialStats,
   computeCapitalizedSeries,
-  SAVINGS_KEYS
+  calculateMonthlyIRR,
+  SAVINGS_KEYS,
+  COMPOUNDING_RULES
 } from '@/lib/financial-utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -28,7 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, Play, Square, Euro } from 'lucide-react';
+import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, Play, Euro } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DataPoint {
@@ -49,7 +51,7 @@ interface ComparatorProps {
   onKeysChange: (keys: string[]) => void;
 }
 
-type Period = '1M' | '3M' | '6M' | '1A' | '5A' | 'YTD' | 'MAX' | 'CUSTOM';
+type Period = '1M' | '3M' | '6M' | '1A' | '5A' | '10A' | '18A' | '20A' | 'YTD' | 'MAX' | 'CUSTOM';
 
 // Types pour l'analyse de compatibilité des modes
 type ModeRecommendation = 'real' | 'percent' | 'both';
@@ -185,6 +187,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const [placementAmount, setPlacementAmount] = useState<string>('1000');
   const [localPlacementAmount, setLocalPlacementAmount] = useState<string>('1000');
   const [simulationActive, setSimulationActive] = useState(false);
+  const [monthlyPayment, setMonthlyPayment] = useState<string>('0');
+  const [localMonthlyPayment, setLocalMonthlyPayment] = useState<string>('0');
+  const [showSimPanel, setShowSimPanel] = useState(false);
 
   // Available indices for selection
   const availableIndices = Object.keys(indices);
@@ -282,14 +287,156 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     return !isNaN(parsed) && parsed > 0 ? parsed : null;
   }, [simulationActive, placementAmount]);
 
+  const effectiveMonthlyPayment = useMemo(() => {
+    if (!simulationActive) return null;
+    const parsed = parseFloat(monthlyPayment);
+    return !isNaN(parsed) && parsed >= 0 ? parsed : null;
+  }, [simulationActive, monthlyPayment]);
+
   // Calculate statistics based on brush-filtered data
   // In percent mode: all indices normalised to base 100 (or simulation amount) for consistent display
   const statistics = useMemo(() => {
     const baseAmt = (simulationActive && effectivePlacementAmount) ? effectivePlacementAmount : 100;
+    const hasDCA = !!(effectiveMonthlyPayment && effectiveMonthlyPayment > 0);
 
     return brushFilteredData.map(ds => {
       const isSavings = ds.suffix === '%' && SAVINGS_KEYS.includes(ds.key);
 
+      // ── DCA mode: compute portfolio with monthly contributions ──
+      if (hasDCA && mode === 'percent') {
+        const sortedData = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
+        if (sortedData.length < 2) return null;
+
+        const startDate = new Date(sortedData[0].date);
+        // Always use today as end: sparse rate data may not extend to today,
+        // but the last known rate/price applies until now.
+        const endDate = new Date();
+
+        const getValAt = (dateStr: string): number => {
+          let val = sortedData[0].value;
+          for (const pt of sortedData) {
+            if (pt.date <= dateStr) val = pt.value;
+            else break;
+          }
+          return val;
+        };
+
+        // Build DCA portfolio value series
+        const dcaSeries: { date: string; value: number }[] = [];
+
+        // Count actual payment iterations — source of truth for totalInvested
+        let paymentCount = 0;
+
+        if (isSavings) {
+          const rule = COMPOUNDING_RULES[ds.key] || 'monthly';
+          let capital = baseAmt;
+          dcaSeries.push({ date: sortedData[0].date, value: capital });
+          const cursor = new Date(startDate);
+
+          if (rule === 'annual') {
+            let pendingInterest = 0;
+            let currentYear = startDate.getFullYear();
+            cursor.setMonth(cursor.getMonth() + 1);
+            while (cursor <= endDate) {
+              const year = cursor.getFullYear();
+              if (year > currentYear) {
+                capital += pendingInterest;
+                pendingInterest = 0;
+                currentYear = year;
+              }
+              capital += effectiveMonthlyPayment;
+              paymentCount++;
+              const monthlyAccrual = getValAt(cursor.toISOString().split('T')[0]) / 100 / 365 * 30.4375;
+              pendingInterest += capital * monthlyAccrual;
+              dcaSeries.push({ date: cursor.toISOString().split('T')[0], value: parseFloat((capital + pendingInterest).toFixed(4)) });
+              cursor.setMonth(cursor.getMonth() + 1);
+            }
+          } else if (rule === 'quarterly') {
+            let quarter = Math.floor(startDate.getMonth() / 3);
+            cursor.setMonth(cursor.getMonth() + 1);
+            while (cursor <= endDate) {
+              const currentQuarter = Math.floor(cursor.getMonth() / 3);
+              if (currentQuarter !== quarter) {
+                const rate = getValAt(cursor.toISOString().split('T')[0]) / 100 / 4;
+                capital = capital * (1 + rate);
+                quarter = currentQuarter;
+              }
+              capital += effectiveMonthlyPayment;
+              paymentCount++;
+              dcaSeries.push({ date: cursor.toISOString().split('T')[0], value: parseFloat(capital.toFixed(4)) });
+              cursor.setMonth(cursor.getMonth() + 1);
+            }
+          } else {
+            // Monthly compounding
+            cursor.setMonth(cursor.getMonth() + 1);
+            while (cursor <= endDate) {
+              const monthlyRate = getValAt(cursor.toISOString().split('T')[0]) / 100 / 12;
+              capital = capital * (1 + monthlyRate) + effectiveMonthlyPayment;
+              paymentCount++;
+              dcaSeries.push({ date: cursor.toISOString().split('T')[0], value: parseFloat(capital.toFixed(4)) });
+              cursor.setMonth(cursor.getMonth() + 1);
+            }
+          }
+        } else {
+          // Price-based DCA
+          const t0Price = sortedData[0].value || 1;
+          const schedule: { date: string; cumUnits: number }[] = [];
+          let cumUnits = baseAmt / t0Price;
+          schedule.push({ date: sortedData[0].date, cumUnits });
+          const cursor = new Date(startDate);
+          cursor.setMonth(cursor.getMonth() + 1);
+          while (cursor <= endDate) {
+            const dateStr = cursor.toISOString().split('T')[0];
+            const price = getValAt(dateStr) || 1;
+            cumUnits += effectiveMonthlyPayment / price;
+            paymentCount++;
+            schedule.push({ date: dateStr, cumUnits });
+            cursor.setMonth(cursor.getMonth() + 1);
+          }
+          let schedIdx = 0;
+          let curUnits = 0;
+          for (const pt of sortedData) {
+            while (schedIdx < schedule.length && schedule[schedIdx].date <= pt.date) {
+              curUnits = schedule[schedIdx].cumUnits;
+              schedIdx++;
+            }
+            dcaSeries.push({ date: pt.date, value: parseFloat((curUnits * pt.value).toFixed(4)) });
+          }
+        }
+
+        if (dcaSeries.length < 2) return null;
+
+        // totalInvested uses actual payment count — never mismatched across products
+        const totalInvested = baseAmt + effectiveMonthlyPayment * paymentCount;
+        const finalValue = dcaSeries[dcaSeries.length - 1].value;
+        const totalReturn = (finalValue - totalInvested) / totalInvested * 100;
+
+        // Build IRR cash flows
+        const cashFlows: number[] = [-baseAmt];
+        for (let m = 0; m < paymentCount; m++) cashFlows.push(-effectiveMonthlyPayment);
+        cashFlows.push(finalValue);
+        const irr = calculateMonthlyIRR(cashFlows);
+
+        const portfolioStats = calculateAllStats(dcaSeries);
+
+        return {
+          key: ds.key,
+          title: ds.title,
+          suffix: '€',
+          color: ds.color,
+          isSavings,
+          startValue: baseAmt,
+          endValue: finalValue,
+          totalReturn,
+          annualizedReturn: irr,
+          volatility: portfolioStats.volatility,
+          maxDrawdown: portfolioStats.maxDrawdown,
+          sharpeRatio: portfolioStats.sharpeRatio,
+          totalInvested,
+        };
+      }
+
+      // ── Standard mode (no DCA) ──
       if (mode === 'percent') {
         if (isSavings) {
           const capSeries = computeCapitalizedSeries(ds.data, ds.key, baseAmt);
@@ -318,8 +465,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
 
       const stats = calculateAllStats(ds.data);
       return { key: ds.key, title: ds.title, suffix: ds.suffix, color: ds.color, isSavings: false, ...stats };
-    });
-  }, [brushFilteredData, mode, simulationActive, effectivePlacementAmount]);
+    }).filter(Boolean) as any[];
+  }, [brushFilteredData, mode, simulationActive, effectivePlacementAmount, effectiveMonthlyPayment]);
 
   // Toggle index selection
   const toggleIndex = (key: string) => {
@@ -340,6 +487,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     { value: '6M', label: '6M' },
     { value: '1A', label: '1A' },
     { value: '5A', label: '5A' },
+    { value: '10A', label: '10A' },
+    { value: '18A', label: '18A' },
+    { value: '20A', label: '20A' },
     { value: 'YTD', label: 'YTD' },
     { value: 'MAX', label: 'Max' },
   ];
@@ -496,6 +646,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                     onClick={() => {
                       setMode('real');
                       setUserOverrodeMode(true);
+                      setShowSimPanel(false);
+                      setSimulationActive(false);
                     }}
                     disabled={modeAnalysis.forceBase100}
                     className={cn(
@@ -525,6 +677,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                       onClick={() => {
                         setMode('absolute');
                         setUserOverrodeMode(true);
+                        setShowSimPanel(false);
+                        setSimulationActive(false);
                       }}
                       className="h-8"
                     >
@@ -545,11 +699,13 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant={mode === 'percent' ? 'default' : 'ghost'}
+                    variant={mode === 'percent' && !showSimPanel ? 'default' : 'ghost'}
                     size="sm"
                     onClick={() => {
                       setMode('percent');
                       setUserOverrodeMode(true);
+                      setShowSimPanel(false);
+                      setSimulationActive(false);
                     }}
                     className="h-8"
                   >
@@ -558,8 +714,36 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-xs">
                   <p className="text-sm">
-                    <strong>Base 100 :</strong> Normalise tous les indices à 100 au début de la période 
+                    <strong>Base 100 :</strong> Normalise tous les indices à 100 au début de la période
                     pour comparer les performances relatives (ex: +15% vs +8%)
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={showSimPanel ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => {
+                      setShowSimPanel(true);
+                      setMode('percent');
+                      setUserOverrodeMode(true);
+                    }}
+                    className={cn(
+                      "h-8",
+                      showSimPanel && simulationActive && "bg-green-600 hover:bg-green-700 text-white"
+                    )}
+                  >
+                    Base perso.
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p className="text-sm">
+                    <strong>Base personnalisée :</strong> Simule l'évolution d'un placement avec un montant initial
+                    et des versements mensuels optionnels.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -621,82 +805,77 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           ))}
         </div>
 
-        {/* Séparateur vertical */}
-        <div className="h-8 w-px bg-border hidden sm:block" />
-
-        {/* Simulation de placement */}
-        <div className="flex items-center gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-1.5">
-                  <Euro className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">Placement</span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-xs">
-                <p className="text-sm">
-                  <strong>Simulation de placement :</strong> Saisissez un montant pour simuler l'évolution d'un investissement 
-                  depuis la date de début de la période sélectionnée. Fonctionne en mode Base 100.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <input
-            type="number"
-            value={localPlacementAmount}
-            onChange={(e) => setLocalPlacementAmount(e.target.value)}
-            onBlur={() => setPlacementAmount(localPlacementAmount)}
-            onKeyDown={(e) => { if (e.key === 'Enter') setPlacementAmount(localPlacementAmount); }}
-            placeholder="1000"
-            min="1"
-            className={cn(
-              "h-8 w-24 px-2 text-sm rounded-md border bg-background text-foreground text-right",
-              simulationActive ? "border-primary ring-1 ring-primary/30" : "border-border"
-            )}
-          />
-          <span className="text-xs text-muted-foreground">€</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={simulationActive ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => {
-                    setSimulationActive(!simulationActive);
-                    if (!simulationActive) {
-                      // Force percent mode when activating simulation
-                      setMode('percent');
-                      setUserOverrodeMode(true);
-                    }
-                  }}
-                  className={cn(
-                    "h-8 gap-1",
-                    simulationActive && "bg-green-600 hover:bg-green-700 text-white"
-                  )}
-                >
-                  {simulationActive ? (
-                    <>
-                      <Square className="h-3 w-3" />
-                      Arrêter
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-3 w-3" />
-                      Simuler
-                    </>
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {simulationActive 
-                  ? "Désactiver la simulation de placement" 
-                  : "Activer la simulation de placement"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
       </div>
+
+      {/* Panneau simulation de placement (Base personnalisée) */}
+      {showSimPanel && (
+        <div className="bg-muted/40 rounded-lg border border-border px-4 py-3 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Euro className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Simulation placement</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Apport initial</span>
+            <input
+              type="number"
+              value={localPlacementAmount}
+              onChange={(e) => setLocalPlacementAmount(e.target.value)}
+              onBlur={() => setPlacementAmount(localPlacementAmount)}
+              onKeyDown={(e) => { if (e.key === 'Enter') setPlacementAmount(localPlacementAmount); }}
+              placeholder="1000"
+              min="1"
+              className="h-8 w-24 px-2 text-sm rounded-md border border-border bg-background text-foreground text-right"
+            />
+            <span className="text-xs text-muted-foreground">€</span>
+
+            <span className="text-xs text-muted-foreground">+</span>
+
+            <input
+              type="number"
+              value={localMonthlyPayment}
+              onChange={(e) => setLocalMonthlyPayment(e.target.value)}
+              onBlur={() => setMonthlyPayment(localMonthlyPayment)}
+              onKeyDown={(e) => { if (e.key === 'Enter') setMonthlyPayment(localMonthlyPayment); }}
+              placeholder="0"
+              min="0"
+              className="h-8 w-20 px-2 text-sm rounded-md border border-border bg-background text-foreground text-right"
+            />
+            <span className="text-xs text-muted-foreground whitespace-nowrap">€/mois</span>
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSimulationActive(true);
+                setMode('percent');
+                setUserOverrodeMode(true);
+                setPlacementAmount(localPlacementAmount);
+                setMonthlyPayment(localMonthlyPayment);
+              }}
+              className={cn(
+                "h-8 gap-1",
+                simulationActive && "border-green-600 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30"
+              )}
+            >
+              <Play className="h-3 w-3" />
+              Simuler
+            </Button>
+            <button
+              onClick={() => {
+                setShowSimPanel(false);
+                setSimulationActive(false);
+              }}
+              className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Fermer la simulation"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Message d'aide contextuel */}
       {selectedKeys.length > 1 && modeAnalysis.message && (
@@ -729,12 +908,14 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           <AlertDescription className="flex items-center gap-2 text-sm text-green-800 dark:text-green-300">
             <Euro className="h-4 w-4 flex-shrink-0 text-green-600" />
             <span>
-              <strong>Simulation active :</strong> Affichage de l'évolution de <strong>{effectivePlacementAmount.toLocaleString('fr-FR')}€</strong> investis 
-              depuis le début de la période. 
+              <strong>Simulation active :</strong> Évolution de <strong>{effectivePlacementAmount.toLocaleString('fr-FR')} €</strong>
+              {effectiveMonthlyPayment && effectiveMonthlyPayment > 0 && (
+                <> + <strong>{effectiveMonthlyPayment.toLocaleString('fr-FR')} €/mois</strong> (versements programmés — méthode DCA)</>
+              )}{' '}depuis le début de la période.
               {brushStartDate && (
-                <> Plage sélectionnée depuis le <strong>{new Date(brushStartDate).toLocaleDateString('fr-FR')}</strong>.</>
+                <> Plage depuis le <strong>{new Date(brushStartDate).toLocaleDateString('fr-FR')}</strong>.</>
               )}
-              {' '}Utilisez le slider sous le graphique pour ajuster la plage de dates.
+              {' '}Slider disponible sous le graphique.
             </span>
           </AlertDescription>
         </Alert>
@@ -772,6 +953,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           onToggleMA50={() => setShowMA50(!showMA50)}
           onToggleMA200={() => setShowMA200(!showMA200)}
           placementAmount={effectivePlacementAmount}
+          monthlyPayment={effectiveMonthlyPayment}
           onBrushChange={handleBrushChange}
           normalizeFromDate={normalizeFromDate}
           externalBrushStartDate={externalBrushStartDate}
@@ -818,6 +1000,21 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 <TableRow>
                   <TableHead className="w-[150px]">Indice</TableHead>
                   <TableHead className="text-right">Début</TableHead>
+                  {statistics.some(s => s?.totalInvested !== undefined) && (
+                    <TableHead className="text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help underline decoration-dotted">
+                            Investi
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p className="text-sm font-semibold mb-1">Capital investi total</p>
+                            <p className="text-sm">Somme de l'apport initial et de tous les versements mensuels sur la période.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                  )}
                   <TableHead className="text-right">Fin</TableHead>
                   <TableHead className="text-right">
                     <TooltipProvider>
@@ -901,6 +1098,11 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                     <TableCell className="text-right">
                       {formatNumber(stat.startValue)} {stat.suffix}
                     </TableCell>
+                    {statistics.some(s => s?.totalInvested !== undefined) && (
+                      <TableCell className="text-right text-muted-foreground">
+                        {stat.totalInvested !== undefined ? `${formatNumber(stat.totalInvested)} €` : '—'}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
                       {formatNumber(stat.endValue)} {stat.suffix}
                     </TableCell>

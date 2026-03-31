@@ -644,6 +644,54 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     category: 'crypto', categoryLabel: 'Crypto',
     source: 'Marchés crypto', sourceUrl: 'https://finance.yahoo.com/quote/XRP-USD'
   },
+
+  dax: {
+    title: 'DAX',
+    shortDescription: 'Indice boursier des 40 plus grandes entreprises allemandes cotées à Francfort. Baromètre de l\'économie européenne.',
+    fullDescription: `Le DAX (Deutscher Aktienindex) regroupe les 40 plus grandes capitalisations boursières allemandes cotées à la Bourse de Francfort. Il est fortement exposé à l'industrie, l'automobile (Volkswagen, BMW, Mercedes), la chimie (BASF), l'assurance (Allianz) et les technologies. Sa performance reflète étroitement la santé de l'économie réelle européenne et allemande.`,
+    importance: `Le DAX est le principal indicateur boursier de la zone euro avec le CAC 40. Très corrélé au cycle industriel mondial, il est sensible aux exportations allemandes (forte dépendance à la Chine), au prix de l'énergie et au cours de l'euro. À comparer systématiquement avec le CAC 40 et l'Euro Stoxx 50 pour une lecture européenne complète.`,
+    factors: ['Santé de l\'industrie automobile allemande', 'Exportations vers la Chine', 'Prix de l\'énergie (gaz)', 'Taux BCE et euro', 'Commandes industrielles en zone euro'],
+    insights: ['40 valeurs depuis 2021 (était 30)', 'Indice de performance (dividendes réinvestis)', 'SAP, Siemens, Allianz = top 3 pondérations', 'Très sensible aux tensions géopolitiques Russia/Ukraine'],
+    color: '#f59e0b', bgColor: '#fffbeb', darkBgColor: '#451a03',
+    category: 'stocks', categoryLabel: 'Actions',
+    source: 'Yahoo Finance', sourceUrl: 'https://finance.yahoo.com/quote/%5EGDAXI'
+  },
+
+  ftse: {
+    title: 'FTSE 100',
+    shortDescription: 'Indice des 100 plus grandes entreprises du London Stock Exchange. Très exposé aux matières premières et à la finance.',
+    fullDescription: `Le FTSE 100 (Financial Times Stock Exchange 100) regroupe les 100 plus grandes capitalisations cotées à Londres. Il est dominé par les secteurs pétrolier et gazier (Shell, BP), financier (HSBC, Barclays), pharmaceutique (AstraZeneca, GSK) et minier (Rio Tinto, Anglo American). La majorité des revenus des entreprises du FTSE 100 sont réalisés hors du Royaume-Uni.`,
+    importance: `Le FTSE 100 est libellé en livres sterling, ce qui implique un effet de change pour les investisseurs européens. Sa forte exposition aux matières premières en fait un indicateur utile du cycle mondial des ressources. À comparer avec le DAX et le CAC 40 pour évaluer les divergences de dynamique entre économies européennes post-Brexit.`,
+    factors: ['Cours du pétrole et des matières premières', 'Livre sterling (GBP/EUR)', 'Politique monétaire Bank of England', 'Brexit et accords commerciaux UK', 'Croissance des marchés émergents (expositions globales)'],
+    insights: ['~75% des revenus réalisés à l\'international', 'Très sensible au prix du pétrole (Shell, BP = ~15%)', 'Impact fort du GBP/EUR pour un investisseur euro', 'Dividendes élevés historiquement (>3.5% de rendement)'],
+    color: '#1d4ed8', bgColor: '#eff6ff', darkBgColor: '#1e3a5f',
+    category: 'stocks', categoryLabel: 'Actions',
+    source: 'Yahoo Finance', sourceUrl: 'https://finance.yahoo.com/quote/%5EFTSE'
+  },
+
+  nikkei: {
+    title: 'Nikkei 225',
+    shortDescription: 'Principal indice boursier japonais. Regroupe 225 grandes entreprises cotées à Tokyo, dont Toyota, Sony, SoftBank.',
+    fullDescription: `Le Nikkei 225 est l'indice boursier de référence du Japon, calculé depuis 1950. Il regroupe 225 valeurs sélectionnées parmi les plus liquides de la Bourse de Tokyo (TSE). Il est fortement exposé aux secteurs industriel, technologique et automobile. Son évolution est très influencée par le yen (JPY) : un yen faible favorise les exportateurs japonais.`,
+    importance: `Le Nikkei est l'indicateur clé pour suivre la troisième économie mondiale. Sa forte corrélation inverse avec le yen en fait un outil de lecture macro unique. La politique ultra-accommodante de la Banque du Japon (taux négatifs jusqu'en 2024) a longtemps maintenu des dynamiques atypiques. À suivre pour l'exposition Asie d'un portefeuille international.`,
+    factors: ['Cours du yen (JPY/EUR)', 'Politique monétaire Banque du Japon (BoJ)', 'Exportations automobiles et électroniques', 'Demande chinoise', 'Interventions du gouvernement japonais (fonds de pension)'],
+    insights: ['Indice pondéré par les prix (comme le Dow Jones)', 'Record historique dépassé en 2024 pour la 1ère fois depuis 1989', 'Toyota, Sony, SoftBank = top pondérations', 'Yen faible = Nikkei fort (corrélation forte)'],
+    color: '#dc2626', bgColor: '#fef2f2', darkBgColor: '#450a0a',
+    category: 'stocks', categoryLabel: 'Actions',
+    source: 'Yahoo Finance', sourceUrl: 'https://finance.yahoo.com/quote/%5EN225'
+  },
+
+  gaz: {
+    title: 'Gaz naturel',
+    shortDescription: 'Prix du gaz naturel (contrat futures Henry Hub, USD/MMBtu). Indicateur clé du coût de l\'énergie.',
+    fullDescription: `Le contrat futures sur le gaz naturel Henry Hub (NG=F) est la référence mondiale du prix du gaz aux États-Unis. En Europe, le TTF néerlandais est la référence locale, mais les deux marchés sont de plus en plus corrélés depuis 2022 avec l'essor du GNL américain exporté vers l'Europe. Le prix du gaz impacte directement les coûts de production industriels, l'inflation et la politique énergétique.`,
+    importance: `Depuis la crise énergétique de 2022 liée à la guerre en Ukraine, le gaz naturel est devenu un indicateur macro-économique de premier plan en Europe. Son prix influence directement l'inflation, la compétitivité industrielle et les décisions de la BCE. Utile pour contextualiser les anticipations d'inflation et les stratégies d'investissement dans les secteurs énergie et utilities.`,
+    factors: ['Températures hivernales (demande de chauffage)', 'Exportations de GNL américain', 'Niveaux de stockage en Europe', 'Géopolitique (Russie/Ukraine)', 'Transition énergétique et renouvelables'],
+    insights: ['Prix en USD/MMBtu (Henry Hub, référence US)', 'Corrélation avec pétrole partielle (substitution)', 'Pic historique en 2022 : >9 USD (crise énergie)', 'Revenu aux niveaux pré-crise début 2024'],
+    color: '#06b6d4', bgColor: '#ecfeff', darkBgColor: '#082f49',
+    category: 'commodities', categoryLabel: 'Matières premières',
+    source: 'Yahoo Finance', sourceUrl: 'https://finance.yahoo.com/quote/NG%3DF'
+  },
 };
 
 export const CATEGORY_CONFIG = {

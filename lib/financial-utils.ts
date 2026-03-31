@@ -14,6 +14,7 @@ export interface FinancialStats {
   volatility: number;
   maxDrawdown: number;
   sharpeRatio: number;
+  totalInvested?: number;
 }
 
 /**
@@ -110,6 +111,35 @@ export function calculateSharpeRatio(data: DataPoint[]): number {
 }
 
 /**
+ * Calculate annualized IRR for a series of equal-interval monthly cash flows.
+ * Cash flows: negative = outflows, positive = inflows.
+ * Uses Newton-Raphson iteration.
+ * Returns annualized IRR as a percentage.
+ */
+export function calculateMonthlyIRR(cashFlows: number[]): number {
+  if (cashFlows.length < 2) return 0;
+
+  let r = 0.005; // initial guess: 0.5% per month
+  for (let iter = 0; iter < 200; iter++) {
+    let npv = 0;
+    let dnpv = 0;
+    for (let t = 0; t < cashFlows.length; t++) {
+      const factor = Math.pow(1 + r, t);
+      npv += cashFlows[t] / factor;
+      if (t > 0) {
+        dnpv -= t * cashFlows[t] / (factor * (1 + r));
+      }
+    }
+    if (Math.abs(dnpv) < 1e-15) break;
+    const delta = npv / dnpv;
+    r -= delta;
+    if (Math.abs(delta) < 1e-12) break;
+  }
+
+  return (Math.pow(1 + r, 12) - 1) * 100;
+}
+
+/**
  * Calculate correlation between two series
  */
 export function calculateCorrelation(data1: DataPoint[], data2: DataPoint[]): number {
@@ -196,7 +226,7 @@ export function calculateAllStats(data: DataPoint[]): FinancialStats {
  */
 export function filterDataByPeriod(
   data: DataPoint[],
-  period: '1M' | '3M' | '6M' | '1A' | '5A' | 'YTD' | 'MAX',
+  period: '1M' | '3M' | '6M' | '1A' | '5A' | '10A' | '18A' | '20A' | 'YTD' | 'MAX',
   customStart?: Date,
   customEnd?: Date
 ): DataPoint[] {
@@ -206,12 +236,17 @@ export function filterDataByPeriod(
   let startDate: Date;
   
   if (customStart && customEnd) {
-    startDate = customStart;
-    const endDate = customEnd;
-    return data.filter(d => {
-      const date = new Date(d.date);
-      return date >= startDate && date <= endDate;
-    });
+    const startDateStr = customStart.toISOString().split('T')[0];
+    const endDateStr = customEnd.toISOString().split('T')[0];
+    const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+    const filtered = sorted.filter(d => d.date >= startDateStr && d.date <= endDateStr);
+    if (filtered.length === 0 || filtered[0].date > startDateStr) {
+      const lastBefore = sorted.filter(d => d.date < startDateStr).pop();
+      if (lastBefore) {
+        return [{ ...lastBefore, date: startDateStr }, ...filtered];
+      }
+    }
+    return filtered;
   }
   
   switch (period) {
@@ -230,14 +265,36 @@ export function filterDataByPeriod(
     case '5A':
       startDate = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate());
       break;
+    case '10A':
+      startDate = new Date(now.getFullYear() - 10, now.getMonth(), now.getDate());
+      break;
+    case '18A':
+      startDate = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
+      break;
+    case '20A':
+      startDate = new Date(now.getFullYear() - 20, now.getMonth(), now.getDate());
+      break;
     case 'YTD':
       startDate = new Date(now.getFullYear(), 0, 1);
       break;
     default:
       return data;
   }
-  
-  return data.filter(d => new Date(d.date) >= startDate);
+
+  const startDateStr = startDate.toISOString().split('T')[0];
+  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+  const filtered = sorted.filter(d => d.date >= startDateStr);
+
+  // For sparse data (e.g. rate series), inject a synthetic point at startDate
+  // carrying the last known value before the period, so the chart starts at the right date.
+  if (filtered.length === 0 || filtered[0].date > startDateStr) {
+    const lastBefore = sorted.filter(d => d.date < startDateStr).pop();
+    if (lastBefore) {
+      return [{ ...lastBefore, date: startDateStr }, ...filtered];
+    }
+  }
+
+  return filtered;
 }
 
 /**

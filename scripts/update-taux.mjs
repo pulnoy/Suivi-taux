@@ -865,6 +865,7 @@ function getScpiHistory() {
   ];
 }
 
+
 // ─────────────────────────────────────────────────────────────
 // 13. FONDS EUROS — Taux moyen marché (France Assureurs / ACPR)
 //     Données annuelles hardcodées, mise à jour 1x/an (mars)
@@ -952,6 +953,9 @@ async function main() {
   const historyCac40    = await fetchYahooHistoryWithFallback('%5EFCHI');
   const historyCacMid   = await fetchYahooHistoryWithFallback('C6E.PA');
   const historyStoxx50  = await fetchYahooHistoryWithFallback('%5ESTOXX50E');
+  const historyDax      = await fetchYahooHistoryWithFallback('%5EGDAXI');
+  const historyFtse     = await fetchYahooHistoryWithFallback('%5EFTSE');
+  const historyNikkei   = await fetchYahooHistoryWithFallback('%5EN225');
   const historySP500    = await fetchYahooHistoryWithFallback('%5EGSPC');
   const historyNasdaq   = await fetchYahooHistoryWithFallback('%5ENDX');
   const historyWorld    = await fetchYahooHistoryWithFallback('URTH');
@@ -961,6 +965,7 @@ async function main() {
   console.log("\n💰 Récupération matières premières et crypto...");
   const historyBrent = await fetchYahooHistoryWithFallback('BZ=F');
   const historyGold  = await fetchYahooHistoryWithFallback('GC=F');
+  const historyGaz   = await fetchYahooHistoryWithFallback('NG=F');
   const historyBtc   = await fetchYahooHistoryWithFallback('BTC-USD');
   const historyEth   = await fetchYahooHistoryWithFallback('ETH-USD');
   const historySol   = await fetchYahooHistoryWithFallback('SOL-USD');
@@ -1028,20 +1033,22 @@ async function main() {
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
     indices: {
-      // Taux & Épargne
+      // Taux de marché
       oat:          { titre: "OAT 10 ans",        valeur: getLast(historyOat),          suffixe: "%", historique: historyOat },
       tec10:        { titre: "TEC 10 ans",         valeur: getLast(historyTec10),         suffixe: "%", historique: historyTec10 },
-      inflation:    { titre: "Inflation France",   valeur: getLast(historyInflation),     suffixe: "%", historique: historyInflation },
       estr:         { titre: "€STR",               valeur: getLast(historyEstr),          suffixe: "%", historique: historyEstr },
       tauxDepotBCE: { titre: "Taux dépôt BCE",     valeur: getLast(historyTauxDepotBCE),  suffixe: "%", historique: historyTauxDepotBCE },
+      inflation:    { titre: "Inflation France",   valeur: getLast(historyInflation),     suffixe: "%", historique: historyInflation },
+
+      // Épargne réglementée
       livreta:      { titre: "Livret A",           valeur: getLast(historyLivretA),       suffixe: "%", historique: historyLivretA },
       pel:          { titre: "PEL",                valeur: getLast(historyPel),           suffixe: "%", historique: historyPel },
       fondsEuros:   { titre: "Fonds euros (moy.)", valeur: getLast(historyFondsEuros),    suffixe: "%", historique: historyFondsEuros },
 
       // Immobilier
-      tauxImmo:     { titre: "Taux crédit immo",   valeur: getLast(historyTauxImmo),      suffixe: "%", historique: historyTauxImmo },
-      prixImmo:     { titre: "Prix immo (var. an.)", valeur: getLast(historyPrixImmo),    suffixe: "%", historique: historyPrixImmo },
-      scpi:         { titre: "Moyenne SCPI",       valeur: getLast(historyScpi),          suffixe: "%", historique: historyScpi },
+      tauxImmo:     { titre: "Taux crédit immo",      valeur: getLast(historyTauxImmo),      suffixe: "%", historique: historyTauxImmo },
+      prixImmo:     { titre: "Prix immo (var. an.)",   valeur: getLast(historyPrixImmo),      suffixe: "%", historique: historyPrixImmo },
+      scpi:         { titre: "Moyenne SCPI",           valeur: getLast(historyScpi),          suffixe: "%", historique: historyScpi },
 
       // Devises
       eurusd:   createIndexData("EUR / USD", getLast(historyEurUsd), "$",   historyEurUsd),
@@ -1054,14 +1061,18 @@ async function main() {
       cac40:    createIndexData("CAC 40",        getLast(historyCac40),    "pts", historyCac40),
       cacmid:   createIndexData("CAC Mid 60",    getLast(historyCacMid),   "pts", historyCacMid),
       stoxx50:  createIndexData("Euro Stoxx 50", getLast(historyStoxx50),  "pts", historyStoxx50),
-      sp500:    createIndexData("S&P 500",        getLast(historySP500),    "pts", historySP500),
-      nasdaq:   createIndexData("Nasdaq 100",    getLast(historyNasdaq),   "pts", historyNasdaq),
-      world:    createIndexData("MSCI World",    getLast(historyWorld),    "$",   historyWorld),
-      emerging: createIndexData("Émergents",     getLast(historyEmerging), "$",   historyEmerging),
+      dax:      createIndexData("DAX",           getLast(historyDax),     "pts", historyDax),
+      ftse:     createIndexData("FTSE 100",      getLast(historyFtse),    "pts", historyFtse),
+      nikkei:   createIndexData("Nikkei 225",    getLast(historyNikkei),  "pts", historyNikkei),
+      sp500:    createIndexData("S&P 500",        getLast(historySP500),   "pts", historySP500),
+      nasdaq:   createIndexData("Nasdaq 100",    getLast(historyNasdaq),  "pts", historyNasdaq),
+      world:    createIndexData("MSCI World",    getLast(historyWorld),   "$",   historyWorld),
+      emerging: createIndexData("Émergents",     getLast(historyEmerging),"$",   historyEmerging),
 
       // Matières premières
-      brent:    createIndexData("Pétrole (Brent)", getLast(historyBrent), "$", historyBrent),
-      gold:     createIndexData("Or (Once)",       getLast(historyGold),  "$", historyGold),
+      brent:    createIndexData("Pétrole (Brent)",  getLast(historyBrent), "$", historyBrent),
+      gold:     createIndexData("Or (Once)",         getLast(historyGold),  "$", historyGold),
+      gaz:      createIndexData("Gaz naturel (TTF)", getLast(historyGaz),   "$", historyGaz),
 
       // Crypto
       btc:      createIndexData("Bitcoin",   getLast(historyBtc), "$", historyBtc),
