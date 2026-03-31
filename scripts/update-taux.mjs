@@ -894,30 +894,27 @@ function getScpiHistory() {
 // ─────────────────────────────────────────────────────────────
 function getLepHistory() {
   const rates = [
-    { date: '2000-01-01', value: 3.00 },  // Livret A 3% + prime
+    { date: '2000-01-01', value: 3.00 },
     { date: '2003-08-01', value: 2.75 },
-    { date: '2006-08-01', value: 2.75 },
     { date: '2007-08-01', value: 3.00 },
     { date: '2008-02-01', value: 3.50 },
     { date: '2008-08-01', value: 4.00 },
     { date: '2009-02-01', value: 3.00 },
     { date: '2009-08-01', value: 2.25 },
-    { date: '2011-08-01', value: 2.75 },
-    { date: '2012-02-01', value: 2.75 },
-    { date: '2013-02-01', value: 2.25 },
-    { date: '2013-08-01', value: 1.75 },
+    { date: '2011-08-01', value: 2.50 },
+    { date: '2013-02-01', value: 2.75 },
+    { date: '2013-08-01', value: 2.25 },
     { date: '2014-08-01', value: 1.50 },
-    { date: '2015-08-01', value: 1.25 },  // Livret A 0.75% + 0.5%
-    { date: '2020-02-01', value: 1.00 },  // Livret A 0.50% + 0.5%
+    { date: '2020-02-01', value: 1.00 },
     { date: '2022-02-01', value: 2.20 },
     { date: '2022-08-01', value: 4.60 },
     { date: '2023-02-01', value: 6.10 },
-    { date: '2023-08-01', value: 6.10 },  // maintenu
+    { date: '2023-08-01', value: 6.00 },
     { date: '2024-02-01', value: 5.00 },
     { date: '2024-08-01', value: 4.00 },
     { date: '2025-02-01', value: 3.50 },
-    { date: '2025-08-01', value: 3.10 },
-    { date: '2026-02-01', value: 2.80 },
+    { date: '2025-08-01', value: 2.70 },
+    { date: '2026-02-01', value: 2.50 },
   ];
   return rates.map(r => ({ ...r, timestamp: new Date(r.date).getTime() }));
 }
