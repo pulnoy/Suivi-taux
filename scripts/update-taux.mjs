@@ -147,30 +147,6 @@ async function getOatRecentFromECB() {
   }
 }
 
-// Récupère une série ECB SDW générique au format XML SDMX
-async function fetchECBSeriesXML(ecbKey, label) {
-  try {
-    const url = `https://data-api.ecb.europa.eu/service/data/FM/${ecbKey}?startPeriod=2000-01-01`;
-    const resp = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/xml' } });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const xml = await resp.text();
-    const observations = [];
-    const regex = /TIME_PERIOD value="([^"]+)"[^/]*\/>\s*<[^:]*:ObsValue value="([^"]+)"/g;
-    let m;
-    while ((m = regex.exec(xml)) !== null) {
-      const date = m[1];
-      const val = parseFloat(m[2]);
-      if (!isNaN(val)) observations.push({ date, value: parseFloat(val.toFixed(3)), timestamp: new Date(date).getTime() });
-    }
-    observations.sort((a, b) => a.timestamp - b.timestamp);
-    console.log(`  ✓ ${label}: ${observations.length} points, dernier: ${observations[observations.length-1]?.date} = ${observations[observations.length-1]?.value}`);
-    return observations;
-  } catch(e) {
-    console.error(`  ❌ ${label} ECB:`, e.message);
-    return existingData?.indices?.[label]?.historique ?? [];
-  }
-}
-
 // Fusion FRED (historique long) + BCE (données récentes)
 async function getOatHistory() {
   // 1. Récupérer l'historique long depuis FRED
@@ -889,128 +865,6 @@ function getScpiHistory() {
   ];
 }
 
-// ─────────────────────────────────────────────────────────────
-// LEP — Taux réglementé (mis à jour manuellement)
-// ─────────────────────────────────────────────────────────────
-function getLepHistory() {
-  const rates = [
-    { date: '2000-01-01', value: 3.00 },
-    { date: '2003-08-01', value: 2.75 },
-    { date: '2007-08-01', value: 3.00 },
-    { date: '2008-02-01', value: 3.50 },
-    { date: '2008-08-01', value: 4.00 },
-    { date: '2009-02-01', value: 3.00 },
-    { date: '2009-08-01', value: 2.25 },
-    { date: '2011-08-01', value: 2.50 },
-    { date: '2013-02-01', value: 2.75 },
-    { date: '2013-08-01', value: 2.25 },
-    { date: '2014-08-01', value: 1.50 },
-    { date: '2020-02-01', value: 1.00 },
-    { date: '2022-02-01', value: 2.20 },
-    { date: '2022-08-01', value: 4.60 },
-    { date: '2023-02-01', value: 6.10 },
-    { date: '2023-08-01', value: 6.00 },
-    { date: '2024-02-01', value: 5.00 },
-    { date: '2024-08-01', value: 4.00 },
-    { date: '2025-02-01', value: 3.50 },
-    { date: '2025-08-01', value: 2.70 },
-    { date: '2026-02-01', value: 2.50 },
-  ];
-  return rates.map(r => ({ ...r, timestamp: new Date(r.date).getTime() }));
-}
-
-// ─────────────────────────────────────────────────────────────
-// Taux d'usure — BdF trimestriel, immobilier >20 ans (hardcodé)
-// ─────────────────────────────────────────────────────────────
-function getTauxUsureHistory() {
-  const rates = [
-    { date: '2016-01-01', value: 3.25 }, { date: '2016-07-01', value: 3.05 },
-    { date: '2017-01-01', value: 2.97 }, { date: '2017-07-01', value: 2.95 },
-    { date: '2018-01-01', value: 2.95 }, { date: '2018-07-01', value: 2.97 },
-    { date: '2019-01-01', value: 3.05 }, { date: '2019-07-01', value: 2.97 },
-    { date: '2020-01-01', value: 2.67 }, { date: '2020-07-01', value: 2.57 },
-    { date: '2021-01-01', value: 2.57 }, { date: '2021-07-01', value: 2.41 },
-    { date: '2022-01-01', value: 2.41 }, { date: '2022-07-01', value: 2.57 },
-    { date: '2022-10-01', value: 3.05 }, { date: '2023-01-01', value: 3.57 },
-    { date: '2023-04-01', value: 4.24 }, { date: '2023-07-01', value: 5.09 },
-    { date: '2023-10-01', value: 5.80 }, { date: '2024-01-01', value: 6.29 },
-    { date: '2024-04-01', value: 6.39 }, { date: '2024-07-01', value: 6.39 },
-    { date: '2024-10-01', value: 6.18 }, { date: '2025-01-01', value: 5.94 },
-    { date: '2025-04-01', value: 5.78 }, { date: '2025-07-01', value: 5.52 },
-    { date: '2025-10-01', value: 5.40 }, { date: '2026-01-01', value: 5.28 },
-  ];
-  return rates.map(r => ({ ...r, timestamp: new Date(r.date).getTime() }));
-}
-
-// ─────────────────────────────────────────────────────────────
-// Taux d'épargne des ménages — INSEE BDM (série 000872483)
-// Fallback hardcodé si pas de token INSEE
-// ─────────────────────────────────────────────────────────────
-async function getTauxEpargneHistory() {
-  try {
-    const seriesId = '000872483';
-    const url = `https://api.insee.fr/series/BDM/V1/data/SERIES_BDM/${seriesId}?startPeriod=2000-Q1`;
-    const resp = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/xml', 'Authorization': 'Bearer ' + (process.env.INSEE_TOKEN || '') } });
-    // If no token, use hardcoded fallback
-    if (!resp.ok) throw new Error('no INSEE token or HTTP ' + resp.status);
-    const xml = await resp.text();
-    const observations = [];
-    const regex = /TIME_PERIOD value="([^"]+)"[^/]*\/>\s*<[^:]*:ObsValue value="([^"]+)"/g;
-    let m;
-    while ((m = regex.exec(xml)) !== null) {
-      const date = m[1].replace(/Q(\d)/, (_, q) => `-${String((parseInt(q)-1)*3+1).padStart(2,'0')}-01`);
-      const val = parseFloat(m[2]);
-      if (!isNaN(val)) observations.push({ date, value: parseFloat(val.toFixed(1)), timestamp: new Date(date).getTime() });
-    }
-    if (observations.length > 10) {
-      observations.sort((a,b) => a.timestamp - b.timestamp);
-      console.log(`  ✓ Taux épargne INSEE: ${observations.length} points`);
-      return observations;
-    }
-    throw new Error('not enough data');
-  } catch(e) {
-    console.log('  ⚠️ Taux épargne: fallback hardcodé');
-    const data = [
-      { date: '2000-01-01', value: 15.9 }, { date: '2001-01-01', value: 16.0 },
-      { date: '2002-01-01', value: 16.7 }, { date: '2003-01-01', value: 16.6 },
-      { date: '2004-01-01', value: 16.0 }, { date: '2005-01-01', value: 15.3 },
-      { date: '2006-01-01', value: 15.2 }, { date: '2007-01-01', value: 15.5 },
-      { date: '2008-01-01', value: 15.8 }, { date: '2009-01-01', value: 16.4 },
-      { date: '2010-01-01', value: 16.1 }, { date: '2011-01-01', value: 16.8 },
-      { date: '2012-01-01', value: 15.7 }, { date: '2013-01-01', value: 15.1 },
-      { date: '2014-01-01', value: 14.7 }, { date: '2015-01-01', value: 14.5 },
-      { date: '2016-01-01', value: 14.2 }, { date: '2017-01-01', value: 14.3 },
-      { date: '2018-01-01', value: 14.5 }, { date: '2019-01-01', value: 15.0 },
-      { date: '2020-01-01', value: 21.4 }, { date: '2021-01-01', value: 19.5 },
-      { date: '2022-01-01', value: 17.2 }, { date: '2023-01-01', value: 17.6 },
-      { date: '2024-01-01', value: 18.2 }, { date: '2025-01-01', value: 17.8 },
-    ];
-    return data.map(r => ({ ...r, timestamp: new Date(r.date).getTime() }));
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Rendement locatif net — FNAIM/IEIF approximations (hardcodé)
-// ─────────────────────────────────────────────────────────────
-function getRendLocatifNetHistory() {
-  const rates = [
-    { date: '2000-01-01', value: 5.2 }, { date: '2001-01-01', value: 5.0 },
-    { date: '2002-01-01', value: 4.8 }, { date: '2003-01-01', value: 4.5 },
-    { date: '2004-01-01', value: 4.2 }, { date: '2005-01-01', value: 3.9 },
-    { date: '2006-01-01', value: 3.7 }, { date: '2007-01-01', value: 3.5 },
-    { date: '2008-01-01', value: 3.6 }, { date: '2009-01-01', value: 3.8 },
-    { date: '2010-01-01', value: 3.6 }, { date: '2011-01-01', value: 3.5 },
-    { date: '2012-01-01', value: 3.4 }, { date: '2013-01-01', value: 3.3 },
-    { date: '2014-01-01', value: 3.2 }, { date: '2015-01-01', value: 3.3 },
-    { date: '2016-01-01', value: 3.4 }, { date: '2017-01-01', value: 3.3 },
-    { date: '2018-01-01', value: 3.2 }, { date: '2019-01-01', value: 3.0 },
-    { date: '2020-01-01', value: 2.8 }, { date: '2021-01-01', value: 2.9 },
-    { date: '2022-01-01', value: 3.1 }, { date: '2023-01-01', value: 3.4 },
-    { date: '2024-01-01', value: 3.6 }, { date: '2025-01-01', value: 3.7 },
-    { date: '2026-01-01', value: 3.8 },
-  ];
-  return rates.map(r => ({ ...r, timestamp: new Date(r.date).getTime() }));
-}
 
 // ─────────────────────────────────────────────────────────────
 // 13. FONDS EUROS — Taux moyen marché (France Assureurs / ACPR)
@@ -1122,10 +976,6 @@ async function main() {
   const historyTauxDepotBCE = await getTauxDepotBCEHistory();
   const historyScpi         = getScpiHistory();
   const historyFondsEuros   = getFondsEurosHistory();
-  const historyLep          = getLepHistory();
-  const historyTauxUsure    = getTauxUsureHistory();
-  const historyTauxEpargne  = await getTauxEpargneHistory();
-  const historyRendLocatif  = getRendLocatifNetHistory();
 
   const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : 0;
 
@@ -1188,19 +1038,13 @@ async function main() {
 
       // Épargne réglementée
       livreta:      { titre: "Livret A",           valeur: getLast(historyLivretA),       suffixe: "%", historique: historyLivretA },
-      lep:          { titre: "LEP",                valeur: getLast(historyLep),           suffixe: "%", historique: historyLep },
       pel:          { titre: "PEL",                valeur: getLast(historyPel),           suffixe: "%", historique: historyPel },
       fondsEuros:   { titre: "Fonds euros (moy.)", valeur: getLast(historyFondsEuros),    suffixe: "%", historique: historyFondsEuros },
 
-      // Économie ménages
-      tauxEpargne:  { titre: "Taux d'épargne",     valeur: getLast(historyTauxEpargne),   suffixe: "%", historique: historyTauxEpargne },
-
       // Immobilier
       tauxImmo:     { titre: "Taux crédit immo",      valeur: getLast(historyTauxImmo),      suffixe: "%", historique: historyTauxImmo },
-      tauxUsure:    { titre: "Taux d'usure",           valeur: getLast(historyTauxUsure),     suffixe: "%", historique: historyTauxUsure },
       prixImmo:     { titre: "Prix immo (var. an.)",   valeur: getLast(historyPrixImmo),      suffixe: "%", historique: historyPrixImmo },
       scpi:         { titre: "Moyenne SCPI",           valeur: getLast(historyScpi),          suffixe: "%", historique: historyScpi },
-      rendLocatif:  { titre: "Rendement locatif net",  valeur: getLast(historyRendLocatif),   suffixe: "%", historique: historyRendLocatif },
 
       // Devises
       eurusd:   createIndexData("EUR / USD", getLast(historyEurUsd), "$",   historyEurUsd),
@@ -1240,12 +1084,8 @@ async function main() {
   console.log(`  Taux dépôt   : ${nouvellesDonnees.indices.tauxDepotBCE.valeur}% (dernier: ${historyTauxDepotBCE[historyTauxDepotBCE.length-1]?.date ?? 'N/A'})`);
   console.log(`  Livret A     : ${nouvellesDonnees.indices.livreta.valeur}% (dernier: ${historyLivretA[historyLivretA.length-1]?.date ?? 'N/A'})`);
   console.log(`  PEL          : ${nouvellesDonnees.indices.pel.valeur}% (dernier: ${historyPel[historyPel.length-1]?.date ?? 'N/A'})`);
-  console.log(`  LEP          : ${nouvellesDonnees.indices.lep.valeur}% (dernier: ${historyLep[historyLep.length-1]?.date ?? 'N/A'})`);
   console.log(`  Taux immo    : ${nouvellesDonnees.indices.tauxImmo.valeur}% (dernier: ${historyTauxImmo[historyTauxImmo.length-1]?.date ?? 'N/A'})`);
   console.log(`  Prix immo    : ${nouvellesDonnees.indices.prixImmo.valeur}% var/an (dernier: ${historyPrixImmo[historyPrixImmo.length-1]?.date ?? 'N/A'})`);
-  console.log(`  Taux usure   : ${nouvellesDonnees.indices.tauxUsure.valeur}% (dernier: ${historyTauxUsure[historyTauxUsure.length-1]?.date ?? 'N/A'})`);
-  console.log(`  Rend. locatif: ${nouvellesDonnees.indices.rendLocatif.valeur}% (dernier: ${historyRendLocatif[historyRendLocatif.length-1]?.date ?? 'N/A'})`);
-  console.log(`  Taux épargne : ${nouvellesDonnees.indices.tauxEpargne.valeur}% (dernier: ${historyTauxEpargne[historyTauxEpargne.length-1]?.date ?? 'N/A'})`);
   console.log(`  €STR         : ${nouvellesDonnees.indices.estr.valeur}% (dernier: ${historyEstr[historyEstr.length-1]?.date ?? 'N/A'})`);
 
   const dir = path.dirname(FILE_PATH);
