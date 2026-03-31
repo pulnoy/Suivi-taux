@@ -894,18 +894,30 @@ function getScpiHistory() {
 // ─────────────────────────────────────────────────────────────
 function getLepHistory() {
   const rates = [
-    { date: '2000-01-01', value: 2.25 }, { date: '2003-08-01', value: 2.25 },
-    { date: '2005-08-01', value: 2.25 }, { date: '2006-08-01', value: 2.75 },
-    { date: '2007-08-01', value: 3.00 }, { date: '2008-02-01', value: 3.50 },
-    { date: '2008-08-01', value: 4.00 }, { date: '2009-02-01', value: 2.50 },
-    { date: '2009-08-01', value: 1.75 }, { date: '2011-08-01', value: 2.25 },
-    { date: '2012-02-01', value: 2.75 }, { date: '2013-08-01', value: 1.75 },
-    { date: '2014-08-01', value: 1.25 }, { date: '2015-08-01', value: 1.00 },
-    { date: '2016-08-01', value: 0.75 }, { date: '2017-02-01', value: 0.75 },
-    { date: '2020-02-01', value: 0.50 }, { date: '2022-02-01', value: 2.20 },
-    { date: '2022-08-01', value: 4.60 }, { date: '2023-02-01', value: 6.10 },
-    { date: '2024-01-01', value: 5.00 }, { date: '2024-08-01', value: 4.00 },
-    { date: '2025-02-01', value: 3.50 }, { date: '2026-02-01', value: 2.80 },
+    { date: '2000-01-01', value: 3.00 },  // Livret A 3% + prime
+    { date: '2003-08-01', value: 2.75 },
+    { date: '2006-08-01', value: 2.75 },
+    { date: '2007-08-01', value: 3.00 },
+    { date: '2008-02-01', value: 3.50 },
+    { date: '2008-08-01', value: 4.00 },
+    { date: '2009-02-01', value: 3.00 },
+    { date: '2009-08-01', value: 2.25 },
+    { date: '2011-08-01', value: 2.75 },
+    { date: '2012-02-01', value: 2.75 },
+    { date: '2013-02-01', value: 2.25 },
+    { date: '2013-08-01', value: 1.75 },
+    { date: '2014-08-01', value: 1.50 },
+    { date: '2015-08-01', value: 1.25 },  // Livret A 0.75% + 0.5%
+    { date: '2020-02-01', value: 1.00 },  // Livret A 0.50% + 0.5%
+    { date: '2022-02-01', value: 2.20 },
+    { date: '2022-08-01', value: 4.60 },
+    { date: '2023-02-01', value: 6.10 },
+    { date: '2023-08-01', value: 6.10 },  // maintenu
+    { date: '2024-02-01', value: 5.00 },
+    { date: '2024-08-01', value: 4.00 },
+    { date: '2025-02-01', value: 3.50 },
+    { date: '2025-08-01', value: 3.10 },
+    { date: '2026-02-01', value: 2.80 },
   ];
   return rates.map(r => ({ ...r, timestamp: new Date(r.date).getTime() }));
 }
@@ -1170,24 +1182,28 @@ async function main() {
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
     indices: {
-      // Taux & Épargne
+      // Taux de marché
       oat:          { titre: "OAT 10 ans",        valeur: getLast(historyOat),          suffixe: "%", historique: historyOat },
       tec10:        { titre: "TEC 10 ans",         valeur: getLast(historyTec10),         suffixe: "%", historique: historyTec10 },
-      inflation:    { titre: "Inflation France",   valeur: getLast(historyInflation),     suffixe: "%", historique: historyInflation },
       estr:         { titre: "€STR",               valeur: getLast(historyEstr),          suffixe: "%", historique: historyEstr },
       tauxDepotBCE: { titre: "Taux dépôt BCE",     valeur: getLast(historyTauxDepotBCE),  suffixe: "%", historique: historyTauxDepotBCE },
+      inflation:    { titre: "Inflation France",   valeur: getLast(historyInflation),     suffixe: "%", historique: historyInflation },
+
+      // Épargne réglementée
       livreta:      { titre: "Livret A",           valeur: getLast(historyLivretA),       suffixe: "%", historique: historyLivretA },
+      lep:          { titre: "LEP",                valeur: getLast(historyLep),           suffixe: "%", historique: historyLep },
       pel:          { titre: "PEL",                valeur: getLast(historyPel),           suffixe: "%", historique: historyPel },
       fondsEuros:   { titre: "Fonds euros (moy.)", valeur: getLast(historyFondsEuros),    suffixe: "%", historique: historyFondsEuros },
-      lep:          { titre: "LEP",               valeur: getLast(historyLep),            suffixe: "%", historique: historyLep },
-      tauxEpargne:  { titre: "Taux d'épargne",    valeur: getLast(historyTauxEpargne),    suffixe: "%", historique: historyTauxEpargne },
+
+      // Économie ménages
+      tauxEpargne:  { titre: "Taux d'épargne",     valeur: getLast(historyTauxEpargne),   suffixe: "%", historique: historyTauxEpargne },
 
       // Immobilier
-      tauxImmo:     { titre: "Taux crédit immo",   valeur: getLast(historyTauxImmo),      suffixe: "%", historique: historyTauxImmo },
-      prixImmo:     { titre: "Prix immo (var. an.)", valeur: getLast(historyPrixImmo),    suffixe: "%", historique: historyPrixImmo },
-      scpi:         { titre: "Moyenne SCPI",       valeur: getLast(historyScpi),          suffixe: "%", historique: historyScpi },
-      tauxUsure:    { titre: "Taux d'usure",       valeur: getLast(historyTauxUsure),     suffixe: "%", historique: historyTauxUsure },
-      rendLocatif:  { titre: "Rendement locatif net", valeur: getLast(historyRendLocatif), suffixe: "%", historique: historyRendLocatif },
+      tauxImmo:     { titre: "Taux crédit immo",      valeur: getLast(historyTauxImmo),      suffixe: "%", historique: historyTauxImmo },
+      tauxUsure:    { titre: "Taux d'usure",           valeur: getLast(historyTauxUsure),     suffixe: "%", historique: historyTauxUsure },
+      prixImmo:     { titre: "Prix immo (var. an.)",   valeur: getLast(historyPrixImmo),      suffixe: "%", historique: historyPrixImmo },
+      scpi:         { titre: "Moyenne SCPI",           valeur: getLast(historyScpi),          suffixe: "%", historique: historyScpi },
+      rendLocatif:  { titre: "Rendement locatif net",  valeur: getLast(historyRendLocatif),   suffixe: "%", historique: historyRendLocatif },
 
       // Devises
       eurusd:   createIndexData("EUR / USD", getLast(historyEurUsd), "$",   historyEurUsd),
