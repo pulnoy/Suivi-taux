@@ -281,16 +281,52 @@ export function EnhancedChart({
         };
 
         if (isSav) {
+          const COMPOUND_RULES: Record<string, string> = {
+            livreta: 'annual', pel: 'annual', fondsEuros: 'annual',
+            scpi: 'quarterly',
+            oat: 'monthly', tec10: 'monthly', tauxImmo: 'monthly', tauxDepotBCE: 'monthly', estr: 'monthly',
+          };
+          const rule = COMPOUND_RULES[ds.key] || 'monthly';
           let capital = baseAmount;
           snapshots2[sorted2[0].date] = capital;
           const cursor = new Date(startDate2);
-          cursor.setMonth(cursor.getMonth() + 1);
-          while (cursor <= endDate2) {
-            const dateStr = cursor.toISOString().split('T')[0];
-            const monthlyRate = getValAt2(dateStr) / 100 / 12;
-            capital = capital * (1 + monthlyRate) + monthlyPayment;
-            snapshots2[dateStr] = parseFloat(capital.toFixed(4));
+
+          if (rule === 'annual') {
+            let pendingInterest = 0;
+            let currentYear = startDate2.getFullYear();
             cursor.setMonth(cursor.getMonth() + 1);
+            while (cursor <= endDate2) {
+              const year = cursor.getFullYear();
+              if (year > currentYear) { capital += pendingInterest; pendingInterest = 0; currentYear = year; }
+              capital += monthlyPayment;
+              const accrual = getValAt2(cursor.toISOString().split('T')[0]) / 100 / 365 * 30.4375;
+              pendingInterest += capital * accrual;
+              snapshots2[cursor.toISOString().split('T')[0]] = parseFloat((capital + pendingInterest).toFixed(4));
+              cursor.setMonth(cursor.getMonth() + 1);
+            }
+          } else if (rule === 'quarterly') {
+            let quarter = Math.floor(startDate2.getMonth() / 3);
+            cursor.setMonth(cursor.getMonth() + 1);
+            while (cursor <= endDate2) {
+              const currentQuarter = Math.floor(cursor.getMonth() / 3);
+              if (currentQuarter !== quarter) {
+                const rate = getValAt2(cursor.toISOString().split('T')[0]) / 100 / 4;
+                capital = capital * (1 + rate);
+                quarter = currentQuarter;
+              }
+              capital += monthlyPayment;
+              snapshots2[cursor.toISOString().split('T')[0]] = parseFloat(capital.toFixed(4));
+              cursor.setMonth(cursor.getMonth() + 1);
+            }
+          } else {
+            cursor.setMonth(cursor.getMonth() + 1);
+            while (cursor <= endDate2) {
+              const dateStr = cursor.toISOString().split('T')[0];
+              const monthlyRate = getValAt2(dateStr) / 100 / 12;
+              capital = capital * (1 + monthlyRate) + monthlyPayment;
+              snapshots2[dateStr] = parseFloat(capital.toFixed(4));
+              cursor.setMonth(cursor.getMonth() + 1);
+            }
           }
         } else {
           // Price-based: track cumulative units × current price
