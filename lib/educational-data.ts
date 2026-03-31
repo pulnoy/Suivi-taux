@@ -644,6 +644,114 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     category: 'crypto', categoryLabel: 'Crypto',
     source: 'Marchés crypto', sourceUrl: 'https://finance.yahoo.com/quote/XRP-USD'
   },
+
+  lep: {
+    title: 'LEP',
+    shortDescription: 'Livret d\'Épargne Populaire. Taux réglementé réservé aux foyers modestes, toujours supérieur au Livret A.',
+    fullDescription: `Le Livret d'Épargne Populaire (LEP) est un produit d'épargne réglementé réservé aux personnes dont le revenu fiscal de référence ne dépasse pas un plafond. Son taux est toujours supérieur au Livret A, ce qui en fait le meilleur placement liquide sans risque pour les ménages éligibles. Les intérêts sont exonérés d'impôt et de prélèvements sociaux. Le plafond est de 10 000 €.`,
+    importance: `Le LEP est le placement sans risque le plus rémunérateur pour les ménages éligibles. Avec un taux révisé deux fois par an (février et août), il offre systématiquement 0.5 à 1.5 point de plus que le Livret A. Un conseiller financier doit systématiquement vérifier l'éligibilité de ses clients avant tout autre placement d'épargne liquide.`,
+    factors: [
+      'Taux du Livret A (le LEP lui est toujours supérieur)',
+      'Inflation française',
+      'Décision ministérielle (arrêté)',
+      'Plafond de revenus pour l\'éligibilité',
+      'Politique sociale du gouvernement'
+    ],
+    insights: [
+      'Taux toujours ≥ Livret A + prime (souvent +1 pt)',
+      'Plafond : 10 000 € de versements',
+      'Éligible si revenu fiscal ≤ ~21 000 €/an (1 part)',
+      'Taux 2026 : 2.80% (vs Livret A à 1.70%)'
+    ],
+    color: '#16a34a',
+    bgColor: '#f0fdf4',
+    darkBgColor: '#052e16',
+    category: 'rates',
+    categoryLabel: 'Épargne',
+    source: 'Banque de France / Ministère des Finances',
+    sourceUrl: 'https://www.banque-france.fr/fr/statistiques/taux-et-cours/taux-livret-epargne-populaire'
+  },
+
+  tauxUsure: {
+    title: 'Taux d\'usure',
+    shortDescription: 'Taux maximum légal que les banques peuvent pratiquer pour les crédits immobiliers à plus de 20 ans. Publié trimestriellement par la Banque de France.',
+    fullDescription: `Le taux d'usure est le taux annuel effectif global (TAEG) maximum légal au-delà duquel un prêteur ne peut pas accorder un crédit. Il est calculé et publié chaque trimestre par la Banque de France, en majorant d'un tiers la moyenne des taux effectivement pratiqués lors du trimestre précédent. Il s'applique aux crédits immobiliers selon leur durée (moins de 10 ans, de 10 à moins de 20 ans, 20 ans et plus).`,
+    importance: `Le taux d'usure est un garde-fou légal mais peut aussi bloquer l'accès au crédit en période de remontée rapide des taux (comme en 2022-2023). En 2023, la Banque de France a exceptionnellement mis à jour ce taux mensuellement pour suivre la hausse. À surveiller pour anticiper les fenêtres d'emprunt accessibles pour les clients.`,
+    factors: [
+      'Taux moyens pratiqués le trimestre précédent',
+      'Politique de la Banque de France',
+      'Taux directeurs BCE',
+      'Conditions du marché obligataire (OAT)',
+      'Coût de refinancement des banques'
+    ],
+    insights: [
+      'Calculé = moyenne des taux pratiqués × 4/3',
+      'Mis à jour trimestriellement (janvier, avril, juillet, octobre)',
+      'En 2023 : passage temporaire à une révision mensuelle',
+      'Inclut tous les frais : taux nominal + assurance + frais de dossier'
+    ],
+    color: '#dc2626',
+    bgColor: '#fef2f2',
+    darkBgColor: '#450a0a',
+    category: 'real_estate',
+    categoryLabel: 'Immobilier',
+    source: 'Banque de France',
+    sourceUrl: 'https://www.banque-france.fr/fr/statistiques/taux-et-cours/taux-usure'
+  },
+
+  tauxEpargne: {
+    title: 'Taux d\'épargne',
+    shortDescription: 'Part du revenu disponible brut des ménages épargnée. Indicateur macroéconomique clé publié trimestriellement par l\'INSEE.',
+    fullDescription: `Le taux d'épargne des ménages mesure la part du revenu disponible brut (RDB) qui n'est pas consommée. Il est calculé et publié trimestriellement par l'INSEE dans les comptes nationaux. Il intègre toutes les formes d'épargne : financière (Livret A, assurance-vie, actions…) et non financière (immobilier). C'est un indicateur avancé de la consommation et de l'activité économique.`,
+    importance: `Un taux d'épargne élevé signale une prudence des ménages et peut annoncer un ralentissement de la consommation. Le pic historique de 2020 (27% pendant le Covid) illustre ce phénomène. À surveiller pour anticiper les cycles économiques et adapter les allocations patrimoniales entre consommation et épargne.`,
+    factors: [
+      'Incertitude économique et crainte du chômage',
+      'Niveau des taux d\'intérêt (rémunération de l\'épargne)',
+      'Inflation (effet sur le pouvoir d\'achat)',
+      'Politique fiscale et aides sociales',
+      'Confiance des consommateurs'
+    ],
+    insights: [
+      'Moyenne historique française : ~15%',
+      'Pic Covid 2020 : ~27% (épargne forcée)',
+      'Reste élevé post-Covid par précaution',
+      'Données trimestrielles — décalage de publication ~3 mois'
+    ],
+    color: '#0ea5e9',
+    bgColor: '#e0f2fe',
+    darkBgColor: '#0c4a6e',
+    category: 'rates',
+    categoryLabel: 'Économie',
+    source: 'INSEE (Comptes nationaux)',
+    sourceUrl: 'https://www.insee.fr/fr/statistiques/serie/000872483'
+  },
+
+  rendLocatif: {
+    title: 'Rendement locatif net',
+    shortDescription: 'Rendement locatif net moyen en France (loyer annuel net de charges et fiscalité / prix d\'achat). Source : FNAIM / IEIF.',
+    fullDescription: `Le rendement locatif net représente le rapport entre les loyers annuels perçus (après déduction des charges, frais de gestion, taxe foncière, assurances et fiscalité) et le prix d'acquisition du bien. Il varie selon la localisation (Paris ~2-2.5%, villes moyennes ~4-5%), le type de bien et la fiscalité applicable (régime micro-foncier, réel, meublé LMNP…). Les données sont issues des estimations annuelles FNAIM et IEIF.`,
+    importance: `Indicateur essentiel pour comparer l'investissement locatif aux autres placements. Un rendement net de 3-4% est-il attractif face à un fonds euros à 2.5% et un OAT à 3.3% ? La réponse dépend du levier (crédit), de la fiscalité et de la plus-value espérée. À systématiquement contextualiser avec l'OAT, le taux d'usure et la variation des prix immobiliers.`,
+    factors: [
+      'Prix d\'achat du bien (niveau du marché)',
+      'Niveau des loyers de marché',
+      'Fiscalité locative (IR, prélèvements sociaux)',
+      'Charges et frais de gestion (~20-25% des loyers)',
+      'Taux de vacance locative'
+    ],
+    insights: [
+      'Paris : ~2-2.5% net (marché très cher)',
+      'Villes moyennes : ~4-5% net',
+      'Meublé (LMNP) peut améliorer le rendement fiscal',
+      'À comparer avec OAT + prime de risque immobilier'
+    ],
+    color: '#7c3aed',
+    bgColor: '#f5f3ff',
+    darkBgColor: '#2e1065',
+    category: 'real_estate',
+    categoryLabel: 'Immobilier',
+    source: 'FNAIM / IEIF (estimations)',
+    sourceUrl: 'https://www.ieif.fr'
+  },
 };
 
 export const CATEGORY_CONFIG = {
