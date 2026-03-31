@@ -861,7 +861,7 @@ function getScpiHistory() {
     { date: "2023-01-01", value: 4.52 },
     { date: "2024-01-01", value: 4.52 },
     { date: "2025-01-01", value: 4.55 },
-    { date: "2026-01-01", value: 4.58 },
+    { date: "2026-01-01", value: 4.67 },
   ];
 }
 
