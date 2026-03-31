@@ -268,7 +268,8 @@ export function EnhancedChart({
         if (sorted2.length === 0) return;
 
         const startDate2 = new Date(sorted2[0].date);
-        const endDate2 = new Date(sorted2[sorted2.length - 1].date);
+        // Use today as end so sparse-data products (Livret A, SCPI…) extend to the full period
+        const endDate2 = new Date();
         const snapshots2: Record<string, number> = {};
 
         const getValAt2 = (dateStr: string): number => {

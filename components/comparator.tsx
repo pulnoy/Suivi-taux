@@ -308,10 +308,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         if (sortedData.length < 2) return null;
 
         const startDate = new Date(sortedData[0].date);
-        const endDate = new Date(sortedData[sortedData.length - 1].date);
-        const months = Math.max(1, Math.round(
-          (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)
-        ));
+        // Always use today as end: sparse rate data may not extend to today,
+        // but the last known rate/price applies until now.
+        const endDate = new Date();
 
         const getValAt = (dateStr: string): number => {
           let val = sortedData[0].value;
@@ -324,6 +323,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
 
         // Build DCA portfolio value series
         const dcaSeries: { date: string; value: number }[] = [];
+
+        // Count actual payment iterations — source of truth for totalInvested
+        let paymentCount = 0;
 
         if (isSavings) {
           const rule = COMPOUNDING_RULES[ds.key] || 'monthly';
@@ -343,6 +345,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 currentYear = year;
               }
               capital += effectiveMonthlyPayment;
+              paymentCount++;
               const monthlyAccrual = getValAt(cursor.toISOString().split('T')[0]) / 100 / 365 * 30.4375;
               pendingInterest += capital * monthlyAccrual;
               dcaSeries.push({ date: cursor.toISOString().split('T')[0], value: parseFloat((capital + pendingInterest).toFixed(4)) });
@@ -359,6 +362,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 quarter = currentQuarter;
               }
               capital += effectiveMonthlyPayment;
+              paymentCount++;
               dcaSeries.push({ date: cursor.toISOString().split('T')[0], value: parseFloat(capital.toFixed(4)) });
               cursor.setMonth(cursor.getMonth() + 1);
             }
@@ -368,6 +372,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             while (cursor <= endDate) {
               const monthlyRate = getValAt(cursor.toISOString().split('T')[0]) / 100 / 12;
               capital = capital * (1 + monthlyRate) + effectiveMonthlyPayment;
+              paymentCount++;
               dcaSeries.push({ date: cursor.toISOString().split('T')[0], value: parseFloat(capital.toFixed(4)) });
               cursor.setMonth(cursor.getMonth() + 1);
             }
@@ -384,6 +389,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             const dateStr = cursor.toISOString().split('T')[0];
             const price = getValAt(dateStr) || 1;
             cumUnits += effectiveMonthlyPayment / price;
+            paymentCount++;
             schedule.push({ date: dateStr, cumUnits });
             cursor.setMonth(cursor.getMonth() + 1);
           }
@@ -400,13 +406,14 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
 
         if (dcaSeries.length < 2) return null;
 
-        const totalInvested = baseAmt + effectiveMonthlyPayment * months;
+        // totalInvested uses actual payment count — never mismatched across products
+        const totalInvested = baseAmt + effectiveMonthlyPayment * paymentCount;
         const finalValue = dcaSeries[dcaSeries.length - 1].value;
         const totalReturn = (finalValue - totalInvested) / totalInvested * 100;
 
         // Build IRR cash flows
         const cashFlows: number[] = [-baseAmt];
-        for (let m = 1; m < months; m++) cashFlows.push(-effectiveMonthlyPayment);
+        for (let m = 0; m < paymentCount; m++) cashFlows.push(-effectiveMonthlyPayment);
         cashFlows.push(finalValue);
         const irr = calculateMonthlyIRR(cashFlows);
 
