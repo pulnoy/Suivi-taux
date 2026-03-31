@@ -953,6 +953,9 @@ async function main() {
   const historyCac40    = await fetchYahooHistoryWithFallback('%5EFCHI');
   const historyCacMid   = await fetchYahooHistoryWithFallback('C6E.PA');
   const historyStoxx50  = await fetchYahooHistoryWithFallback('%5ESTOXX50E');
+  const historyDax      = await fetchYahooHistoryWithFallback('%5EGDAXI');
+  const historyFtse     = await fetchYahooHistoryWithFallback('%5EFTSE');
+  const historyNikkei   = await fetchYahooHistoryWithFallback('%5EN225');
   const historySP500    = await fetchYahooHistoryWithFallback('%5EGSPC');
   const historyNasdaq   = await fetchYahooHistoryWithFallback('%5ENDX');
   const historyWorld    = await fetchYahooHistoryWithFallback('URTH');
@@ -962,6 +965,7 @@ async function main() {
   console.log("\n💰 Récupération matières premières et crypto...");
   const historyBrent = await fetchYahooHistoryWithFallback('BZ=F');
   const historyGold  = await fetchYahooHistoryWithFallback('GC=F');
+  const historyGaz   = await fetchYahooHistoryWithFallback('NG=F');
   const historyBtc   = await fetchYahooHistoryWithFallback('BTC-USD');
   const historyEth   = await fetchYahooHistoryWithFallback('ETH-USD');
   const historySol   = await fetchYahooHistoryWithFallback('SOL-USD');
@@ -1057,14 +1061,18 @@ async function main() {
       cac40:    createIndexData("CAC 40",        getLast(historyCac40),    "pts", historyCac40),
       cacmid:   createIndexData("CAC Mid 60",    getLast(historyCacMid),   "pts", historyCacMid),
       stoxx50:  createIndexData("Euro Stoxx 50", getLast(historyStoxx50),  "pts", historyStoxx50),
-      sp500:    createIndexData("S&P 500",        getLast(historySP500),    "pts", historySP500),
-      nasdaq:   createIndexData("Nasdaq 100",    getLast(historyNasdaq),   "pts", historyNasdaq),
-      world:    createIndexData("MSCI World",    getLast(historyWorld),    "$",   historyWorld),
-      emerging: createIndexData("Émergents",     getLast(historyEmerging), "$",   historyEmerging),
+      dax:      createIndexData("DAX",           getLast(historyDax),     "pts", historyDax),
+      ftse:     createIndexData("FTSE 100",      getLast(historyFtse),    "pts", historyFtse),
+      nikkei:   createIndexData("Nikkei 225",    getLast(historyNikkei),  "pts", historyNikkei),
+      sp500:    createIndexData("S&P 500",        getLast(historySP500),   "pts", historySP500),
+      nasdaq:   createIndexData("Nasdaq 100",    getLast(historyNasdaq),  "pts", historyNasdaq),
+      world:    createIndexData("MSCI World",    getLast(historyWorld),   "$",   historyWorld),
+      emerging: createIndexData("Émergents",     getLast(historyEmerging),"$",   historyEmerging),
 
       // Matières premières
-      brent:    createIndexData("Pétrole (Brent)", getLast(historyBrent), "$", historyBrent),
-      gold:     createIndexData("Or (Once)",       getLast(historyGold),  "$", historyGold),
+      brent:    createIndexData("Pétrole (Brent)",  getLast(historyBrent), "$", historyBrent),
+      gold:     createIndexData("Or (Once)",         getLast(historyGold),  "$", historyGold),
+      gaz:      createIndexData("Gaz naturel (TTF)", getLast(historyGaz),   "$", historyGaz),
 
       // Crypto
       btc:      createIndexData("Bitcoin",   getLast(historyBtc), "$", historyBtc),
