@@ -814,6 +814,38 @@ async function getTauxPelHistory() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// €STR — Euro Short-Term Rate (BCE, quotidien, depuis oct. 2019)
+//     Série FM.B.U2.EUR.RT.MM.ESTRXO.HSTA (ECB Data Portal, sans clé)
+// ─────────────────────────────────────────────────────────────
+async function getEstrHistory() {
+  try {
+    console.log('  Fetching €STR (ECB Data Portal)...');
+    const url = 'https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.RT.MM.ESTRXO.HSTA?startPeriod=2019-10-01&format=jsondata&detail=dataonly';
+    const resp = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    const dates = json.structure?.dimensions?.observation?.[0]?.values ?? [];
+    const values = Object.entries(json.dataSets?.[0]?.series?.['0:0:0:0:0:0:0']?.observations ?? {});
+    const result = values
+      .map(([idx, [val]]) => ({ date: dates[parseInt(idx)]?.id, value: parseFloat(parseFloat(val).toFixed(3)) }))
+      .filter(p => p.date && !isNaN(p.value))
+      .map(p => ({ ...p, timestamp: new Date(p.date).getTime() }))
+      .sort((a, b) => a.timestamp - b.timestamp);
+    if (result.length > 0) {
+      console.log(`  ✓ €STR ECB: ${result.length} points, dernier: ${result[result.length-1].date} = ${result[result.length-1].value}`);
+      return result;
+    }
+    throw new Error('no data');
+  } catch (e) {
+    console.log(`  ⚠️ €STR ECB: ${e.message}, tentative FRED...`);
+    const fred = await fetchFredSeries('ECBESTRVOLWGTTRMDMNRT');
+    if (fred.length > 0) return fred;
+    console.log('  ⚠️ €STR: utilisation données existantes');
+    return existingData?.indices?.estr?.historique ?? [];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // 11. TAUX DE DÉPÔT BCE — Facilité de dépôt (taux plancher)
 //     Série FM.D.U2.EUR.4F.KR.DFR.LEV (quotidienne, J+1)
 // ─────────────────────────────────────────────────────────────
@@ -936,9 +968,9 @@ async function main() {
   console.log("\n📊 Récupération Inflation France (INSEE BDM)...");
   const historyInflation = await getInflationFromIndex();
 
-  // €STR : FRED
-  console.log("\n📊 Récupération €STR (FRED)...");
-  const historyEstr = await fetchFredSeries('ECBESTRVOLWGTTRMDMNRT');
+  // €STR : ECB Data Portal (sans clé) avec fallback FRED
+  console.log("\n📊 Récupération €STR (ECB)...");
+  const historyEstr = await getEstrHistory();
 
   // Devises
   console.log("\n📈 Récupération des données Yahoo Finance...");
