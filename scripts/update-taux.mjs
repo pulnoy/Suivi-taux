@@ -814,6 +814,81 @@ async function getTauxPelHistory() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// €STR — Euro Short-Term Rate (BCE, quotidien, depuis oct. 2019)
+//     Série FM.B.U2.EUR.RT.MM.ESTRXO.HSTA (ECB Data Portal, sans clé)
+// ─────────────────────────────────────────────────────────────
+async function getEstrHistory() {
+  try {
+    console.log('  Fetching €STR (ECB Data Portal)...');
+    const url = 'https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.RT.MM.ESTRXO.HSTA?startPeriod=2019-10-01&format=jsondata&detail=dataonly';
+    const resp = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    const dates = json.structure?.dimensions?.observation?.[0]?.values ?? [];
+    const values = Object.entries(json.dataSets?.[0]?.series?.['0:0:0:0:0:0:0']?.observations ?? {});
+    const result = values
+      .map(([idx, [val]]) => ({ date: dates[parseInt(idx)]?.id, value: parseFloat(parseFloat(val).toFixed(3)) }))
+      .filter(p => p.date && !isNaN(p.value))
+      .map(p => ({ ...p, timestamp: new Date(p.date).getTime() }))
+      .sort((a, b) => a.timestamp - b.timestamp);
+    if (result.length > 0) {
+      console.log(`  ✓ €STR ECB: ${result.length} points, dernier: ${result[result.length-1].date} = ${result[result.length-1].value}`);
+      return result;
+    }
+    throw new Error('no data');
+  } catch (e) {
+    console.log(`  ⚠️ €STR ECB: ${e.message}, tentative FRED...`);
+    const fred = await fetchFredSeries('ECBESTRVOLWGTTRMDMNRT');
+    if (fred.length > 0) return fred;
+    console.log('  ⚠️ €STR: utilisation données existantes');
+    return existingData?.indices?.estr?.historique ?? [];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// OIL PRICE API — Brent & TTF (api.oilpriceapi.com)
+//     Clé: OILPRICEAPI_API_KEY
+//     Codes: BRENT_CRUDE_USD, DUTCH_TTF_EUR
+// ─────────────────────────────────────────────────────────────
+const OILPRICEAPI_KEY = process.env.OILPRICEAPI_API_KEY || '';
+
+async function fetchOilPriceHistory(productCode, label, existingKey) {
+  if (!OILPRICEAPI_KEY) {
+    console.log(`  ⚠️ OILPRICEAPI_API_KEY non définie — ${label} ignoré`);
+    return existingData?.indices?.[existingKey]?.historique ?? [];
+  }
+  try {
+    console.log(`  Fetching ${label} (OilPriceAPI)...`);
+    const headers = { 'Authorization': `Token ${OILPRICEAPI_KEY}`, 'Accept': 'application/json' };
+    const url = `https://api.oilpriceapi.com/v1/prices?by_code=${productCode}`;
+    const resp = await fetch(url, { cache: 'no-store', headers });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    const raw = Array.isArray(json.data) ? json.data : [];
+    const result = raw
+      .map(p => {
+        const date = (p.created_at ?? p.date ?? '').slice(0, 10);
+        const value = parseFloat(parseFloat(p.price ?? p.value).toFixed(2));
+        return { date, value, timestamp: new Date(date).getTime() };
+      })
+      .filter(p => p.date && !isNaN(p.value))
+      .sort((a, b) => a.timestamp - b.timestamp);
+    // Déduplique par date (garde dernier)
+    const seen = new Map();
+    for (const p of result) seen.set(p.date, p);
+    const deduped = [...seen.values()].sort((a, b) => a.timestamp - b.timestamp);
+    if (deduped.length > 0) {
+      console.log(`  ✓ ${label}: ${deduped.length} points, dernier: ${deduped[deduped.length-1].date} = ${deduped[deduped.length-1].value}`);
+      return deduped;
+    }
+    throw new Error('no data in response');
+  } catch (e) {
+    console.log(`  ⚠️ ${label} OilPriceAPI: ${e.message}, fallback Yahoo...`);
+    return existingData?.indices?.[existingKey]?.historique ?? [];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // 11. TAUX DE DÉPÔT BCE — Facilité de dépôt (taux plancher)
 //     Série FM.D.U2.EUR.4F.KR.DFR.LEV (quotidienne, J+1)
 // ─────────────────────────────────────────────────────────────
@@ -936,9 +1011,9 @@ async function main() {
   console.log("\n📊 Récupération Inflation France (INSEE BDM)...");
   const historyInflation = await getInflationFromIndex();
 
-  // €STR : FRED
-  console.log("\n📊 Récupération €STR (FRED)...");
-  const historyEstr = await fetchFredSeries('ECBESTRVOLWGTTRMDMNRT');
+  // €STR : ECB Data Portal (sans clé) avec fallback FRED
+  console.log("\n📊 Récupération €STR (ECB)...");
+  const historyEstr = await getEstrHistory();
 
   // Devises
   console.log("\n📈 Récupération des données Yahoo Finance...");
@@ -963,9 +1038,9 @@ async function main() {
 
   // Matières premières & crypto
   console.log("\n💰 Récupération matières premières et crypto...");
-  const historyBrent = await fetchYahooHistoryWithFallback('BZ=F');
+  const historyBrent = await fetchOilPriceHistory('BRENT_CRUDE_USD', 'Pétrole Brent', 'brent');
+  const historyGaz   = await fetchOilPriceHistory('DUTCH_TTF_EUR',   'Gaz TTF',       'gaz');
   const historyGold  = await fetchYahooHistoryWithFallback('GC=F');
-  const historyGaz   = await fetchYahooHistoryWithFallback('NG=F');
   const historyBtc   = await fetchYahooHistoryWithFallback('BTC-USD');
   const historyEth   = await fetchYahooHistoryWithFallback('ETH-USD');
   const historySol   = await fetchYahooHistoryWithFallback('SOL-USD');
@@ -1072,7 +1147,7 @@ async function main() {
       // Matières premières
       brent:    createIndexData("Pétrole (Brent)",  getLast(historyBrent), "$", historyBrent),
       gold:     createIndexData("Or (Once)",         getLast(historyGold),  "$", historyGold),
-      gaz:      createIndexData("Gaz naturel (TTF)", getLast(historyGaz),   "$", historyGaz),
+      gaz:      createIndexData("Gaz naturel (TTF)", getLast(historyGaz),   "€", historyGaz),
 
       // Crypto
       btc:      createIndexData("Bitcoin",   getLast(historyBtc), "$", historyBtc),
