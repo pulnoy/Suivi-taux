@@ -857,33 +857,34 @@ async function fetchOilPriceHistory(productCode, label, existingKey) {
     console.log(`  ⚠️ OILPRICEAPI_API_KEY non définie — ${label} ignoré`);
     return existingData?.indices?.[existingKey]?.historique ?? [];
   }
+  const parseItem = (p) => {
+    const date = (p.created_at ?? p.date ?? p.time ?? '').slice(0, 10);
+    const value = parseFloat(parseFloat(p.price ?? p.value ?? p.close ?? 0).toFixed(2));
+    return { date, value, timestamp: new Date(date).getTime() };
+  };
   try {
-    console.log(`  Fetching ${label} (OilPriceAPI)...`);
+    console.log(`  Fetching ${label} (OilPriceAPI /v1/prices/latest)...`);
     const headers = { 'Authorization': `Token ${OILPRICEAPI_KEY}`, 'Accept': 'application/json' };
-    const url = `https://api.oilpriceapi.com/v1/prices?by_code=${productCode}`;
-    const resp = await fetch(url, { cache: 'no-store', headers });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const json = await resp.json();
-    const raw = Array.isArray(json.data) ? json.data : [];
-    const result = raw
-      .map(p => {
-        const date = (p.created_at ?? p.date ?? '').slice(0, 10);
-        const value = parseFloat(parseFloat(p.price ?? p.value).toFixed(2));
-        return { date, value, timestamp: new Date(date).getTime() };
-      })
-      .filter(p => p.date && !isNaN(p.value))
-      .sort((a, b) => a.timestamp - b.timestamp);
-    // Déduplique par date (garde dernier)
-    const seen = new Map();
-    for (const p of result) seen.set(p.date, p);
-    const deduped = [...seen.values()].sort((a, b) => a.timestamp - b.timestamp);
-    if (deduped.length > 0) {
-      console.log(`  ✓ ${label}: ${deduped.length} points, dernier: ${deduped[deduped.length-1].date} = ${deduped[deduped.length-1].value}`);
-      return deduped;
+    const latestResp = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${productCode}`, { cache: 'no-store', headers });
+    if (!latestResp.ok) {
+      const body = await latestResp.text();
+      console.log(`  DEBUG OilPriceAPI HTTP ${latestResp.status}: ${body.slice(0, 300)}`);
+      throw new Error(`HTTP ${latestResp.status}`);
     }
-    throw new Error('no data in response');
+    const latestJson = await latestResp.json();
+    console.log(`  DEBUG OilPriceAPI response: ${JSON.stringify(latestJson).slice(0, 300)}`);
+    const latestItems = Array.isArray(latestJson.data) ? latestJson.data : latestJson.data ? [latestJson.data] : [];
+    const latestPoints = latestItems.map(parseItem).filter(p => p.date && !isNaN(p.value) && p.value > 0);
+    if (latestPoints.length === 0) throw new Error('no valid latest price');
+    const existing = existingData?.indices?.[existingKey]?.historique ?? [];
+    const latestPoint = latestPoints[latestPoints.length - 1];
+    const seen = new Map(existing.map(p => [p.date, p]));
+    seen.set(latestPoint.date, latestPoint);
+    const merged = [...seen.values()].sort((a, b) => a.timestamp - b.timestamp);
+    console.log(`  ✓ ${label}: ${merged.length} points, dernier: ${latestPoint.date} = ${latestPoint.value}`);
+    return merged;
   } catch (e) {
-    console.log(`  ⚠️ ${label} OilPriceAPI: ${e.message}, fallback Yahoo...`);
+    console.log(`  ⚠️ ${label} OilPriceAPI: ${e.message}, conservation données existantes`);
     return existingData?.indices?.[existingKey]?.historique ?? [];
   }
 }
