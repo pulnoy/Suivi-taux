@@ -891,24 +891,33 @@ async function fetchBrentHistory() {
   return merged;
 }
 
-// Gaz TTF : OilPriceAPI uniquement (ne pas réutiliser l'historique Henry Hub < 10 EUR)
+// Gaz TTF : Yahoo Finance TTF=F pour l'historique + OilPriceAPI pour la dernière valeur
 async function fetchGazTTFHistory() {
-  console.log(`  Fetching Gaz TTF (OilPriceAPI DUTCH_TTF_EUR)...`);
-  const latestPoint = await fetchOilPriceLatest('DUTCH_TTF_EUR', 'Gaz TTF');
-  // Conserver uniquement les points existants qui sont clairement TTF (> 10 EUR/MWh)
+  console.log(`  Fetching Gaz TTF (Yahoo TTF=F + OilPriceAPI)...`);
+
+  // Historique via Yahoo Finance TTF=F (futures TTF EUR/MWh)
+  const yahooRaw = await fetchYahooHistoryWithFallback('TTF=F');
+  // Filtrer les valeurs aberrantes (< 10 = probablement pas du TTF EUR/MWh)
+  const yahooTTF = yahooRaw.filter(p => p.value > 10);
+
+  // Conserver les points existants clairement TTF (> 10 EUR/MWh) comme fallback
   const existing = (existingData?.indices?.gaz?.historique ?? []).filter(p => p.value > 10);
+
+  // Base : Yahoo si on a des données, sinon existing
+  const base = yahooTTF.length > 0 ? yahooTTF : existing;
+
+  // Dernier point OilPriceAPI (DUTCH_TTF_EUR) pour la valeur la plus fraîche
+  const latestPoint = await fetchOilPriceLatest('DUTCH_TTF_EUR', 'Gaz TTF');
+
   if (!latestPoint) {
-    if (!OILPRICEAPI_KEY) {
-      console.log(`  ⚠️ Gaz TTF: OILPRICEAPI_API_KEY non définie, ${existing.length} points TTF conservés`);
-    } else {
-      console.log(`  ⚠️ Gaz TTF: impossible de récupérer le dernier point, ${existing.length} points TTF conservés`);
-    }
-    return existing;
+    console.log(`  ✓ Gaz TTF: ${base.length} points (Yahoo uniquement)`);
+    return base;
   }
-  const seen = new Map(existing.map(p => [p.date, p]));
+
+  const seen = new Map(base.map(p => [p.date, p]));
   seen.set(latestPoint.date, latestPoint);
   const merged = [...seen.values()].sort((a, b) => a.timestamp - b.timestamp);
-  console.log(`  ✓ Gaz TTF: ${merged.length} points (OilPriceAPI), dernier: ${latestPoint.date} = ${latestPoint.value} EUR/MWh`);
+  console.log(`  ✓ Gaz TTF: ${merged.length} points (Yahoo+OilPriceAPI), dernier: ${latestPoint.date} = ${latestPoint.value} EUR/MWh`);
   return merged;
 }
 
