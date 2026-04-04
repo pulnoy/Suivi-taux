@@ -390,7 +390,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
   
   brent: {
     title: 'Pétrole (Brent)',
-    shortDescription: 'Prix du baril de pétrole West Texas Intermediate.',
+    shortDescription: 'Prix du baril de pétrole Brent (référence européenne, USD/baril).',
     fullDescription: `Le Brent est le pétrole de référence pour l'Europe et représente environ 60% des échanges mondiaux de pétrole. Son prix influence directement le coût des transports, de l'énergie et de nombreux produits manufacturés.`,
     importance: `Le pétrole reste la source d'énergie dominante. Son prix impacte l'inflation, la croissance économique et les coûts de production de nombreuses industries.`,
     factors: [

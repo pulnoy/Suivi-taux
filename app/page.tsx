@@ -149,7 +149,7 @@ export default function Dashboard() {
                 {data && (
                   <span
                     className={`h-2 w-2 rounded-full shrink-0 ${
-                      Object.values(data.indices).every(idx => (idx.historique?.length ?? 0) > 0 && idx.valeur !== 0)
+                      Object.values(data.indices).every(idx => (idx.historique?.length ?? 0) > 0 && idx.valeur != null)
                         ? 'bg-green-500'
                         : 'bg-destructive'
                     }`}

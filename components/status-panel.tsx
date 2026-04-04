@@ -14,7 +14,7 @@ export function StatusPanel({ indices, dateMiseAJour }: StatusPanelProps) {
   const rows = Object.entries(indices).map(([key, idx]) => {
     const h = idx.historique ?? [];
     const lastValueDate = h.length > 0 ? h[h.length - 1].date : null;
-    const ok = h.length > 0 && idx.valeur !== 0;
+    const ok = h.length > 0 && idx.valeur != null;
     const edu = INDEX_EDUCATION[key];
     return { key, titre: idx.titre, lastValueDate, ok, pts: h.length, source: edu?.source ?? '—', sourceUrl: edu?.sourceUrl };
   });

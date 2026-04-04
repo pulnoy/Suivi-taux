@@ -898,10 +898,10 @@ async function fetchGazTTFHistory() {
   // Historique via Yahoo Finance TTF=F (futures TTF EUR/MWh)
   const yahooRaw = await fetchYahooHistoryWithFallback('TTF=F');
   // Filtrer les valeurs aberrantes (< 10 = probablement pas du TTF EUR/MWh)
-  const yahooTTF = yahooRaw.filter(p => p.value > 10);
+  const yahooTTF = yahooRaw.filter(p => p.value > 1);
 
   // Conserver les points existants clairement TTF (> 10 EUR/MWh) comme fallback
-  const existing = (existingData?.indices?.gaz?.historique ?? []).filter(p => p.value > 10);
+  const existing = (existingData?.indices?.gaz?.historique ?? []).filter(p => p.value > 1);
 
   // Base : Yahoo si on a des données, sinon existing
   const base = yahooTTF.length > 0 ? yahooTTF : existing;
@@ -1050,34 +1050,44 @@ async function main() {
 
   // Devises
   console.log("\n📈 Récupération des données Yahoo Finance...");
-  const historyEurUsd = await fetchYahooHistoryWithFallback('EURUSD=X');
-  const historyEurGbp = await fetchYahooHistoryWithFallback('EURGBP=X');
-  const historyEurJpy = await fetchYahooHistoryWithFallback('EURJPY=X');
-  const historyEurChf = await fetchYahooHistoryWithFallback('EURCHF=X');
-  const historyEurCny = await fetchYahooHistoryWithFallback('EURCNY=X');
+  // Helper : Yahoo avec fallback sur données existantes si vide
+  const yahooWithFallback = async (ticker, existingKey) => {
+    const data = await fetchYahooHistoryWithFallback(ticker);
+    if (data.length === 0 && existingData?.indices?.[existingKey]?.historique?.length > 0) {
+      console.log(`  ⚠️ ${ticker}: Yahoo vide, conservation des ${existingData.indices[existingKey].historique.length} points existants`);
+      return existingData.indices[existingKey].historique;
+    }
+    return data;
+  };
+
+  const historyEurUsd = await yahooWithFallback('EURUSD=X', 'eurusd');
+  const historyEurGbp = await yahooWithFallback('EURGBP=X', 'eurgbp');
+  const historyEurJpy = await yahooWithFallback('EURJPY=X', 'eurjpy');
+  const historyEurChf = await yahooWithFallback('EURCHF=X', 'eurchf');
+  const historyEurCny = await yahooWithFallback('EURCNY=X', 'eurcny');
 
   // Indices boursiers
   console.log("\n📊 Récupération des indices boursiers...");
-  const historyCac40    = await fetchYahooHistoryWithFallback('%5EFCHI');
-  const historyCacMid   = await fetchYahooHistoryWithFallback('C6E.PA');
-  const historyStoxx50  = await fetchYahooHistoryWithFallback('%5ESTOXX50E');
-  const historyDax      = await fetchYahooHistoryWithFallback('%5EGDAXI');
-  const historyFtse     = await fetchYahooHistoryWithFallback('%5EFTSE');
-  const historyNikkei   = await fetchYahooHistoryWithFallback('%5EN225');
-  const historySP500    = await fetchYahooHistoryWithFallback('%5EGSPC');
-  const historyNasdaq   = await fetchYahooHistoryWithFallback('%5ENDX');
-  const historyWorld    = await fetchYahooHistoryWithFallback('URTH');
-  const historyEmerging = await fetchYahooHistoryWithFallback('EEM');
+  const historyCac40    = await yahooWithFallback('%5EFCHI', 'cac40');
+  const historyCacMid   = await yahooWithFallback('C6E.PA', 'cacmid');
+  const historyStoxx50  = await yahooWithFallback('%5ESTOXX50E', 'stoxx50');
+  const historyDax      = await yahooWithFallback('%5EGDAXI', 'dax');
+  const historyFtse     = await yahooWithFallback('%5EFTSE', 'ftse');
+  const historyNikkei   = await yahooWithFallback('%5EN225', 'nikkei');
+  const historySP500    = await yahooWithFallback('%5EGSPC', 'sp500');
+  const historyNasdaq   = await yahooWithFallback('%5ENDX', 'nasdaq');
+  const historyWorld    = await yahooWithFallback('URTH', 'world');
+  const historyEmerging = await yahooWithFallback('EEM', 'emerging');
 
   // Matières premières & crypto
   console.log("\n💰 Récupération matières premières et crypto...");
   const historyBrent = await fetchBrentHistory();
   const historyGaz   = await fetchGazTTFHistory();
-  const historyGold  = await fetchYahooHistoryWithFallback('GC=F');
-  const historyBtc   = await fetchYahooHistoryWithFallback('BTC-USD');
-  const historyEth   = await fetchYahooHistoryWithFallback('ETH-USD');
-  const historySol   = await fetchYahooHistoryWithFallback('SOL-USD');
-  const historyXrp   = await fetchYahooHistoryWithFallback('XRP-USD');
+  const historyGold  = await yahooWithFallback('GC=F', 'gold');
+  const historyBtc   = await yahooWithFallback('BTC-USD', 'btc');
+  const historyEth   = await yahooWithFallback('ETH-USD', 'eth');
+  const historySol   = await yahooWithFallback('SOL-USD', 'sol');
+  const historyXrp   = await yahooWithFallback('XRP-USD', 'xrp');
   // Livret A, Prix immobilier + nouvelles séries Webstat
   console.log("\n🏦 Récupération données Webstat BdF...");
   const historyLivretA      = await getLivretAHistory();
@@ -1089,7 +1099,7 @@ async function main() {
   const historyScpi         = getScpiHistory();
   const historyFondsEuros   = getFondsEurosHistory();
 
-  const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : 0;
+  const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : null;
 
   const calculateAnnualizedPerformance = (historique, years) => {
     if (!historique || historique.length < 2) return null;
@@ -1204,10 +1214,19 @@ async function main() {
   console.log(`  Prix immo    : ${nouvellesDonnees.indices.prixImmo.valeur}% var/an (dernier: ${historyPrixImmo[historyPrixImmo.length-1]?.date ?? 'N/A'})`);
   console.log(`  €STR         : ${nouvellesDonnees.indices.estr.valeur}% (dernier: ${historyEstr[historyEstr.length-1]?.date ?? 'N/A'})`);
 
+  // Validation : au moins 50% des indices doivent avoir des données
+  const allIndices = Object.values(nouvellesDonnees.indices);
+  const withData = allIndices.filter(i => i.historique && i.historique.length > 0);
+  console.log(`\n📋 Validation: ${withData.length}/${allIndices.length} indices avec données`);
+  if (withData.length < allIndices.length * 0.5) {
+    console.error(`\n❌ ABANDON: trop d'indices sans données (${withData.length}/${allIndices.length}). taux.json non écrasé.`);
+    process.exit(1);
+  }
+
   const dir = path.dirname(FILE_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(FILE_PATH, JSON.stringify(nouvellesDonnees, null, 2));
   console.log("\n✅ Fichier taux.json généré avec succès.\n");
 }
 
-main();
+main().catch(err => { console.error('❌ Erreur fatale:', err); process.exit(1); });
