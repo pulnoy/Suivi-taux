@@ -3,13 +3,15 @@
 import { useState, useEffect } from 'react';
 import { Comparator } from '@/components/comparator';
 import { TimelineCrises } from '@/components/timeline-crises';
+import { StatusPanel } from '@/components/status-panel';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { 
-  LayoutDashboard, 
+import {
+  LayoutDashboard,
   Clock,
-  RefreshCw
+  RefreshCw,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -43,7 +45,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [activeMainTab, setActiveMainTab] = useState<'comparator' | 'timeline'>('comparator');
+  const [activeMainTab, setActiveMainTab] = useState<'comparator' | 'timeline' | 'status'>('comparator');
   
   // Comparator state
   const [comparatorKeys, setComparatorKeys] = useState<string[]>([]);
@@ -93,13 +95,17 @@ export default function Dashboard() {
             <h1 className="text-xl md:text-2xl font-extrabold text-[#003A7A] dark:text-blue-400 tracking-tight whitespace-nowrap">
               Suivi-Taux
             </h1>
-            <span className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap">
+            <button
+              onClick={() => setActiveMainTab(activeMainTab === 'status' ? 'comparator' : 'status')}
+              className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap hover:text-foreground transition-colors underline-offset-2 hover:underline"
+              title="Voir le statut des indices"
+            >
               {new Date(data.date_mise_a_jour).toLocaleDateString('fr-FR', {
                 day: 'numeric',
                 month: 'short',
                 year: 'numeric'
               })}
-            </span>
+            </button>
           </div>
           
           {/* Onglets de navigation */}
@@ -129,6 +135,18 @@ export default function Dashboard() {
                 <Clock className="h-4 w-4" />
                 <span className="hidden sm:inline">Timeline</span>
               </button>
+              <button
+                onClick={() => setActiveMainTab('status')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
+                  activeMainTab === 'status'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Activity className="h-4 w-4" />
+                <span className="hidden sm:inline">Statut</span>
+              </button>
             </div>
             <ThemeToggle />
           </div>
@@ -146,6 +164,11 @@ export default function Dashboard() {
               onKeysChange={setComparatorKeys}
             />
           </div>
+        )}
+
+        {/* Statut Tab */}
+        {activeMainTab === 'status' && (
+          <StatusPanel indices={data.indices} dateMiseAJour={data.date_mise_a_jour} />
         )}
 
         {/* Timeline Tab */}
