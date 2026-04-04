@@ -852,41 +852,64 @@ async function getEstrHistory() {
 // ─────────────────────────────────────────────────────────────
 const OILPRICEAPI_KEY = process.env.OILPRICEAPI_API_KEY || '';
 
-async function fetchOilPriceHistory(productCode, label, existingKey) {
-  if (!OILPRICEAPI_KEY) {
-    console.log(`  ⚠️ OILPRICEAPI_API_KEY non définie — ${label} ignoré`);
-    return existingData?.indices?.[existingKey]?.historique ?? [];
-  }
+// Récupère le dernier point OilPriceAPI et le merge avec une liste existante
+async function fetchOilPriceLatest(productCode, label) {
+  if (!OILPRICEAPI_KEY) return null;
   const parseItem = (p) => {
     const date = (p.created_at ?? p.date ?? p.time ?? '').slice(0, 10);
     const value = parseFloat(parseFloat(p.price ?? p.value ?? p.close ?? 0).toFixed(2));
     return { date, value, timestamp: new Date(date).getTime() };
   };
   try {
-    console.log(`  Fetching ${label} (OilPriceAPI /v1/prices/latest)...`);
     const headers = { 'Authorization': `Token ${OILPRICEAPI_KEY}`, 'Accept': 'application/json' };
-    const latestResp = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${productCode}`, { cache: 'no-store', headers });
-    if (!latestResp.ok) {
-      const body = await latestResp.text();
-      console.log(`  DEBUG OilPriceAPI HTTP ${latestResp.status}: ${body.slice(0, 300)}`);
-      throw new Error(`HTTP ${latestResp.status}`);
-    }
-    const latestJson = await latestResp.json();
-    console.log(`  DEBUG OilPriceAPI response: ${JSON.stringify(latestJson).slice(0, 300)}`);
-    const latestItems = Array.isArray(latestJson.data) ? latestJson.data : latestJson.data ? [latestJson.data] : [];
-    const latestPoints = latestItems.map(parseItem).filter(p => p.date && !isNaN(p.value) && p.value > 0);
-    if (latestPoints.length === 0) throw new Error('no valid latest price');
-    const existing = existingData?.indices?.[existingKey]?.historique ?? [];
-    const latestPoint = latestPoints[latestPoints.length - 1];
-    const seen = new Map(existing.map(p => [p.date, p]));
-    seen.set(latestPoint.date, latestPoint);
-    const merged = [...seen.values()].sort((a, b) => a.timestamp - b.timestamp);
-    console.log(`  ✓ ${label}: ${merged.length} points, dernier: ${latestPoint.date} = ${latestPoint.value}`);
-    return merged;
+    const resp = await fetch(`https://api.oilpriceapi.com/v1/prices/latest?by_code=${productCode}`, { cache: 'no-store', headers });
+    if (!resp.ok) { console.log(`  DEBUG OilPriceAPI HTTP ${resp.status}`); throw new Error(`HTTP ${resp.status}`); }
+    const json = await resp.json();
+    const items = Array.isArray(json.data) ? json.data : json.data ? [json.data] : [];
+    const points = items.map(parseItem).filter(p => p.date && !isNaN(p.value) && p.value > 0);
+    return points.length > 0 ? points[points.length - 1] : null;
   } catch (e) {
-    console.log(`  ⚠️ ${label} OilPriceAPI: ${e.message}, conservation données existantes`);
-    return existingData?.indices?.[existingKey]?.historique ?? [];
+    console.log(`  ⚠️ OilPriceAPI ${label}: ${e.message}`);
+    return null;
   }
+}
+
+// Brent : historique long via Yahoo Finance BZ=F + dernier point OilPriceAPI
+async function fetchBrentHistory() {
+  console.log(`  Fetching Pétrole Brent (Yahoo BZ=F + OilPriceAPI)...`);
+  const yahooHistory = await fetchYahooHistoryWithFallback('BZ=F');
+  const latestPoint = await fetchOilPriceLatest('BRENT_CRUDE_USD', 'Brent');
+  const base = yahooHistory.length > 0 ? yahooHistory : (existingData?.indices?.brent?.historique ?? []);
+  if (!latestPoint) {
+    console.log(`  ✓ Pétrole Brent: ${base.length} points (Yahoo uniquement)`);
+    return base;
+  }
+  const seen = new Map(base.map(p => [p.date, p]));
+  seen.set(latestPoint.date, latestPoint);
+  const merged = [...seen.values()].sort((a, b) => a.timestamp - b.timestamp);
+  console.log(`  ✓ Pétrole Brent: ${merged.length} points (Yahoo+OilPriceAPI), dernier: ${latestPoint.date} = ${latestPoint.value}`);
+  return merged;
+}
+
+// Gaz TTF : OilPriceAPI uniquement (ne pas réutiliser l'historique Henry Hub < 10 EUR)
+async function fetchGazTTFHistory() {
+  console.log(`  Fetching Gaz TTF (OilPriceAPI DUTCH_TTF_EUR)...`);
+  const latestPoint = await fetchOilPriceLatest('DUTCH_TTF_EUR', 'Gaz TTF');
+  // Conserver uniquement les points existants qui sont clairement TTF (> 10 EUR/MWh)
+  const existing = (existingData?.indices?.gaz?.historique ?? []).filter(p => p.value > 10);
+  if (!latestPoint) {
+    if (!OILPRICEAPI_KEY) {
+      console.log(`  ⚠️ Gaz TTF: OILPRICEAPI_API_KEY non définie, ${existing.length} points TTF conservés`);
+    } else {
+      console.log(`  ⚠️ Gaz TTF: impossible de récupérer le dernier point, ${existing.length} points TTF conservés`);
+    }
+    return existing;
+  }
+  const seen = new Map(existing.map(p => [p.date, p]));
+  seen.set(latestPoint.date, latestPoint);
+  const merged = [...seen.values()].sort((a, b) => a.timestamp - b.timestamp);
+  console.log(`  ✓ Gaz TTF: ${merged.length} points (OilPriceAPI), dernier: ${latestPoint.date} = ${latestPoint.value} EUR/MWh`);
+  return merged;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1039,8 +1062,8 @@ async function main() {
 
   // Matières premières & crypto
   console.log("\n💰 Récupération matières premières et crypto...");
-  const historyBrent = await fetchOilPriceHistory('BRENT_CRUDE_USD', 'Pétrole Brent', 'brent');
-  const historyGaz   = await fetchOilPriceHistory('DUTCH_TTF_EUR',   'Gaz TTF',       'gaz');
+  const historyBrent = await fetchBrentHistory();
+  const historyGaz   = await fetchGazTTFHistory();
   const historyGold  = await fetchYahooHistoryWithFallback('GC=F');
   const historyBtc   = await fetchYahooHistoryWithFallback('BTC-USD');
   const historyEth   = await fetchYahooHistoryWithFallback('ETH-USD');

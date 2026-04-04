@@ -146,6 +146,15 @@ export default function Dashboard() {
               >
                 <Activity className="h-4 w-4" />
                 <span className="hidden sm:inline">Statut</span>
+                {data && (
+                  <span
+                    className={`h-2 w-2 rounded-full shrink-0 ${
+                      Object.values(data.indices).every(idx => (idx.historique?.length ?? 0) > 0 && idx.valeur !== 0)
+                        ? 'bg-green-500'
+                        : 'bg-destructive'
+                    }`}
+                  />
+                )}
               </button>
             </div>
             <ThemeToggle />

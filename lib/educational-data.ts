@@ -410,8 +410,8 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     darkBgColor: '#1e293b',
     category: 'commodities',
     categoryLabel: 'Énergie',
-    source: 'Marché des matières premières',
-    sourceUrl: 'https://finance.yahoo.com/quote/BZ=F'
+    source: 'OilPriceAPI (BRENT_CRUDE_USD)',
+    sourceUrl: 'https://oilpriceapi.com'
   },
   
   tec10: {
@@ -683,14 +683,15 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
 
   gaz: {
     title: 'Gaz naturel',
-    shortDescription: 'Prix du gaz naturel (contrat futures Henry Hub, USD/MMBtu). Indicateur clé du coût de l\'énergie.',
-    fullDescription: `Le contrat futures sur le gaz naturel Henry Hub (NG=F) est la référence mondiale du prix du gaz aux États-Unis. En Europe, le TTF néerlandais est la référence locale, mais les deux marchés sont de plus en plus corrélés depuis 2022 avec l'essor du GNL américain exporté vers l'Europe. Le prix du gaz impacte directement les coûts de production industriels, l'inflation et la politique énergétique.`,
-    importance: `Depuis la crise énergétique de 2022 liée à la guerre en Ukraine, le gaz naturel est devenu un indicateur macro-économique de premier plan en Europe. Son prix influence directement l'inflation, la compétitivité industrielle et les décisions de la BCE. Utile pour contextualiser les anticipations d'inflation et les stratégies d'investissement dans les secteurs énergie et utilities.`,
-    factors: ['Températures hivernales (demande de chauffage)', 'Exportations de GNL américain', 'Niveaux de stockage en Europe', 'Géopolitique (Russie/Ukraine)', 'Transition énergétique et renouvelables'],
-    insights: ['Prix en USD/MMBtu (Henry Hub, référence US)', 'Corrélation avec pétrole partielle (substitution)', 'Pic historique en 2022 : >9 USD (crise énergie)', 'Revenu aux niveaux pré-crise début 2024'],
+    shortDescription: 'Prix du gaz naturel TTF (Title Transfer Facility, EUR/MWh). Référence européenne du gaz naturel.',
+    fullDescription: `Le TTF (Title Transfer Facility) est la bourse de référence pour le gaz naturel en Europe, basée aux Pays-Bas. Son prix en EUR/MWh reflète les conditions d'offre et de demande du marché européen du gaz. Depuis la crise énergétique de 2022, il est devenu un indicateur macro-économique majeur en zone euro.`,
+    importance: `Le prix du TTF influence directement l'inflation européenne, la compétitivité industrielle et les décisions de la BCE. Il est bien plus représentatif pour l'économie européenne que le Henry Hub américain.`,
+    factors: ['Températures hivernales (demande de chauffage)', 'Niveaux de stockage en Europe', 'Importations de GNL', 'Géopolitique (Russie/Ukraine)', 'Transition énergétique et renouvelables'],
+    insights: ['Prix en EUR/MWh (référence européenne TTF)', 'Pic historique en 2022 : >300 EUR/MWh (crise énergie)', 'Corrélation forte avec inflation européenne'],
     color: '#06b6d4', bgColor: '#ecfeff', darkBgColor: '#082f49',
     category: 'commodities', categoryLabel: 'Matières premières',
-    source: 'Yahoo Finance', sourceUrl: 'https://finance.yahoo.com/quote/NG%3DF'
+    source: 'OilPriceAPI (DUTCH_TTF_EUR)',
+    sourceUrl: 'https://oilpriceapi.com'
   },
 };
 
