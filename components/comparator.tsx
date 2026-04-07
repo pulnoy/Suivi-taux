@@ -30,7 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, Play, Euro } from 'lucide-react';
+import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, Play, Euro, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DataPoint {
@@ -311,9 +311,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         if (sortedData.length < 2) return null;
 
         const startDate = new Date(sortedData[0].date);
-        // Always use today as end: sparse rate data may not extend to today,
-        // but the last known rate/price applies until now.
-        const endDate = new Date();
+        // Utiliser la date du dernier point disponible dans la plage brush (et non aujourd'hui),
+        // pour que totalInvesti se mette à jour quand on déplace le slider.
+        const endDate = new Date(sortedData[sortedData.length - 1].date);
 
         const getValAt = (dateStr: string): number => {
           let val = sortedData[0].value;
@@ -972,7 +972,6 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             type="text"
             value={startDateInput}
             onChange={(e) => setStartDateInput(e.target.value)}
-            onBlur={handleDateInputSubmit}
             onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
             placeholder="jj/mm/aaaa"
             className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-center"
@@ -982,11 +981,17 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             type="text"
             value={endDateInput}
             onChange={(e) => setEndDateInput(e.target.value)}
-            onBlur={handleDateInputSubmit}
             onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
             placeholder="jj/mm/aaaa"
             className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-center"
           />
+          <button
+            onClick={handleDateInputSubmit}
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-border bg-background hover:bg-primary hover:text-primary-foreground transition-colors"
+            title="Valider les dates"
+          >
+            <Check className="h-3.5 w-3.5" />
+          </button>
         </div>
       )}
 
