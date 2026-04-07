@@ -238,16 +238,19 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const handleDateInputSubmit = useCallback(() => {
     const startISO = parseDisplayDate(startDateInput);
     const endISO = parseDisplayDate(endDateInput);
-    if (startISO) {
-      setBrushStartDate(startISO);
-      setNormalizeFromDate(startISO);
+    // Fallback sur les dates courantes du brush si un champ est vide
+    const effectiveStart = startISO ?? brushStartDate;
+    const effectiveEnd = endISO ?? brushEndDate;
+    if (effectiveStart) {
+      setBrushStartDate(effectiveStart);
+      setNormalizeFromDate(effectiveStart);
     }
-    if (endISO) setBrushEndDate(endISO);
-    if (startISO || endISO) {
-      setExternalBrushStartDate(startISO);
-      setExternalBrushEndDate(endISO);
+    if (effectiveEnd) setBrushEndDate(effectiveEnd);
+    if (effectiveStart || effectiveEnd) {
+      setExternalBrushStartDate(effectiveStart);
+      setExternalBrushEndDate(effectiveEnd);
     }
-  }, [startDateInput, endDateInput]);
+  }, [startDateInput, endDateInput, brushStartDate, brushEndDate]);
 
   // Filter data by period
   const filteredData = useMemo(() => {
@@ -961,38 +964,40 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         />
       )}
 
+      {/* Champs de date — centrés sous le slider */}
+      {selectedKeys.length > 0 && (
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <span className="whitespace-nowrap">Du</span>
+          <input
+            type="text"
+            value={startDateInput}
+            onChange={(e) => setStartDateInput(e.target.value)}
+            onBlur={handleDateInputSubmit}
+            onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
+            placeholder="jj/mm/aaaa"
+            className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-center"
+          />
+          <span className="whitespace-nowrap">au</span>
+          <input
+            type="text"
+            value={endDateInput}
+            onChange={(e) => setEndDateInput(e.target.value)}
+            onBlur={handleDateInputSubmit}
+            onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
+            placeholder="jj/mm/aaaa"
+            className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-center"
+          />
+        </div>
+      )}
+
       {/* Statistics Table */}
       {statistics.length > 0 && (
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="p-4 border-b border-border">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Statistiques comparatives
-              </h3>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="whitespace-nowrap">Du</span>
-                <input
-                  type="text"
-                  value={startDateInput}
-                  onChange={(e) => setStartDateInput(e.target.value)}
-                  onBlur={handleDateInputSubmit}
-                  onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
-                  placeholder="jj/mm/aaaa"
-                  className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <span className="whitespace-nowrap">au</span>
-                <input
-                  type="text"
-                  value={endDateInput}
-                  onChange={(e) => setEndDateInput(e.target.value)}
-                  onBlur={handleDateInputSubmit}
-                  onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
-                  placeholder="jj/mm/aaaa"
-                  className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-            </div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Statistiques comparatives
+            </h3>
           </div>
           <div className="overflow-x-auto">
             <Table>
