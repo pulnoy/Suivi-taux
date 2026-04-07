@@ -267,7 +267,13 @@ export function EnhancedChart({
         const sorted2 = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
         if (sorted2.length === 0) return;
 
-        const startDate2 = new Date(sorted2[0].date);
+        // La simulation DCA démarre depuis normalizeFromDate (date du slider),
+        // pas depuis le début des données — pour cohérence avec les statistiques.
+        const dcaStartEntry = normalizeFromDate
+          ? (sorted2.find(p => p.date >= normalizeFromDate) ?? sorted2[0])
+          : sorted2[0];
+        const startDate2 = new Date(dcaStartEntry.date);
+
         // Use today as end so sparse-data products (Livret A, SCPI…) extend to the full period
         const endDate2 = new Date();
         const snapshots2: Record<string, number> = {};
@@ -289,7 +295,7 @@ export function EnhancedChart({
           };
           const rule = COMPOUND_RULES[ds.key] || 'monthly';
           let capital = baseAmount;
-          snapshots2[sorted2[0].date] = capital;
+          snapshots2[dcaStartEntry.date] = capital;
           const cursor = new Date(startDate2);
 
           if (rule === 'annual') {
@@ -330,11 +336,11 @@ export function EnhancedChart({
             }
           }
         } else {
-          // Price-based: track cumulative units × current price
-          const t0Price = sorted2[0].value || 1;
+          // Price-based: track cumulative units × current price, depuis dcaStartEntry
+          const t0Price = dcaStartEntry.value || 1;
           const schedule: { date: string; cumUnits: number }[] = [];
           let cumUnits = baseAmount / t0Price;
-          schedule.push({ date: sorted2[0].date, cumUnits });
+          schedule.push({ date: dcaStartEntry.date, cumUnits });
           const cursor = new Date(startDate2);
           cursor.setMonth(cursor.getMonth() + 1);
           while (cursor <= endDate2) {
@@ -344,9 +350,11 @@ export function EnhancedChart({
             schedule.push({ date: dateStr, cumUnits });
             cursor.setMonth(cursor.getMonth() + 1);
           }
+          // Only assign values for data points at or after dcaStartEntry
           let schedIdx = 0;
           let curUnits = 0;
           for (const pt of sorted2) {
+            if (pt.date < dcaStartEntry.date) continue;
             while (schedIdx < schedule.length && schedule[schedIdx].date <= pt.date) {
               curUnits = schedule[schedIdx].cumUnits;
               schedIdx++;
@@ -394,7 +402,7 @@ export function EnhancedChart({
     });
 
     return data;
-  }, [datasets, placementAmount, monthlyPayment]);
+  }, [datasets, placementAmount, monthlyPayment, normalizeFromDate]);
 
   // ─── Pass 2 : normalisation selon le mode + position du brush ───
   const chartData = useMemo(() => {
