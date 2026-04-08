@@ -4,36 +4,36 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 223 47% 97%;
+    --foreground: 240 28% 14%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 240 28% 14%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 213 69% 24%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --popover-foreground: 240 28% 14%;
+    --primary: 220 74% 33%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 53% 94%;
+    --secondary-foreground: 220 74% 33%;
+    --muted: 217 53% 94%;
+    --muted-foreground: 220 20% 52%;
+    --accent: 218 53% 85%;
+    --accent-foreground: 220 77% 24%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 213 69% 24%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 218 53% 85%;
+    --input: 218 53% 85%;
+    --ring: 220 74% 33%;
     --radius: 0.75rem;
-    --chart-1: 213 69% 24%;
-    --chart-2: 142 76% 36%;
+    --chart-1: 220 74% 33%;
+    --chart-2: 161 94% 30%;
     --chart-3: 0 84% 60%;
     --chart-4: 45 93% 47%;
     --chart-5: 262 83% 58%;
-    
+
     /* Custom colors */
-    --primary-blue: #003A7A;
-    --primary-blue-light: #1e5799;
-    --success: #16a34a;
+    --primary-blue: #164194;
+    --primary-blue-light: #0e2d6b;
+    --success: #059669;
     --danger: #ef4444;
     --warning: #f59e0b;
   }
@@ -160,7 +160,7 @@ html {
 
 /* Gradient backgrounds */
 .gradient-primary {
-  background: linear-gradient(135deg, #003A7A 0%, #1e5799 100%);
+  background: linear-gradient(135deg, #164194 0%, #0e2d6b 100%);
 }
 
 .dark .gradient-primary {
