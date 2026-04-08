@@ -2,7 +2,7 @@ name: Maj quotidienne des taux
 
 on:
   schedule:
-    - cron: '0 8 * * *'   # 09:00 heure de Paris (08:00 UTC)
+    - cron: '0 7 * * *'   # 08:00 heure de Paris en hiver (CET = UTC+1) / 09:00 en été (CEST = UTC+2)
   workflow_dispatch:
 
 permissions:
