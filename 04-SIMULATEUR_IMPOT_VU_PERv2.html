@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulateur Impôt / Versement PER</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --lbp: #164194;
+      --lbp-light: #1e56b8;
+      --lbp-dark: #0e2d6b;
+      --lbp-pale: #e8eef8;
+      --lbp-muted: #c5d4ed;
+      --surface: #f4f6fb;
+      --white: #ffffff;
+      --text: #1a1a2e;
+      --text-muted: #6b7280;
+      --shadow-sm: 0 1px 3px rgba(22,65,148,0.06);
+      --shadow-md: 0 4px 16px rgba(22,65,148,0.08);
+      --shadow-lg: 0 8px 32px rgba(22,65,148,0.12);
+      --radius: 12px;
+      --radius-lg: 16px;
+      --bar-0: #d1fae5;
+      --bar-11: #bae6fd;
+      --bar-30: #c7d2fe;
+      --bar-41: #fed7aa;
+      --bar-45: #fecaca;
+      --green: #059669;
+      --green-bg: #ecfdf5;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      background: var(--surface);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 0 0 3em;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, var(--lbp) 0%, var(--lbp-dark) 100%);
+      color: white;
+      padding: 2em 1.5em 1.8em;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .header::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    }
+    .header h1 {
+      font-size: 1.6em;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.25em;
+    }
+
+
+    /* ── Form ── */
+    .form-container {
+      max-width: 640px;
+      margin: -1em auto 0;
+      padding: 0 1em;
+      position: relative;
+      z-index: 2;
+    }
+    .form-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      padding: 1.8em 1.6em 1.6em;
+    }
+
+    .year-toggle {
+      display: flex;
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 1.5em;
+      gap: 3px;
+    }
+    .year-toggle button {
+      flex: 1;
+      padding: 0.55em 1em;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.88em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: transparent;
+      color: var(--text-muted);
+    }
+    .year-toggle button.active {
+      background: var(--lbp);
+      color: white;
+      box-shadow: 0 2px 8px rgba(22,65,148,0.25);
+    }
+    .year-toggle button:not(.active):hover {
+      background: var(--lbp-pale);
+      color: var(--lbp);
+    }
+
+    .field { margin-bottom: 1.1em; }
+    .field label {
+      display: block;
+      font-size: 0.82em;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.35em;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .field input, .field select {
+      width: 100%;
+      padding: 0.7em 0.9em;
+      border: 1.5px solid var(--lbp-muted);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 1em;
+      color: var(--text);
+      background: var(--white);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    .field input:focus, .field select:focus {
+      border-color: var(--lbp);
+      box-shadow: 0 0 0 3px rgba(22,65,148,0.1);
+    }
+
+    .per-row {
+      display: flex;
+      gap: 1em;
+      align-items: flex-end;
+    }
+    .per-row .field { flex: 1; margin-bottom: 0; }
+
+    .gain-badge {
+      display: none;
+      align-items: center;
+      gap: 0.4em;
+      background: var(--green-bg);
+      color: var(--green);
+      font-weight: 700;
+      font-size: 0.92em;
+      padding: 0.55em 0.9em;
+      border-radius: 8px;
+      white-space: nowrap;
+      margin-bottom: 0.15em;
+      border: 1px solid #a7f3d0;
+    }
+
+    .btn-calc {
+      width: 100%;
+      margin-top: 1.2em;
+      padding: 0.85em;
+      background: var(--lbp);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 1.05em;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.01em;
+    }
+    .btn-calc:hover { background: var(--lbp-light); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(22,65,148,0.3); }
+    .btn-calc:active { transform: translateY(0); }
+
+    /* ── Results ── */
+    .results-area {
+      max-width: 1100px;
+      margin: 1.5em auto 0;
+      padding: 0 1em;
+    }
+    .results-flex {
+      display: none;
+      gap: 1.2em;
+    }
+    .results-flex.show { display: grid; grid-template-columns: 1fr 1fr; }
+
+    .result-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      padding: 1.5em 1.3em 1.2em;
+      position: relative;
+      overflow: hidden;
+    }
+    .result-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--lbp);
+    }
+    .result-card.after::before { background: var(--green); }
+
+    .result-card h2 {
+      font-size: 0.85em;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 1em;
+      text-align: center;
+    }
+
+    .impot-display {
+      text-align: center;
+      margin-bottom: 1em;
+    }
+    .impot-chip {
+      display: inline-block;
+      font-size: 1.5em;
+      font-weight: 800;
+      color: white;
+      background: var(--lbp);
+      padding: 0.3em 0.8em;
+      border-radius: 10px;
+      min-width: 160px;
+      letter-spacing: -0.01em;
+    }
+    .after .impot-chip { background: var(--green); }
+    .impot-chip.zero { background: #9ca3af; font-size: 1.1em; }
+
+    .decote-note {
+      font-size: 0.82em;
+      color: #dc2626;
+      margin-top: 0.4em;
+      font-weight: 500;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5em;
+      margin-bottom: 0.8em;
+    }
+    .info-item {
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 0.6em 0.7em;
+      text-align: center;
+    }
+    .info-item .label {
+      font-size: 0.7em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 600;
+    }
+    .info-item .value {
+      font-size: 1.05em;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 0.15em;
+    }
+
+    .tmi-bar {
+      text-align: center;
+      font-size: 0.88em;
+      font-weight: 600;
+      color: var(--lbp);
+      margin-bottom: 0.6em;
+    }
+
+    .qf-warning {
+      display: none;
+      text-align: center;
+      font-size: 0.82em;
+      font-weight: 600;
+      color: #d97706;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 0.45em 0.6em;
+      margin-bottom: 0.6em;
+    }
+
+    /* ── Tranches table ── */
+    .tranches-table { width: 100%; }
+    .tranches-table table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+    .tranches-table th {
+      background: var(--lbp);
+      color: white;
+      padding: 0.5em 0.4em;
+      font-weight: 600;
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tranches-table th:first-child { border-radius: 8px 0 0 0; }
+    .tranches-table th:last-child { border-radius: 0 8px 0 0; }
+    .tranches-table td {
+      padding: 0.5em 0.4em;
+      text-align: center;
+      border-bottom: 1px solid var(--surface);
+    }
+    .tranches-table tr.used td { background: #fefce8; font-weight: 600; }
+    .tranches-table tr:last-child td:first-child { border-radius: 0 0 0 8px; }
+    .tranches-table tr:last-child td:last-child { border-radius: 0 0 8px 0; }
+
+    .util-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6em;
+    }
+    .progress-bar {
+      width: 80px;
+      height: 18px;
+      background: #e5e7eb;
+      border-radius: 6px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .progress-fill { height: 100%; border-radius: 6px; transition: width 0.3s ease; }
+    .pct-label { font-weight: 700; font-size: 0.95em; min-width: 38px; text-align: right; }
+
+    /* ── Bottom phrase ── */
+    .bottom-phrase {
+      display: none;
+      max-width: 1100px;
+      margin: 1.2em auto 0;
+      padding: 0 1em;
+    }
+    .bottom-phrase .inner {
+      background: var(--lbp-pale);
+      border: 1px solid var(--lbp-muted);
+      border-radius: var(--radius);
+      padding: 1em 1.4em;
+      font-size: 0.92em;
+      color: var(--lbp-dark);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 2em;
+      font-size: 0.8em;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--lbp); text-decoration: none; }
+
+    @media (max-width: 800px) {
+      .results-flex.show { grid-template-columns: 1fr; }
+      .per-row { flex-direction: column; gap: 0.5em; }
+      .header h1 { font-size: 1.3em; }
+      body { padding-bottom: 2em; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Simulateur Impôt / Versement PER</h1>
+
+</div>
+
+<div class="form-container">
+  <div class="form-card">
+    <div class="year-toggle" id="yearToggle">
+      <button onclick="setYear(2025)" id="btn2025">IR 2025 · revenus 2024</button>
+      <button onclick="setYear(2026)" class="active" id="btn2026">IR 2026 · revenus 2025</button>
+    </div>
+
+    <div class="field">
+      <label>Revenu net imposable (€)</label>
+      <input type="number" id="revenu" min="0" step="1" placeholder="Ex : 35 000" />
+    </div>
+
+    <div class="field">
+      <label>Situation familiale</label>
+      <select id="situation">
+        <option value="couple">Couple marié / PACS (imposition commune)</option>
+        <option value="autre">Autre (célibataire, divorcé, concubinage…)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Nombre de parts fiscales</label>
+      <input type="number" id="parts" step="0.25" min="1" placeholder="Ex : 2.5" />
+    </div>
+
+    <div class="per-row">
+      <div class="field">
+        <label>Versement PER (€)</label>
+        <input type="number" id="deduction" min="0" step="1" placeholder="0" />
+      </div>
+      <div class="gain-badge" id="gain-badge">
+        <span>✓ Gain fiscal :</span>
+        <span id="gain-text"></span>
+      </div>
+    </div>
+
+    <button class="btn-calc" onclick="calculer()">Calculer mon impôt</button>
+  </div>
+</div>
+
+<div class="results-area">
+  <div class="results-flex" id="results-flex">
+    <!-- AVANT -->
+    <div class="result-card">
+      <h2>Avant déduction PER</h2>
+      <div class="impot-display">
+        <span class="impot-chip" id="impotAvant"></span>
+        <div class="decote-note" id="decoteAvant"></div>
+      </div>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="label">Revenu imposable</div>
+          <div class="value" id="revenuAvant"></div>
+        </div>
+        <div class="info-item">
+          <div class="label">Quotient familial</div>
+          <div class="value" id="qfAvant"></div>
+        </div>
+      </div>
+      <div class="qf-warning" id="qfAvant-warn">⚠ Plafonnement du quotient familial appliqué</div>
+      <div class="tmi-bar" id="tmiAvant"></div>
+      <div class="tranches-table">
+        <table>
+          <thead><tr><th>Tranche</th><th>Taux</th><th>Utilisation</th></tr></thead>
+          <tbody id="tranchesAvant"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- APRÈS -->
+    <div class="result-card after">
+      <h2>Après déduction PER</h2>
+      <div class="impot-display">
+        <span class="impot-chip" id="impotApres"></span>
+        <div class="decote-note" id="decoteApres"></div>
+      </div>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="label">Revenu imposable</div>
+          <div class="value" id="revenuApres"></div>
+        </div>
+        <div class="info-item">
+          <div class="label">Quotient familial</div>
+          <div class="value" id="qfApres"></div>
+        </div>
+      </div>
+      <div class="qf-warning" id="qfApres-warn">⚠ Plafonnement du quotient familial appliqué</div>
+      <div class="tmi-bar" id="tmiApres"></div>
+      <div class="tranches-table">
+        <table>
+          <thead><tr><th>Tranche</th><th>Taux</th><th>Utilisation</th></tr></thead>
+          <tbody id="tranchesApres"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-phrase" id="bottom-phrase">
+  <div class="inner" id="bottom-text"></div>
+</div>
+
+<footer>
+  Simulateur indicatif · gillian.noesen@labanquepostale.fr
+</footer>
+
+<script>
+// ═══════════════════════════════════════
+//  BARÈMES
+// ═══════════════════════════════════════
+const BAREMES = {
+  2025: {
+    label: 'IR 2025 (revenus 2024)',
+    tranches: [
+      { min: 0,      max: 11497,    taux: 0.00 },
+      { min: 11497,  max: 29315,    taux: 0.11 },
+      { min: 29315,  max: 83823,    taux: 0.30 },
+      { min: 83823,  max: 180294,   taux: 0.41 },
+      { min: 180294, max: Infinity,  taux: 0.45 }
+    ],
+    plafondQF: 1791,
+    decote: {
+      seuilSeul: 1964, baseSeul: 889,
+      seuilCouple: 3248, baseCouple: 1470,
+      coeff: 0.4525
+    }
+  },
+  2026: {
+    label: 'IR 2026 (revenus 2025)',
+    tranches: [
+      { min: 0,      max: 11600,    taux: 0.00 },
+      { min: 11600,  max: 29579,    taux: 0.11 },
+      { min: 29579,  max: 84577,    taux: 0.30 },
+      { min: 84577,  max: 181917,   taux: 0.41 },
+      { min: 181917, max: Infinity,  taux: 0.45 }
+    ],
+    plafondQF: 1807,
+    decote: {
+      seuilSeul: 1982, baseSeul: 897,
+      seuilCouple: 3277, baseCouple: 1483,
+      coeff: 0.4525
+    }
+  }
+};
+
+let currentYear = 2026;
+function getBarem() { return BAREMES[currentYear]; }
+
+function setYear(y) {
+  currentYear = y;
+  document.getElementById('btn2025').classList.toggle('active', y === 2025);
+  document.getElementById('btn2026').classList.toggle('active', y === 2026);
+  // Recalculate if data present
+  if (document.getElementById('revenu').value && document.getElementById('parts').value) calculer();
+}
+
+// ═══════════════════════════════════════
+//  MOTEUR DE CALCUL
+// ═══════════════════════════════════════
+function impotParPart(qf) {
+  const B = getBarem().tranches;
+  let imp = 0, tranches = [];
+  for (const t of B) {
+    if (qf > t.min) {
+      const base = Math.max(0, Math.min(qf, t.max) - t.min);
+      imp += base * t.taux;
+      tranches.push({ ...t, montant: base });
+    } else {
+      tranches.push({ ...t, montant: 0 });
+    }
+  }
+  return { imp, tranches };
+}
+
+function impotBrutTotal(rev, parts) {
+  const qf = Math.max(0, rev / parts);
+  const r = impotParPart(qf);
+  return { qf, imp: r.imp * parts, tranches: r.tranches };
+}
+
+function plafonnementQF(impParts, rev, parts, situation) {
+  const base = situation === 'couple' ? 2 : 1;
+  if (parts <= base) return { imp: Math.round(impParts.imp), used: false, base };
+  const impBase = impotBrutTotal(rev, base);
+  const demi = (parts - base) * 2;
+  const max = demi * getBarem().plafondQF;
+  const plaf = impBase.imp - max;
+  if (impParts.imp < plaf) return { imp: Math.round(plaf), used: true, base };
+  return { imp: Math.round(impParts.imp), used: false, base };
+}
+
+function decote(impBrut, situation) {
+  if (impBrut <= 0) return { net: 0, applied: false, amount: 0 };
+  const D = getBarem().decote;
+  const seuil = situation === 'couple' ? D.seuilCouple : D.seuilSeul;
+  const base  = situation === 'couple' ? D.baseCouple  : D.baseSeul;
+  if (impBrut < seuil) {
+    const d = base - D.coeff * impBrut;
+    const net = Math.round(Math.max(0, impBrut - Math.max(0, d)));
+    return { net, applied: d > 0, amount: Math.round(Math.max(0, d)) };
+  }
+  return { net: Math.round(impBrut), applied: false, amount: 0 };
+}
+
+function tmiFromQF(qf) {
+  const B = getBarem().tranches;
+  for (let i = 0; i < B.length; i++) {
+    if (qf <= B[i].max) return B[i].taux;
+  }
+  return B[B.length - 1].taux;
+}
+
+function getEffectiveQFTranches(rev, parts, situation, plafUsed, baseParts) {
+  const p = (plafUsed && parts > baseParts) ? baseParts : parts;
+  const qf = Math.max(0, rev / p);
+  return { qf, tranches: impotParPart(qf).tranches };
+}
+
+function tmiApresDeduction(rev, parts, situation, d) {
+  const r2 = Math.max(0, rev - d);
+  const brut = impotBrutTotal(r2, parts);
+  const plaf = plafonnementQF(brut, r2, parts, situation);
+  const p = (plaf.used && parts > plaf.base) ? plaf.base : parts;
+  return tmiFromQF(r2 / p);
+}
+
+function maxDeductPourTMI(rev, parts, situation, tmiInit) {
+  let lo = 0, hi = rev, best = 0;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (tmiApresDeduction(rev, parts, situation, mid) >= tmiInit) { best = mid; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  return best;
+}
+
+// ═══════════════════════════════════════
+//  AFFICHAGE
+// ═══════════════════════════════════════
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('fr-FR');
+
+const barColors = { 0:'var(--bar-0)', 11:'var(--bar-11)', 30:'var(--bar-30)', 41:'var(--bar-41)', 45:'var(--bar-45)' };
+
+function buildTranches(tranches, targetId) {
+  let html = '';
+  for (const t of tranches) {
+    const pct = Math.round(t.taux * 100);
+    const fill = t.max === Infinity ? null
+      : Math.max(0, Math.min(100, Math.round(t.montant / (t.max - t.min) * 100)));
+    const color = barColors[pct] || 'var(--bar-45)';
+    const used = t.montant > 0;
+    html += `<tr class="${used ? 'used' : ''}">
+      <td>${fmt(t.min)} – ${t.max === Infinity ? '∞' : fmt(t.max) + ' €'}</td>
+      <td>${pct} %</td>
+      <td>
+        <div class="util-bar">
+          <div class="progress-bar"><div class="progress-fill" style="width:${fill??0}%;background:${color}"></div></div>
+          <span class="pct-label">${fill == null ? '' : fill + ' %'}</span>
+        </div>
+      </td>
+    </tr>`;
+  }
+  $(targetId).innerHTML = html;
+}
+
+function calculer() {
+  const revenu    = parseInt($('revenu').value) || 0;
+  const deduction = parseInt($('deduction').value) || 0;
+  const parts     = parseFloat($('parts').value) || 0;
+  const situation = $('situation').value;
+
+  if (!revenu || !parts) {
+    $('results-flex').classList.remove('show');
+    $('gain-badge').style.display = 'none';
+    $('bottom-phrase').style.display = 'none';
+    return;
+  }
+
+  const revAvant = Math.max(0, revenu);
+  const revApres = Math.max(0, revAvant - Math.max(0, deduction));
+
+  const brutAv = impotBrutTotal(revAvant, parts);
+  const brutAp = impotBrutTotal(revApres, parts);
+
+  const plafAv = plafonnementQF(brutAv, revAvant, parts, situation);
+  const plafAp = plafonnementQF(brutAp, revApres, parts, situation);
+
+  const decAv = decote(plafAv.imp, situation);
+  const decAp = decote(plafAp.imp, situation);
+
+  const impAv = decAv.net;
+  const impAp = decAp.net;
+  const gain = impAv - impAp;
+
+  $('results-flex').classList.add('show');
+
+  // Impôt chips
+  const chipAv = $('impotAvant'), chipAp = $('impotApres');
+  if (impAv === 0) { chipAv.textContent = 'Non imposable'; chipAv.classList.add('zero'); }
+  else { chipAv.textContent = fmt(impAv) + ' €'; chipAv.classList.remove('zero'); }
+  if (impAp === 0) { chipAp.textContent = 'Non imposable'; chipAp.classList.add('zero'); }
+  else { chipAp.textContent = fmt(impAp) + ' €'; chipAp.classList.remove('zero'); }
+
+  // Décote
+  const dAv = $('decoteAvant'), dAp = $('decoteApres');
+  if (decAv.applied && decAv.amount > 0) { dAv.style.display = 'block'; dAv.textContent = `Décote appliquée : −${fmt(decAv.amount)} €`; }
+  else dAv.style.display = 'none';
+  if (decAp.applied && decAp.amount > 0) { dAp.style.display = 'block'; dAp.textContent = `Décote appliquée : −${fmt(decAp.amount)} €`; }
+  else dAp.style.display = 'none';
+
+  // Infos
+  $('revenuAvant').textContent = fmt(revAvant) + ' €';
+  $('revenuApres').textContent = fmt(revApres) + ' €';
+  $('qfAvant').textContent = fmt(Math.round(brutAv.qf)) + ' €';
+  $('qfApres').textContent = fmt(Math.round(brutAp.qf)) + ' €';
+
+  $('qfAvant-warn').style.display = plafAv.used ? 'block' : 'none';
+  $('qfApres-warn').style.display = plafAp.used ? 'block' : 'none';
+
+  // TMI + tranches
+  const affAv = getEffectiveQFTranches(revAvant, parts, situation, plafAv.used, plafAv.base);
+  const affAp = getEffectiveQFTranches(revApres, parts, situation, plafAp.used, plafAp.base);
+
+  const tmiAv = tmiFromQF(affAv.qf);
+  const tmiAp = tmiFromQF(affAp.qf);
+  $('tmiAvant').innerHTML = `TMI : <strong>${Math.round(tmiAv*100)} %</strong>`;
+  $('tmiApres').innerHTML = `TMI : <strong>${Math.round(tmiAp*100)} %</strong>`;
+
+  buildTranches(affAv.tranches, 'tranchesAvant');
+  buildTranches(affAp.tranches, 'tranchesApres');
+
+  // Gain badge
+  if (deduction > 0 && gain > 0) {
+    $('gain-badge').style.display = 'flex';
+    const pct = Math.round(100 * gain / deduction);
+    $('gain-text').textContent = `${fmt(gain)} € (${pct} %)`;
+  } else {
+    $('gain-badge').style.display = 'none';
+  }
+
+  // Bottom phrase
+  const maxD = maxDeductPourTMI(revAvant, parts, situation, tmiAv);
+  if (maxD > 0) {
+    const eco = Math.round(maxD * tmiAv);
+    $('bottom-text').textContent =
+      `Pour que la déduction soit entièrement valorisée à la TMI actuelle (${Math.round(tmiAv*100)} %), le client peut verser jusqu'à ${fmt(maxD)} € sur son PER, soit un gain fiscal de ${fmt(eco)} €.`;
+    $('bottom-phrase').style.display = 'block';
+  } else {
+    $('bottom-phrase').style.display = 'none';
+  }
+}
+
+// Auto-calc on Enter
+document.querySelectorAll('input').forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') calculer(); }));
+</script>
+</body>
+</html>
