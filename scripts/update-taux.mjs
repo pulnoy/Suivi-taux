@@ -22,7 +22,9 @@ const HISTORY_START_DATE = '2000-01-01';
 // 1. Récupération FRED - Historique maximum depuis 2000
 const FRED_SERIES_MAP = {
   'IRLTLT01FRM156N': 'oat',
-  'ECBESTRVOLWGTTRMDMNRT': 'estr'
+  'ECBESTRVOLWGTTRMDMNRT': 'estr',
+  'IRLTLT01JPM156N': 'jgb',
+  'IRLTLT01GBM156N': 'gilt',
 };
 
 async function fetchFredSeries(seriesId) {
@@ -58,8 +60,31 @@ async function fetchFredSeries(seriesId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 2. OAT 10 ANS — BCE (quotidien si dispo, sinon mensuel) + FRED historique
+// 2. OAT 10 ANS — BCE mensuel + FRED historique
 // ─────────────────────────────────────────────────────────────
+
+// Fetch generique BCE mensuel pour obligations d'État d'une zone Euro (FR, DE…)
+async function fetchEcbBondMonthly(countryCode, label, existingKey) {
+  try {
+    const url = `https://data-api.ecb.europa.eu/service/data/IRS/M.${countryCode}.L.L40.CI.0000.EUR.N.Z?startPeriod=2000-01-01&format=jsondata&detail=dataonly`;
+    const response = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+    if (!response.ok) {
+      console.log(`  ⚠️ BCE ${label} HTTP ${response.status}`);
+      return existingData?.indices?.[existingKey]?.historique ?? [];
+    }
+    const json = await response.json();
+    const points = parseEcbSdmxJson(json);
+    if (points.length > 0) {
+      const last = points[points.length - 1];
+      console.log(`  ✓ BCE ${label}: ${points.length} pts, dernier: ${last.date} = ${last.value}%`);
+      return points;
+    }
+    return existingData?.indices?.[existingKey]?.historique ?? [];
+  } catch (err) {
+    console.log(`  ⚠️ BCE ${label} erreur: ${err.message}`);
+    return existingData?.indices?.[existingKey]?.historique ?? [];
+  }
+}
 
 // Parse un bloc d'observations SDMX-JSON BCE et retourne les points triés
 function parseEcbSdmxJson(json) {
@@ -120,8 +145,8 @@ async function getOatHistory() {
   // 1. Historique long FRED (mensuel, depuis 2000)
   const fredData = await fetchFredSeries('IRLTLT01FRM156N');
 
-  // 2. BCE : quotidien en priorité, mensuel en fallback
-  const ecbData = await fetchOatFromECB('D');
+  // 2. BCE mensuel (quotidien retourne 404 pour ce dataset)
+  const ecbData = await fetchOatFromECB('M');
 
   if (fredData.length === 0 && ecbData.length === 0) {
     if (existingData?.indices?.oat?.historique?.length > 0) {
@@ -1065,6 +1090,13 @@ async function main() {
   const historyScpi         = getScpiHistory();
   const historyFondsEuros   = getFondsEurosHistory();
 
+  // Obligations d'État étrangères 10 ans
+  console.log("\n🌍 Récupération obligations d'État étrangères (10 ans)...");
+  const historyUs10y = await yahooWithFallback('%5ETNX', 'us10y');            // US Treasury (Yahoo, quotidien)
+  const historyBund  = await fetchEcbBondMonthly('DE', 'Bund DE', 'bund');    // Bund allemand (ECB, mensuel)
+  const historyJgb   = await fetchFredSeries('IRLTLT01JPM156N');              // JGB japonais (FRED, mensuel)
+  const historyGilt  = await fetchFredSeries('IRLTLT01GBM156N');              // Gilt britannique (FRED, mensuel)
+
   const getLast = (arr) => arr && arr.length ? arr[arr.length - 1].value : null;
 
   const calculateAnnualizedPerformance = (historique, years) => {
@@ -1117,22 +1149,26 @@ async function main() {
   const nouvellesDonnees = {
     date_mise_a_jour: new Date().toISOString(),
     indices: {
-      // Taux de marché
+      // Taux de marché France
       oat:          { titre: "OAT 10 ans",        valeur: getLast(historyOat),          suffixe: "%", historique: historyOat },
       tec10:        { titre: "TEC 10 ans",         valeur: getLast(historyTec10),         suffixe: "%", historique: historyTec10 },
       estr:         { titre: "€STR",               valeur: getLast(historyEstr),          suffixe: "%", historique: historyEstr },
       tauxDepotBCE: { titre: "Taux dépôt BCE",     valeur: getLast(historyTauxDepotBCE),  suffixe: "%", historique: historyTauxDepotBCE },
       inflation:    { titre: "Inflation France",   valeur: getLast(historyInflation),     suffixe: "%", historique: historyInflation },
+      tauxImmo:     { titre: "Taux crédit immo",   valeur: getLast(historyTauxImmo),      suffixe: "%", historique: historyTauxImmo },
+      prixImmo:     { titre: "Prix immo (var.an.)",valeur: getLast(historyPrixImmo),      suffixe: "%", historique: historyPrixImmo },
+
+      // Obligations d'État étrangères 10 ans
+      us10y: { titre: "Treasury US 10 ans",      valeur: getLast(historyUs10y), suffixe: "%", historique: historyUs10y },
+      bund:  { titre: "Bund allemand 10 ans",    valeur: getLast(historyBund),  suffixe: "%", historique: historyBund  },
+      jgb:   { titre: "JGB japonais 10 ans",     valeur: getLast(historyJgb),   suffixe: "%", historique: historyJgb   },
+      gilt:  { titre: "Gilt britannique 10 ans", valeur: getLast(historyGilt),  suffixe: "%", historique: historyGilt  },
 
       // Épargne réglementée
-      livreta:      { titre: "Livret A",           valeur: getLast(historyLivretA),       suffixe: "%", historique: historyLivretA },
-      pel:          { titre: "PEL",                valeur: getLast(historyPel),           suffixe: "%", historique: historyPel },
-      fondsEuros:   { titre: "Fonds euros (moy.)", valeur: getLast(historyFondsEuros),    suffixe: "%", historique: historyFondsEuros },
-
-      // Immobilier
-      tauxImmo:     { titre: "Taux crédit immo",      valeur: getLast(historyTauxImmo),      suffixe: "%", historique: historyTauxImmo },
-      prixImmo:     { titre: "Prix immo (var. an.)",   valeur: getLast(historyPrixImmo),      suffixe: "%", historique: historyPrixImmo },
-      scpi:         { titre: "Moyenne SCPI",           valeur: getLast(historyScpi),          suffixe: "%", historique: historyScpi },
+      livreta:    { titre: "Livret A",           valeur: getLast(historyLivretA),    suffixe: "%", historique: historyLivretA },
+      pel:        { titre: "PEL",                valeur: getLast(historyPel),        suffixe: "%", historique: historyPel },
+      fondsEuros: { titre: "Fonds euros (moy.)", valeur: getLast(historyFondsEuros), suffixe: "%", historique: historyFondsEuros },
+      scpi:       { titre: "Moyenne SCPI",       valeur: getLast(historyScpi),       suffixe: "%", historique: historyScpi },
 
       // Devises
       eurusd:   createIndexData("EUR / USD", getLast(historyEurUsd), "$",   historyEurUsd),

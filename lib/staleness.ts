@@ -6,7 +6,7 @@ export type UpdateFreq = {
 // Fréquence cible + délai de tolérance par indice
 export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   // Taux — quotidien (jours ouvrés, tolérance weekend+1j)
-  oat:          { label: 'Quotidien',       maxDays: 5  },
+  oat:          { label: 'Mensuel',         maxDays: 60 },
   tec10:        { label: 'Quotidien',       maxDays: 5  },
   estr:         { label: 'Quotidien',       maxDays: 5  },
   // BCE — par réunion (~8×/an soit toutes les 6 semaines)
@@ -45,6 +45,11 @@ export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   brent:        { label: 'Quotidien',       maxDays: 5  },
   gold:         { label: 'Quotidien',       maxDays: 5  },
   gaz:          { label: 'Quotidien',       maxDays: 5  },
+  // Obligations d'État étrangères 10 ans
+  us10y:        { label: 'Quotidien',       maxDays: 5  },
+  bund:         { label: 'Mensuel',         maxDays: 60 },
+  jgb:          { label: 'Mensuel',         maxDays: 60 },
+  gilt:         { label: 'Mensuel',         maxDays: 60 },
   // Crypto — quotidien (24/7, tolérance plus courte)
   btc:          { label: 'Quotidien',       maxDays: 3  },
   eth:          { label: 'Quotidien',       maxDays: 3  },

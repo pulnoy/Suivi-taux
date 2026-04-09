@@ -10,7 +10,7 @@ export interface IndexEducation {
   color: string;
   bgColor: string;
   darkBgColor: string;
-  category: 'rates' | 'stocks' | 'forex' | 'commodities' | 'crypto' | 'real_estate';
+  category: 'rates' | 'savings' | 'stocks' | 'forex' | 'commodities' | 'crypto';
   categoryLabel: string;
   source: string;
   sourceUrl?: string;
@@ -356,7 +356,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     color: '#7c3aed',
     bgColor: '#f3e8ff',
     darkBgColor: '#2e1065',
-    category: 'real_estate',
+    category: 'savings',
     categoryLabel: 'Pierre Papier',
     source: 'ASPIM (Association des SCPI)',
     sourceUrl: 'https://www.aspim.fr/'
@@ -486,7 +486,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     color: '#7c3aed',
     bgColor: '#f5f3ff',
     darkBgColor: '#2e1065',
-    category: 'rates',
+    category: 'savings',
     categoryLabel: 'Épargne',
     source: 'Banque de France (Webstat)',
     sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/mir1/MIR1.M.FR.B.L22FRSP.H.R.A.2250U6.EUR.N'
@@ -513,7 +513,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     color: '#d97706',
     bgColor: '#fffbeb',
     darkBgColor: '#451a03',
-    category: 'rates',
+    category: 'savings',
     categoryLabel: 'Épargne',
     source: 'France Assureurs / ACPR',
     sourceUrl: 'https://www.franceassureurs.fr/nos-publications/chiffres-marche-assurance-vie'
@@ -539,7 +539,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     color: '#0891b2',
     bgColor: '#ecfeff',
     darkBgColor: '#082f49',
-    category: 'real_estate',
+    category: 'rates',
     categoryLabel: 'Immobilier',
     source: 'Banque de France (Webstat)',
     sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/mir1/MIR1.M.FR.B.A22.K.R.A.2254U6.EUR.N'
@@ -565,7 +565,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     color: '#0ea5e9',
     bgColor: '#e0f2fe',
     darkBgColor: '#0c4a6e',
-    category: 'rates',
+    category: 'savings',
     categoryLabel: 'Épargne',
     source: 'Banque de France / Ministère des Finances',
     sourceUrl: 'https://www.banque-france.fr/fr/statistiques/taux-et-cours/taux-livret-a'
@@ -591,7 +591,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     color: '#7c3aed',
     bgColor: '#f5f3ff',
     darkBgColor: '#2e1065',
-    category: 'real_estate',
+    category: 'rates',
     categoryLabel: 'Immobilier',
     source: 'Banque de France / INSEE-Notaires',
     sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/rpp/RPP.Q.FR.N.ED.00.1.00'
@@ -693,15 +693,63 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     source: 'OilPriceAPI (DUTCH_TTF_EUR)',
     sourceUrl: 'https://oilpriceapi.com'
   },
+
+  us10y: {
+    title: 'Treasury US 10 ans',
+    shortDescription: 'Rendement de l\'obligation souveraine américaine à 10 ans. Taux de référence mondial.',
+    fullDescription: `Le "10-Year Treasury Note" américain est l'obligation d'État de référence mondiale. Son rendement influence les marchés obligataires, immobiliers et boursiers à l'échelle planétaire. Il reflète les anticipations de croissance et d'inflation aux États-Unis.`,
+    importance: `C'est l'actif de référence mondial pour la valeur de l'argent dans le temps. Un hausse du Treasury 10 ans provoque souvent une correction sur les marchés actions et pèse sur les obligations mondiales.`,
+    factors: ['Politique monétaire de la Fed', 'Anticipations d\'inflation US', 'Déficit budgétaire américain', 'Demande mondiale de dollars', 'Croissance économique US'],
+    insights: ['Référence mondiale pour le coût de l\'argent', 'Corrélation négative avec les actions', 'Impact sur le dollar et les marchés émergents'],
+    color: '#1d4ed8', bgColor: '#eff6ff', darkBgColor: '#1e3a5f',
+    category: 'rates' as const, categoryLabel: 'Taux État',
+    source: 'Yahoo Finance (^TNX)', sourceUrl: 'https://finance.yahoo.com/quote/%5ETNX'
+  },
+
+  bund: {
+    title: 'Bund allemand 10 ans',
+    shortDescription: 'Rendement de l\'obligation souveraine allemande à 10 ans. Référence de la zone euro.',
+    fullDescription: `Le Bund (Bundesanleihe) à 10 ans est l'obligation d'État de référence en zone euro. L'Allemagne étant perçue comme l'emprunteur le plus sûr de la zone, son taux constitue le plancher de référence. Le spread OAT-Bund mesure la prime de risque France vs Allemagne.`,
+    importance: `Le taux Bund est la référence "sans risque" européenne. L'écart OAT-Bund (actuellement ~70-80 bps) est un indicateur clé de la confiance des marchés envers la France par rapport à l'Allemagne.`,
+    factors: ['Politique monétaire BCE', 'Solidité des finances publiques allemandes', 'Appétit pour la qualité en zone euro', 'Inflation zone euro'],
+    insights: ['Plancher de référence obligataire en Europe', 'Spread OAT-Bund = indicateur de risque France', 'Taux souvent plus bas que tous les autres pays euro'],
+    color: '#dc2626', bgColor: '#fef2f2', darkBgColor: '#450a0a',
+    category: 'rates' as const, categoryLabel: 'Taux État',
+    source: 'BCE (IRS/M.DE)', sourceUrl: 'https://data-api.ecb.europa.eu'
+  },
+
+  jgb: {
+    title: 'JGB japonais 10 ans',
+    shortDescription: 'Rendement de l\'obligation souveraine japonaise à 10 ans. Politique monétaire ultra-accommodante historique.',
+    fullDescription: `Le JGB (Japanese Government Bond) à 10 ans est l'obligation d'État japonaise de référence. La Banque du Japon (BoJ) a maintenu une politique de contrôle de la courbe des taux (YCC) pendant des années, maintenant les rendements proches de zéro. La normalisation progressive depuis 2023 est un événement macro majeur.`,
+    importance: `La BoJ commence à normaliser sa politique après des décennies de taux ultra-bas. Cette normalisation crée des flux importants (carry trade débouclé) affectant le yen, les actions mondiales et les marchés obligataires.`,
+    factors: ['Politique de contrôle de courbe (YCC) de la BoJ', 'Inflation japonaise (longtemps absente)', 'Yen (JPY)', 'Flux de carry trade', 'Démographie et dette publique japonnaise'],
+    insights: ['Longtemps maintenu à 0% par la BoJ (YCC)', 'Normalisation en cours depuis 2023-2024', 'Débouclage du carry trade JPY = volatilité mondiale'],
+    color: '#dc2626', bgColor: '#fef9f0', darkBgColor: '#450a0a',
+    category: 'rates' as const, categoryLabel: 'Taux État',
+    source: 'FRED (IRLTLT01JPM156N)', sourceUrl: 'https://fred.stlouisfed.org/series/IRLTLT01JPM156N'
+  },
+
+  gilt: {
+    title: 'Gilt britannique 10 ans',
+    shortDescription: 'Rendement de l\'obligation souveraine britannique à 10 ans. Impacté par le Brexit et l\'inflation UK.',
+    fullDescription: `Le Gilt à 10 ans est l'obligation d'État du Royaume-Uni. Depuis le Brexit (2020), le Gilt est décorrélé des obligations européennes et suit davantage les politiques de la Bank of England (BoE). La crise des "mini-budgets" de septembre 2022 a illustré la vulnérabilité du marché obligataire britannique.`,
+    importance: `Le Gilt reflète la politique monétaire britannique post-Brexit et les primes de risque liées à la sortie de l'UE. L'écart Gilt-Bund mesure la divergence entre les économies britannique et allemande.`,
+    factors: ['Politique monétaire Bank of England', 'Inflation UK (souvent plus élevée qu\'en zone euro)', 'Brexit et relations commerciales UE/UK', 'Livre sterling', 'Déficit budgétaire britannique'],
+    insights: ['Crise des Gilts sept. 2022 (mini-budget Truss)', 'BoE souvent plus hawkish que BCE', 'Corrélé aux Treasuries US mais avec prime de risque UK'],
+    color: '#1d4ed8', bgColor: '#f0f4ff', darkBgColor: '#1e3a5f',
+    category: 'rates' as const, categoryLabel: 'Taux État',
+    source: 'FRED (IRLTLT01GBM156N)', sourceUrl: 'https://fred.stlouisfed.org/series/IRLTLT01GBM156N'
+  },
 };
 
 export const CATEGORY_CONFIG = {
-  rates: { icon: '📊', label: 'Taux', color: '#16a34a' },
-  stocks: { icon: '📈', label: 'Actions', color: '#003A7A' },
-  forex: { icon: '💱', label: 'Devises', color: '#0ea5e9' },
-  commodities: { icon: '🛢️', label: 'Matières premières', color: '#F2B301' },
-  crypto: { icon: '₿', label: 'Crypto', color: '#f7931a' },
-  real_estate: { icon: '🏢', label: 'Immobilier', color: '#7c3aed' }
+  savings:    { icon: '💰', label: 'Épargne',            color: '#7c3aed' },
+  stocks:     { icon: '📈', label: 'Actions',             color: '#164194' },
+  crypto:     { icon: '₿',  label: 'Crypto',              color: '#f7931a' },
+  rates:      { icon: '📊', label: 'Taux',                color: '#16a34a' },
+  forex:      { icon: '💱', label: 'Devises',             color: '#0ea5e9' },
+  commodities:{ icon: '🛢️', label: 'Matières premières',  color: '#F2B301' },
 };
 
 export function getCategoryColor(category: string): string {

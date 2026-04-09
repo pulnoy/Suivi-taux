@@ -499,12 +499,12 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
 
   // Grouper les indices par catégorie
   const CATEGORY_ORDER = [
-    { id: 'rates',        label: 'Taux & Épargne',     icon: '📊' },
-    { id: 'real_estate',  label: 'Immobilier',          icon: '🏢' },
+    { id: 'savings',      label: 'Épargne',             icon: '💰' },
     { id: 'stocks',       label: 'Actions',             icon: '📈' },
+    { id: 'crypto',       label: 'Crypto',              icon: '₿'  },
+    { id: 'rates',        label: 'Taux',                icon: '📊' },
     { id: 'forex',        label: 'Devises',             icon: '💱' },
     { id: 'commodities',  label: 'Matières premières',  icon: '🛢️' },
-    { id: 'crypto',       label: 'Crypto',              icon: '₿'  },
   ];
 
   const indicesByCategory = useMemo(() => {
