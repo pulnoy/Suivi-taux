@@ -458,12 +458,6 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             return { key: ds.key, title: ds.title, suffix: '€', color: ds.color, isSavings: false, ...stats };
           }
         }
-      } else if (isSavings) {
-        const capSeries = computeCapitalizedSeries(ds.data, ds.key, 100);
-        if (capSeries.length >= 2) {
-          const stats = calculateAllStats(capSeries);
-          return { key: ds.key, title: ds.title, suffix: '€ (base 100)', color: ds.color, isSavings: true, ...stats };
-        }
       }
 
       const stats = calculateAllStats(ds.data);
