@@ -14,6 +14,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getIndexStatus } from '@/lib/staleness';
 
 // --- TYPES ---
 type DataPoint = { date: string; value: number; timestamp?: number };
@@ -146,15 +147,17 @@ export default function Dashboard() {
               >
                 <Activity className="h-4 w-4" />
                 <span className="hidden sm:inline">Statut</span>
-                {data && (
-                  <span
-                    className={`h-2 w-2 rounded-full shrink-0 ${
-                      Object.values(data.indices).every(idx => (idx.historique?.length ?? 0) > 0 && idx.valeur != null)
-                        ? 'bg-green-500'
-                        : 'bg-destructive'
-                    }`}
-                  />
-                )}
+                {data && (() => {
+                  const statuses = Object.entries(data.indices).map(([key, idx]) => {
+                    const h = idx.historique ?? [];
+                    const last = h.length > 0 ? h[h.length - 1].date : null;
+                    return getIndexStatus(key, h.length, idx.valeur, last);
+                  });
+                  const hasFail  = statuses.some(s => s === 'fail');
+                  const hasStale = statuses.some(s => s === 'stale');
+                  const dotClass = hasFail ? 'bg-destructive' : hasStale ? 'bg-orange-400' : 'bg-green-500';
+                  return <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} />;
+                })()}
               </button>
             </div>
             <ThemeToggle />
