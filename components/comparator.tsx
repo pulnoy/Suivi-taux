@@ -53,6 +53,9 @@ interface ComparatorProps {
 
 type Period = '1M' | '3M' | '6M' | '1A' | '5A' | '10A' | '18A' | '20A' | 'YTD' | 'MAX' | 'CUSTOM';
 
+// Couleurs fixes par slot de sélection (1er sélectionné → slot 0, etc.)
+const SELECTION_PALETTE = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
+
 // Types pour l'analyse de compatibilité des modes
 type ModeRecommendation = 'real' | 'percent' | 'both';
 type CompatibilityLevel = 'compatible' | 'warning' | 'incompatible';
@@ -263,7 +266,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       return {
         key,
         data: filtered,
-        color: INDEX_EDUCATION[key]?.color || '#64748b',
+        color: SELECTION_PALETTE[selectedKeys.indexOf(key)] ?? '#64748b',
         title: index.titre,
         suffix: index.suffixe
       };
@@ -577,8 +580,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                                 isDisabled && 'opacity-40 cursor-not-allowed'
                               )}
                               style={isSelected ? {
-                                backgroundColor: education?.color ?? '#3b82f6',
-                                borderColor: education?.color ?? '#3b82f6',
+                                backgroundColor: SELECTION_PALETTE[selectedKeys.indexOf(key)] ?? '#3b82f6',
+                                borderColor: SELECTION_PALETTE[selectedKeys.indexOf(key)] ?? '#3b82f6',
                               } : {}}
                             >
                               {index.titre}
@@ -609,7 +612,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 <span
                   key={key}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white"
-                  style={{ backgroundColor: edu?.color ?? '#3b82f6' }}
+                  style={{ backgroundColor: SELECTION_PALETTE[selectedKeys.indexOf(key)] ?? '#3b82f6' }}
                 >
                   {indices[key]?.titre}
                   <button onClick={() => toggleIndex(key)} className="ml-0.5 hover:opacity-70">
