@@ -58,159 +58,74 @@ async function fetchFredSeries(seriesId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 2. OAT 10 ANS — SOURCE COMPLÉMENTAIRE : Banque de France Webstat
-//    Série FM.M.FR.EUR.FR2.BB.FR10YT_RR.YLD (mensuelle, quasi temps réel)
-//    Utilisée pour compléter les données FRED avec les mois récents manquants
+// 2. OAT 10 ANS — BCE (quotidien si dispo, sinon mensuel) + FRED historique
 // ─────────────────────────────────────────────────────────────
-// Récupère les données OAT récentes depuis l'API de la BCE
-// Série IRS : taux d'intérêt à long terme, France, mensuel
-// Nouveau endpoint data-api.ecb.europa.eu (l'ancien sdw-wsrest a été retiré en oct. 2025)
-async function getOatRecentFromECB() {
-  try {
-    console.log(`  Fetching BCE (OAT 10 ans récent)...`);
-    const startPeriod = new Date();
-    startPeriod.setFullYear(startPeriod.getFullYear() - 3);
-    const startStr = startPeriod.toISOString().substring(0, 7);
 
-    // Clé SDMX : Fréquence=M, Pays=FR, Maturité=Long terme, Instrument=Obligations d'État 10 ans
-    const url = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0000.EUR.N.Z?startPeriod=${startStr}&format=jsondata&detail=dataonly`;
-    const response = await fetch(url, {
-      cache: 'no-store',
-      headers: { 'Accept': 'application/json' }
-    });
-
-    if (!response.ok) {
-      console.log(`  ⚠️ BCE HTTP ${response.status} — tentative format XML...`);
-      // Fallback: essayer le format XML générique
-      const urlXml = `https://data-api.ecb.europa.eu/service/data/IRS/M.FR.L.L40.CI.0000.EUR.N.Z?startPeriod=${startStr}`;
-      const resp2 = await fetch(urlXml, { cache: 'no-store', headers: { 'Accept': 'application/xml' } });
-      if (!resp2.ok) {
-        console.log(`  ⚠️ BCE XML HTTP ${resp2.status}`);
-        return [];
-      }
-      const xmlText = await resp2.text();
-      const observations = [];
-      const obsRegex = /TIME_PERIOD="([^"]+)"[^>]*OBS_VALUE="([^"]+)"/g;
-      let m;
-      while ((m = obsRegex.exec(xmlText)) !== null) {
-        const date = m[1].length === 7 ? `${m[1]}-01` : m[1];
-        const val = parseFloat(m[2]);
-        if (!isNaN(val)) observations.push({ date, value: parseFloat(val.toFixed(2)), timestamp: new Date(date).getTime() });
-      }
-      if (observations.length > 0) {
-        observations.sort((a, b) => a.timestamp - b.timestamp);
-        const last = observations[observations.length - 1];
-        console.log(`  ✓ BCE OAT (XML): ${observations.length} points, dernier: ${last.date} = ${last.value}%`);
-        return observations;
-      }
-      return [];
-    }
-
-    const json = await response.json();
-
-    // Format SDMX-JSON BCE :
-    // - Les observations sont dans dataSets[0].series["0:0:0:0:0:0:0:0:0"].observations
-    //   sous forme d'objet { "0": [valeur,...], "1": [valeur,...], ... }
-    // - Les périodes correspondantes sont dans structure.dimensions.observation[0].values
-    const seriesObs = json?.dataSets?.[0]?.series?.['0:0:0:0:0:0:0:0:0']?.observations;
-    const allPeriods = json?.structure?.dimensions?.observation?.[0]?.values;
-
-    if (!seriesObs || !allPeriods) {
-      console.log(`  ⚠️ BCE: structure JSON inattendue`);
-      return [];
-    }
-
-    const observations = [];
-    for (const [idx, obs] of Object.entries(seriesObs)) {
-      const periodObj = allPeriods[parseInt(idx)];
-      if (!periodObj || obs[0] == null) continue;
-      const period = periodObj.id; // ex: "2026-02"
-      const date = `${period}-01`;
-      const numValue = parseFloat(obs[0]);
-      if (!isNaN(numValue)) {
-        observations.push({ date, value: parseFloat(numValue.toFixed(2)), timestamp: new Date(date).getTime() });
-      }
-    }
-
-    if (observations.length > 0) {
-      observations.sort((a, b) => a.timestamp - b.timestamp);
-      const last = observations[observations.length - 1];
-      console.log(`  ✓ BCE OAT: ${observations.length} points récents, dernier: ${last.date} = ${last.value}%`);
-      return observations;
-    }
-
-    console.log(`  ⚠️ BCE: aucune observation parsée`);
-    return [];
-  } catch (error) {
-    console.error(`  ⚠️ Erreur BCE:`, error.message);
-    return [];
+// Parse un bloc d'observations SDMX-JSON BCE et retourne les points triés
+function parseEcbSdmxJson(json) {
+  const seriesKey = Object.keys(json?.dataSets?.[0]?.series ?? {})[0];
+  const seriesObs = json?.dataSets?.[0]?.series?.[seriesKey]?.observations;
+  const allPeriods = json?.structure?.dimensions?.observation?.[0]?.values;
+  if (!seriesObs || !allPeriods) return [];
+  const points = [];
+  for (const [idx, obs] of Object.entries(seriesObs)) {
+    const periodObj = allPeriods[parseInt(idx)];
+    if (!periodObj || obs[0] == null) continue;
+    const period = periodObj.id; // ex: "2026-04-08" ou "2026-02"
+    const date = period.length === 7 ? `${period}-01` : period;
+    const val = parseFloat(obs[0]);
+    if (!isNaN(val)) points.push({ date, value: parseFloat(val.toFixed(3)), timestamp: new Date(date).getTime() });
   }
+  points.sort((a, b) => a.timestamp - b.timestamp);
+  return points;
 }
 
-// ─────────────────────────────────────────────────────────────
-// OAT — SOURCE PRIMAIRE QUOTIDIENNE : Stooq.com (10yfr.b)
-//   CSV gratuit, sans clé API, données quotidiennes depuis 2000
-//   Format : Date,Open,High,Low,Close,Volume  (on utilise Close)
-// ─────────────────────────────────────────────────────────────
-async function fetchOatFromStooq() {
+// Tentative BCE : d'abord quotidien (D), puis mensuel (M) en fallback
+async function fetchOatFromECB(freq = 'D') {
   try {
-    console.log(`  Fetching OAT 10 ans (Stooq.com, quotidien)...`);
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const url = `https://stooq.com/q/d/l/?s=10yfr.b&d1=20000101&d2=${today}&i=d`;
-    const response = await fetch(url, {
-      cache: 'no-store',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; finance-dashboard/1.0)' }
-    });
+    const startPeriod = freq === 'D' ? '2024-01-01' : new Date(Date.now() - 3 * 365 * 86400000).toISOString().slice(0, 7);
+    const url = `https://data-api.ecb.europa.eu/service/data/IRS/${freq}.FR.L.L40.CI.0000.EUR.N.Z?startPeriod=${startPeriod}&format=jsondata&detail=dataonly`;
+    const response = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
     if (!response.ok) {
-      console.log(`  ⚠️ Stooq HTTP ${response.status}`);
+      if (freq === 'D') {
+        console.log(`  ⚠️ BCE OAT quotidien HTTP ${response.status}, tentative mensuel...`);
+        return fetchOatFromECB('M');
+      }
+      console.log(`  ⚠️ BCE OAT mensuel HTTP ${response.status}`);
       return [];
     }
-    const text = await response.text();
-    const lines = text.trim().split('\n');
-    if (lines.length < 2 || !lines[0].toLowerCase().startsWith('date')) {
-      console.log(`  ⚠️ Stooq: réponse inattendue — ${text.slice(0, 80)}`);
-      return [];
+    const json = await response.json();
+    const points = parseEcbSdmxJson(json);
+    if (points.length === 0 && freq === 'D') {
+      console.log(`  ⚠️ BCE OAT quotidien: aucun point, tentative mensuel...`);
+      return fetchOatFromECB('M');
     }
-    const points = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',');
-      if (cols.length < 5) continue;
-      const date = cols[0].trim();               // YYYY-MM-DD
-      const close = parseFloat(cols[4].trim());  // Close = rendement en %
-      if (!date || isNaN(close) || close <= 0) continue;
-      points.push({ date, value: parseFloat(close.toFixed(3)), timestamp: new Date(date).getTime() });
+    if (points.length > 0) {
+      const last = points[points.length - 1];
+      console.log(`  ✓ BCE OAT (${freq === 'D' ? 'quotidien' : 'mensuel'}): ${points.length} pts, dernier: ${last.date} = ${last.value}%`);
     }
-    if (points.length === 0) {
-      console.log(`  ⚠️ Stooq: aucun point parsé`);
-      return [];
-    }
-    points.sort((a, b) => a.timestamp - b.timestamp);
-    const last = points[points.length - 1];
-    console.log(`  ✓ OAT Stooq: ${points.length} points quotidiens, dernier: ${last.date} = ${last.value}%`);
     return points;
   } catch (err) {
-    console.log(`  ⚠️ Stooq erreur: ${err.message}`);
+    if (freq === 'D') {
+      console.log(`  ⚠️ BCE OAT quotidien erreur: ${err.message}, tentative mensuel...`);
+      return fetchOatFromECB('M');
+    }
+    console.log(`  ⚠️ BCE OAT mensuel erreur: ${err.message}`);
     return [];
   }
 }
 
-// Fusion : Stooq (quotidien) en priorité, FRED+BCE (mensuel) en fallback
+// Fusion : FRED (historique long mensuel) + BCE daily pour les points récents
 async function getOatHistory() {
-  // 1. Tentative Stooq quotidien
-  const stooqData = await fetchOatFromStooq();
-  if (stooqData.length > 50) return stooqData;
-
-  console.log(`  ↩ Stooq insuffisant, fallback FRED + BCE...`);
-
-  // 2. Historique long FRED (mensuel)
+  // 1. Historique long FRED (mensuel, depuis 2000)
   const fredData = await fetchFredSeries('IRLTLT01FRM156N');
 
-  // 3. Points récents BCE (mensuel) pour compléter FRED
-  const ecbData = await getOatRecentFromECB();
+  // 2. BCE : quotidien en priorité, mensuel en fallback
+  const ecbData = await fetchOatFromECB('D');
 
   if (fredData.length === 0 && ecbData.length === 0) {
     if (existingData?.indices?.oat?.historique?.length > 0) {
-      console.log(`  ⚠️ OAT: utilisation des données existantes`);
+      console.log(`  ⚠️ OAT: conservation données existantes`);
       return existingData.indices.oat.historique;
     }
     return [];
@@ -219,14 +134,16 @@ async function getOatHistory() {
   if (ecbData.length === 0) return fredData;
   if (fredData.length === 0) return ecbData;
 
+  // Garder FRED comme base historique, BCE pour les points plus récents
   const lastFredDate = fredData[fredData.length - 1].date;
-  const newEcbPoints = ecbData.filter(d => d.date > lastFredDate);
-  if (newEcbPoints.length > 0) {
-    const merged = [...fredData, ...newEcbPoints];
-    const lastNew = newEcbPoints[newEcbPoints.length - 1];
-    console.log(`  ✓ OAT fusionné FRED+BCE: ${merged.length} pts, dernier: ${lastNew.date}`);
+  const newPoints = ecbData.filter(d => d.date > lastFredDate);
+  if (newPoints.length > 0) {
+    const merged = [...fredData, ...newPoints];
+    const last = newPoints[newPoints.length - 1];
+    console.log(`  ✓ OAT fusionné: ${merged.length} pts (FRED → ${lastFredDate}, +${newPoints.length} BCE → ${last.date})`);
     return merged;
   }
+  console.log(`  ℹ️ OAT: BCE n'apporte pas de points plus récents que FRED (${lastFredDate})`);
   return fredData;
 }
 
