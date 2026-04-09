@@ -147,12 +147,65 @@ async function getOatRecentFromECB() {
   }
 }
 
-// Fusion FRED (historique long) + BCE (données récentes)
+// ─────────────────────────────────────────────────────────────
+// OAT — SOURCE PRIMAIRE QUOTIDIENNE : Stooq.com (10yfr.b)
+//   CSV gratuit, sans clé API, données quotidiennes depuis 2000
+//   Format : Date,Open,High,Low,Close,Volume  (on utilise Close)
+// ─────────────────────────────────────────────────────────────
+async function fetchOatFromStooq() {
+  try {
+    console.log(`  Fetching OAT 10 ans (Stooq.com, quotidien)...`);
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const url = `https://stooq.com/q/d/l/?s=10yfr.b&d1=20000101&d2=${today}&i=d`;
+    const response = await fetch(url, {
+      cache: 'no-store',
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; finance-dashboard/1.0)' }
+    });
+    if (!response.ok) {
+      console.log(`  ⚠️ Stooq HTTP ${response.status}`);
+      return [];
+    }
+    const text = await response.text();
+    const lines = text.trim().split('\n');
+    if (lines.length < 2 || !lines[0].toLowerCase().startsWith('date')) {
+      console.log(`  ⚠️ Stooq: réponse inattendue — ${text.slice(0, 80)}`);
+      return [];
+    }
+    const points = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',');
+      if (cols.length < 5) continue;
+      const date = cols[0].trim();               // YYYY-MM-DD
+      const close = parseFloat(cols[4].trim());  // Close = rendement en %
+      if (!date || isNaN(close) || close <= 0) continue;
+      points.push({ date, value: parseFloat(close.toFixed(3)), timestamp: new Date(date).getTime() });
+    }
+    if (points.length === 0) {
+      console.log(`  ⚠️ Stooq: aucun point parsé`);
+      return [];
+    }
+    points.sort((a, b) => a.timestamp - b.timestamp);
+    const last = points[points.length - 1];
+    console.log(`  ✓ OAT Stooq: ${points.length} points quotidiens, dernier: ${last.date} = ${last.value}%`);
+    return points;
+  } catch (err) {
+    console.log(`  ⚠️ Stooq erreur: ${err.message}`);
+    return [];
+  }
+}
+
+// Fusion : Stooq (quotidien) en priorité, FRED+BCE (mensuel) en fallback
 async function getOatHistory() {
-  // 1. Récupérer l'historique long depuis FRED
+  // 1. Tentative Stooq quotidien
+  const stooqData = await fetchOatFromStooq();
+  if (stooqData.length > 50) return stooqData;
+
+  console.log(`  ↩ Stooq insuffisant, fallback FRED + BCE...`);
+
+  // 2. Historique long FRED (mensuel)
   const fredData = await fetchFredSeries('IRLTLT01FRM156N');
 
-  // 2. Récupérer les données récentes depuis la BCE
+  // 3. Points récents BCE (mensuel) pour compléter FRED
   const ecbData = await getOatRecentFromECB();
 
   if (fredData.length === 0 && ecbData.length === 0) {
@@ -166,18 +219,14 @@ async function getOatHistory() {
   if (ecbData.length === 0) return fredData;
   if (fredData.length === 0) return ecbData;
 
-  // Fusionner : FRED comme base historique, BCE pour les mois manquants récents
   const lastFredDate = fredData[fredData.length - 1].date;
   const newEcbPoints = ecbData.filter(d => d.date > lastFredDate);
-
   if (newEcbPoints.length > 0) {
     const merged = [...fredData, ...newEcbPoints];
     const lastNew = newEcbPoints[newEcbPoints.length - 1];
-    console.log(`  ✓ OAT fusionné: ${merged.length} points (FRED → ${lastFredDate}, +${newEcbPoints.length} points BCE → ${lastNew.date})`);
+    console.log(`  ✓ OAT fusionné FRED+BCE: ${merged.length} pts, dernier: ${lastNew.date}`);
     return merged;
   }
-
-  console.log(`  ℹ️ OAT: BCE n'apporte pas de nouveaux points au-delà de FRED (${lastFredDate})`);
   return fredData;
 }
 

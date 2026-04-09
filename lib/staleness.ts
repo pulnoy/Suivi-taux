@@ -11,17 +11,19 @@ export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   estr:         { label: 'Quotidien',       maxDays: 5  },
   // BCE — par réunion (~8×/an soit toutes les 6 semaines)
   tauxDepotBCE: { label: 'Par réunion BCE', maxDays: 60 },
-  // Mensuel (IPC, crédits, PEL publié mensuellement par BdF)
+  // Mensuel — inflation et PEL (délai ~6 semaines)
   inflation:    { label: 'Mensuel',         maxDays: 45 },
-  tauxImmo:     { label: 'Mensuel',         maxDays: 45 },
   pel:          { label: 'Mensuel',         maxDays: 45 },
+  // Mensuel — taux immo BdF publié avec ~2 mois de délai structurel
+  tauxImmo:     { label: 'Mensuel',         maxDays: 75 },
   // Semestriel — réglementé (1er fév. et 1er août)
   livreta:      { label: 'Semestriel',      maxDays: 200 },
   // Annuel — publié en jan.-mars avec 1 an de décalage
   fondsEuros:   { label: 'Annuel',          maxDays: 400 },
-  // Trimestriel
-  prixImmo:     { label: 'Trimestriel',     maxDays: 120 },
+  // Trimestriel — SCPI
   scpi:         { label: 'Trimestriel',     maxDays: 120 },
+  // Trimestriel — prix immo INSEE/Notaires publiés avec ~4 mois de délai structurel
+  prixImmo:     { label: 'Trimestriel',     maxDays: 150 },
   // Devises — quotidien (jours ouvrés)
   eurusd:       { label: 'Quotidien',       maxDays: 5  },
   eurgbp:       { label: 'Quotidien',       maxDays: 5  },
