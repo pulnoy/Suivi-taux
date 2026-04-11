@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { EnhancedChart } from './enhanced-chart';
-import { INDEX_EDUCATION } from '@/lib/educational-data';
+import { INDEX_EDUCATION, CATEGORY_CONFIG } from '@/lib/educational-data';
 import {
   calculateAllStats,
   filterDataByPeriod,
@@ -517,7 +517,10 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   return (
     <div className="space-y-6">
       {/* Index Selection — par catégories */}
-      <div className="bg-card rounded-xl border border-border p-4">
+      <div className="bg-card rounded-xl border border-border shadow-lbp-sm overflow-hidden">
+        {/* Barre d'accent bleue LBP */}
+        <div className="h-[3px] w-full" style={{ background: '#164194' }} />
+        <div className="p-4">
         <button
           onClick={() => setShowIndicesSection(!showIndicesSection)}
           className="w-full flex items-center justify-between mb-3 cursor-pointer group"
@@ -549,12 +552,16 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             const keys = indicesByCategory[cat.id];
             if (!keys || keys.length === 0) return null;
 
+            const catColor = CATEGORY_CONFIG[cat.id as keyof typeof CATEGORY_CONFIG]?.color ?? '#164194';
             return (
               <div
                 key={cat.id}
-                className="rounded-lg border border-border bg-muted/30 p-3"
+                className="rounded-lg border border-border bg-card overflow-hidden"
               >
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                {/* Barre d'accent colorée par catégorie */}
+                <div className="h-[3px] w-full" style={{ background: catColor }} />
+                <div className="p-3">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ letterSpacing: '0.06em' }}>
                   <span>{cat.icon}</span>
                   {cat.label}
                 </p>
@@ -597,6 +604,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                     );
                   })}
                 </div>
+                </div>{/* /p-3 */}
               </div>
             );
           })}
@@ -630,6 +638,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           </div>
         )}
         </>)}
+        </div>{/* /p-4 */}
       </div>
 
       {/* Toolbar : Mode | Périodes | Simulation de placement — une seule ligne */}

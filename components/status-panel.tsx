@@ -53,7 +53,9 @@ export function StatusPanel({ indices, dateMiseAJour }: StatusPanelProps) {
   });
 
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm p-4">
+    <div className="bg-card rounded-xl border border-border shadow-lbp-md overflow-hidden">
+      <div className="h-[3px] w-full" style={{ background: '#164194' }} />
+      <div className="p-4">
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-bold text-foreground">Statut des indices</h2>
@@ -133,6 +135,7 @@ export function StatusPanel({ indices, dateMiseAJour }: StatusPanelProps) {
           </tbody>
         </table>
       </div>
+      </div>{/* /p-4 */}
     </div>
   );
 }

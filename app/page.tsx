@@ -88,17 +88,19 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Header compact avec onglets intégrés */}
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-4">
+      {/* Header avec gradient LBP */}
+      <header className="app-header sticky top-0 z-50 w-full relative">
+        {/* Shimmer line (mode clair uniquement) */}
+        <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-white/30 to-transparent dark:hidden pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
           {/* Logo et date de mise à jour */}
           <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-xl md:text-2xl font-extrabold text-[#164194] dark:text-blue-400 tracking-tight whitespace-nowrap">
+            <h1 className="text-xl md:text-2xl font-extrabold text-white dark:text-blue-400 tracking-tight whitespace-nowrap" style={{letterSpacing: '-0.02em'}}>
               Suivi-Taux
             </h1>
             <button
               onClick={() => setActiveMainTab(activeMainTab === 'status' ? 'comparator' : 'status')}
-              className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap hover:text-foreground transition-colors underline-offset-2 hover:underline"
+              className="hidden sm:inline text-xs text-white/60 dark:text-muted-foreground whitespace-nowrap hover:text-white dark:hover:text-foreground transition-colors"
               title="Voir le statut des indices"
             >
               {new Date(data.date_mise_a_jour).toLocaleDateString('fr-FR', {
@@ -108,17 +110,17 @@ export default function Dashboard() {
               })}
             </button>
           </div>
-          
+
           {/* Onglets de navigation */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-muted rounded-lg p-0.5">
+            <div className="flex items-center bg-white/[0.12] dark:bg-muted rounded-lg p-0.5">
               <button
                 onClick={() => setActiveMainTab('comparator')}
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
                   activeMainTab === 'comparator'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'bg-white/25 dark:bg-background text-white dark:text-foreground shadow-sm'
+                    : 'text-white/70 dark:text-muted-foreground hover:text-white dark:hover:text-foreground'
                 )}
               >
                 <LayoutDashboard className="h-4 w-4" />
@@ -129,8 +131,8 @@ export default function Dashboard() {
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
                   activeMainTab === 'timeline'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'bg-white/25 dark:bg-background text-white dark:text-foreground shadow-sm'
+                    : 'text-white/70 dark:text-muted-foreground hover:text-white dark:hover:text-foreground'
                 )}
               >
                 <Clock className="h-4 w-4" />
@@ -141,8 +143,8 @@ export default function Dashboard() {
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all',
                   activeMainTab === 'status'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? 'bg-white/25 dark:bg-background text-white dark:text-foreground shadow-sm'
+                    : 'text-white/70 dark:text-muted-foreground hover:text-white dark:hover:text-foreground'
                 )}
               >
                 <Activity className="h-4 w-4" />
@@ -155,12 +157,14 @@ export default function Dashboard() {
                   });
                   const hasFail  = statuses.some(s => s === 'fail');
                   const hasStale = statuses.some(s => s === 'stale');
-                  const dotClass = hasFail ? 'bg-destructive' : hasStale ? 'bg-orange-400' : 'bg-green-500';
+                  const dotClass = hasFail ? 'bg-red-400' : hasStale ? 'bg-orange-400' : 'bg-green-400';
                   return <span className={`h-2 w-2 rounded-full shrink-0 ${dotClass}`} />;
                 })()}
               </button>
             </div>
-            <ThemeToggle />
+            <div className="[&>button]:text-white/80 dark:[&>button]:text-foreground [&>button]:hover:text-white dark:[&>button]:hover:text-foreground">
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </header>
@@ -169,7 +173,7 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-4 py-3">
         {/* Tableau de bord */}
         {activeMainTab === 'comparator' && (
-          <div className="bg-card rounded-xl border border-border shadow-sm p-4">
+          <div className="bg-card rounded-xl border border-border shadow-lbp-md p-4">
             <Comparator
               indices={data.indices}
               selectedKeys={comparatorKeys}
@@ -185,7 +189,7 @@ export default function Dashboard() {
 
         {/* Timeline Tab */}
         {activeMainTab === 'timeline' && (
-          <div className="bg-card rounded-xl border border-border shadow-sm p-4">
+          <div className="bg-card rounded-xl border border-border shadow-lbp-md p-4">
             <div className="mb-4">
               <h2 className="text-lg font-bold text-foreground">Timeline des Crises Financières</h2>
               <p className="text-sm text-muted-foreground">
