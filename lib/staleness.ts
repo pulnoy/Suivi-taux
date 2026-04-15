@@ -34,6 +34,7 @@ export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   cac40:        { label: 'Quotidien',       maxDays: 5  },
   cacmid:       { label: 'Quotidien',       maxDays: 5  },
   stoxx50:      { label: 'Quotidien',       maxDays: 5  },
+  stoxx600:     { label: 'Quotidien',       maxDays: 5  },
   dax:          { label: 'Quotidien',       maxDays: 5  },
   ftse:         { label: 'Quotidien',       maxDays: 5  },
   nikkei:       { label: 'Quotidien',       maxDays: 5  },
