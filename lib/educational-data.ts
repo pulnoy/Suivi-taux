@@ -171,7 +171,33 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     source: 'STOXX Ltd.',
     sourceUrl: 'https://finance.yahoo.com/quote/%5ESTOXX50E'
   },
-  
+
+  stoxx600: {
+    title: 'Stoxx Europe 600',
+    shortDescription: 'Indice des 600 plus grandes entreprises européennes (17 pays).',
+    fullDescription: `Le Stoxx Europe 600 regroupe 600 entreprises de toutes capitalisations (large, mid, small caps) issues de 17 pays européens, dont le Royaume-Uni et la Suisse en plus de la zone euro. Il couvre environ 90% de la capitalisation boursière européenne et est la référence la plus large pour l'investissement actions européen.`,
+    importance: `Plus large et plus diversifié que l'Euro Stoxx 50, il offre la meilleure représentation de l'économie européenne dans son ensemble. C'est l'indice de référence pour la majorité des ETF actions Europe.`,
+    factors: [
+      'Politique monétaire de la BCE et de la BoE',
+      'Croissance économique européenne',
+      'Cours de l\'euro et de la livre',
+      'Résultats des entreprises européennes',
+      'Contexte géopolitique mondial'
+    ],
+    insights: [
+      'Inclut UK et Suisse, contrairement à l\'Euro Stoxx 50',
+      'Couvre ~90% de la capitalisation européenne',
+      'Référence des principaux ETF Europe (iShares STOXX 600, etc.)'
+    ],
+    color: '#0891b2',
+    bgColor: '#ecfeff',
+    darkBgColor: '#083344',
+    category: 'stocks',
+    categoryLabel: 'Europe élargie',
+    source: 'STOXX Ltd.',
+    sourceUrl: 'https://finance.yahoo.com/quote/%5ESTOXX'
+  },
+
   sp500: {
     title: 'S&P 500',
     shortDescription: 'Indice des 500 plus grandes entreprises américaines.',
@@ -251,7 +277,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
   },
   
   emerging: {
-    title: 'Marchés Émergents',
+    title: 'MSCI Emerging Markets',
     shortDescription: 'Indice MSCI des marchés émergents (Chine, Inde, Brésil, etc.).',
     fullDescription: `L'indice MSCI Emerging Markets couvre environ 1 400 entreprises dans 27 pays émergents (Chine, Inde, Brésil, Corée du Sud, Taiwan, etc.). Il offre une exposition à la croissance des économies en développement.`,
     importance: `Les marchés émergents représentent ~40% du PIB mondial et une grande partie de la croissance future. Ils offrent diversification et potentiel de rendement supérieur, mais avec plus de volatilité.`,

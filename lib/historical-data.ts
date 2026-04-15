@@ -156,6 +156,22 @@ export const stoxx50Historical = interpolateMonthly(
   '2007-03-25'
 );
 
+// ─── Stoxx Europe 600 (base 100 on 1991-12-31, live data starts 1998-01-02) ──
+// Key events: post-base climb, tech bubble, global indices broadly rising
+export const stoxx600Historical = interpolateMonthly(
+  [
+    { year: 1991, month: 12, value: 100 },  // Base date
+    { year: 1992, month: 12, value: 109 },
+    { year: 1993, month: 12, value: 138 },
+    { year: 1994, month: 12, value: 134 },
+    { year: 1995, month: 12, value: 145 },
+    { year: 1996, month: 12, value: 175 },
+    { year: 1997, month: 12, value: 222 },
+    { year: 1998, month: 1, value: 232 },
+  ],
+  '1998-01-02'
+);
+
 // ─── Brent crude USD/bbl (from 2000-01, live data starts 2007-07-30) ──────────
 export const brentHistorical = interpolateMonthly(
   [
@@ -305,6 +321,7 @@ export const HISTORICAL_DATA: Record<string, HistoricalPoint[]> = {
   nasdaq: nasdaqHistorical,
   gold: goldHistorical,
   stoxx50: stoxx50Historical,
+  stoxx600: stoxx600Historical,
   brent: brentHistorical,
   world: worldHistorical,
   oat: oatHistorical,
