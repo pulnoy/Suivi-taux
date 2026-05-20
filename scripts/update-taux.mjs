@@ -1173,10 +1173,10 @@ async function main() {
 
       // Devises
       eurusd:   createIndexData("EUR / USD", getLast(historyEurUsd), "$",   historyEurUsd),
-      eurgbp:   createIndexData("EUR / GBP", getLast(historyEurGbp), "£",   historyEurGbp),
-      eurjpy:   createIndexData("EUR / JPY", getLast(historyEurJpy), "¥",   historyEurJpy),
+      eurgbp:   createIndexData("EUR / GBP", getLast(historyEurGbp), "\u00a3",   historyEurGbp),
+      eurjpy:   createIndexData("EUR / JPY", getLast(historyEurJpy), "\u00a5",   historyEurJpy),
       eurchf:   createIndexData("EUR / CHF", getLast(historyEurChf), "CHF", historyEurChf),
-      eurcny:   createIndexData("EUR / CNY", getLast(historyEurCny), "¥",   historyEurCny),
+      eurcny:   createIndexData("EUR / CNY", getLast(historyEurCny), "\u00a5",   historyEurCny),
 
       // Actions
       cac40:    createIndexData("CAC 40",        getLast(historyCac40),    "pts", historyCac40),

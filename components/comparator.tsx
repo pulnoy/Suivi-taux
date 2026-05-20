@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { EnhancedChart } from './enhanced-chart';
-import { INDEX_EDUCATION, CATEGORY_CONFIG } from '@/lib/educational-data';
+import { INDEX_EDUCATION } from '@/lib/educational-data';
 import {
   calculateAllStats,
   filterDataByPeriod,
@@ -11,6 +11,7 @@ import {
   computeCapitalizedSeries,
   calculateMonthlyIRR,
   SAVINGS_KEYS,
+  FIXED_RATE_AT_OPENING_KEYS,
   COMPOUNDING_RULES
 } from '@/lib/financial-utils';
 import { Button } from '@/components/ui/button';
@@ -319,6 +320,10 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         const endDate = new Date(sortedData[sortedData.length - 1].date);
 
         const getValAt = (dateStr: string): number => {
+          if (FIXED_RATE_AT_OPENING_KEYS.includes(ds.key)) {
+            return sortedData[0].value;
+          }
+
           let val = sortedData[0].value;
           for (const pt of sortedData) {
             if (pt.date <= dateStr) val = pt.value;
@@ -494,22 +499,49 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     { value: 'MAX', label: 'Max' },
   ];
 
-  // Grouper les indices par catégorie
+  // Grouper les indices par usage : supports investissables vs indicateurs.
   const CATEGORY_ORDER = [
-    { id: 'savings',      label: 'Épargne',             icon: '💰' },
-    { id: 'stocks',       label: 'Actions',             icon: '📈' },
-    { id: 'crypto',       label: 'Crypto',              icon: '₿'  },
-    { id: 'rates',        label: 'Taux',                icon: '📊' },
-    { id: 'forex',        label: 'Devises',             icon: '💱' },
-    { id: 'commodities',  label: 'Matières premières',  icon: '🛢️' },
+    {
+      id: 'investable-savings',
+      label: 'Investissables - Épargne',
+      icon: 'EUR',
+      color: '#164194',
+      keys: ['livreta', 'pel', 'fondsEuros', 'scpi'],
+    },
+    {
+      id: 'investable-stocks',
+      label: 'Investissables - Marchés actions',
+      icon: 'EQ',
+      color: '#2563eb',
+      keys: ['cac40', 'cacmid', 'stoxx50', 'stoxx600', 'dax', 'ftse', 'nikkei', 'sp500', 'nasdaq', 'world', 'emerging'],
+    },
+    {
+      id: 'investable-alt',
+      label: 'Investissables - Matières premières & crypto',
+      icon: 'ALT',
+      color: '#f59e0b',
+      keys: ['brent', 'gold', 'gaz', 'btc', 'eth', 'sol', 'xrp'],
+    },
+    {
+      id: 'indicator-rates',
+      label: 'Indicateurs - Taux & macro',
+      icon: 'IND',
+      color: '#10b981',
+      keys: ['oat', 'tec10', 'estr', 'tauxDepotBCE', 'inflation', 'tauxImmo', 'prixImmo', 'us10y', 'bund', 'jgb', 'gilt'],
+    },
+    {
+      id: 'indicator-forex',
+      label: 'Indicateurs - Devises',
+      icon: 'FX',
+      color: '#8b5cf6',
+      keys: ['eurusd', 'eurgbp', 'eurjpy', 'eurchf', 'eurcny'],
+    },
   ];
 
   const indicesByCategory = useMemo(() => {
     const groups: Record<string, string[]> = {};
-    for (const key of Object.keys(indices)) {
-      const cat = INDEX_EDUCATION[key]?.category ?? 'rates';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(key);
+    for (const group of CATEGORY_ORDER) {
+      groups[group.id] = group.keys.filter(key => indices[key]);
     }
     return groups;
   }, [indices]);
@@ -552,7 +584,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             const keys = indicesByCategory[cat.id];
             if (!keys || keys.length === 0) return null;
 
-            const catColor = CATEGORY_CONFIG[cat.id as keyof typeof CATEGORY_CONFIG]?.color ?? '#164194';
+            const catColor = cat.color;
             return (
               <div
                 key={cat.id}
@@ -935,7 +967,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           <AlertDescription className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
             <Lightbulb className="h-4 w-4 flex-shrink-0 text-blue-600" />
             <span>
-              <strong>Simulation de placement :</strong> Les produits d'épargne sont convertis en performance cumulée de <strong>100€ investis</strong> selon leurs règles officielles — capitalisation annuelle (Livret A, PEL, Fonds euros), trimestrielle (SCPI) ou mensuelle (OAT, taux marché). Les changements de taux sont pris en compte à leur date exacte.
+              <strong>Simulation de placement :</strong> Les supports investissables sont convertis en performance cumulée de <strong>100€ investis</strong> selon leurs règles officielles. Le PEL conserve le taux fixé à l'ouverture de la période sélectionnée. Les indicateurs de taux restent des repères de marché, pas des supports investissables directs.
               {' '}<strong>💡 Activez la simulation de placement pour un montant personnalisé.</strong>
             </span>
           </AlertDescription>

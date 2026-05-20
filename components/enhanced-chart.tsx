@@ -164,6 +164,7 @@ export function EnhancedChart({
       tauxDepotBCE: 'monthly',
       estr: 'monthly',
     };
+    const FIXED_RATE_AT_OPENING = new Set(['pel']);
 
     const baseAmount = placementAmount || 100;
     const capitalizedCache: Record<string, Record<string, number>> = {};
@@ -187,10 +188,18 @@ export function EnhancedChart({
       const rateChanges = [...ds.data].sort((a, b) => a.date.localeCompare(b.date));
       if (rateChanges.length === 0) return;
 
-      const startDate = new Date(rateChanges[0].date);
+      const isFixedRateAtOpening = FIXED_RATE_AT_OPENING.has(ds.key);
+      const openingEntry = isFixedRateAtOpening && normalizeFromDate
+        ? (rateChanges.find(p => p.date >= normalizeFromDate) ?? rateChanges[0])
+        : rateChanges[0];
+      const startDate = new Date(openingEntry.date);
       const endDate = new Date();
 
       const getRateAt = (date: Date): number => {
+        if (isFixedRateAtOpening) {
+          return openingEntry.value;
+        }
+
         const dateStr = date.toISOString().split('T')[0];
         let rate = rateChanges[0].value;
         for (const pt of rateChanges) {
@@ -202,6 +211,7 @@ export function EnhancedChart({
 
       let capital = baseAmount;
       const snapshots: Record<string, number> = {};
+      snapshots[openingEntry.date] = baseAmount;
 
       if (rule === 'annual') {
         let pendingInterests = 0;
@@ -219,7 +229,9 @@ export function EnhancedChart({
           pendingInterests += capital * dailyRate;
           if (cursor.getDate() === 1) {
             const dateStr = cursor.toISOString().split('T')[0];
-            snapshots[dateStr] = parseFloat((capital + pendingInterests).toFixed(4));
+            if (dateStr !== openingEntry.date) {
+              snapshots[dateStr] = parseFloat((capital + pendingInterests).toFixed(4));
+            }
           }
           cursor.setDate(cursor.getDate() + 1);
         }
@@ -279,6 +291,10 @@ export function EnhancedChart({
         const snapshots2: Record<string, number> = {};
 
         const getValAt2 = (dateStr: string): number => {
+          if (FIXED_RATE_AT_OPENING.has(ds.key)) {
+            return dcaStartEntry.value;
+          }
+
           let val = sorted2[0].value;
           for (const pt of sorted2) {
             if (pt.date <= dateStr) val = pt.value;

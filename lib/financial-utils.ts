@@ -408,6 +408,8 @@ export function calculateLinearRegression(points: { x: number; y: number }[]): {
 
 export const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr'];
 
+export const FIXED_RATE_AT_OPENING_KEYS = ['pel'];
+
 export const COMPOUNDING_RULES: Record<string, 'annual' | 'quarterly' | 'monthly'> = {
   livreta: 'annual',
   pel: 'annual',
@@ -437,6 +439,10 @@ export function computeCapitalizedSeries(
   const endDate = new Date(sorted[sorted.length - 1].date);
 
   const getRateAt = (date: Date): number => {
+    if (FIXED_RATE_AT_OPENING_KEYS.includes(productKey)) {
+      return sorted[0].value;
+    }
+
     const dateStr = date.toISOString().split('T')[0];
     let rate = sorted[0].value;
     for (const pt of sorted) {
