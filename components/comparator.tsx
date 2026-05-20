@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { EnhancedChart } from './enhanced-chart';
-import { INDEX_EDUCATION } from '@/lib/educational-data';
+import { INDEX_EDUCATION, CATEGORY_CONFIG } from '@/lib/educational-data';
 import {
   calculateAllStats,
   filterDataByPeriod,
@@ -31,7 +31,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, Play, Euro, Check } from 'lucide-react';
+import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, Play, Euro, Check, BadgeInfo } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DataPoint {
@@ -56,6 +56,25 @@ type Period = '1M' | '3M' | '6M' | '1A' | '5A' | '10A' | '18A' | '20A' | 'YTD' |
 
 // Couleurs fixes par slot de sélection (1er sélectionné → slot 0, etc.)
 const SELECTION_PALETTE = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
+
+const NON_INVESTABLE_INDEX_KEYS = new Set([
+  'oat',
+  'tec10',
+  'estr',
+  'tauxDepotBCE',
+  'inflation',
+  'tauxImmo',
+  'prixImmo',
+  'us10y',
+  'bund',
+  'jgb',
+  'gilt',
+  'eurusd',
+  'eurgbp',
+  'eurjpy',
+  'eurchf',
+  'eurcny',
+]);
 
 // Types pour l'analyse de compatibilité des modes
 type ModeRecommendation = 'real' | 'percent' | 'both';
@@ -499,49 +518,22 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     { value: 'MAX', label: 'Max' },
   ];
 
-  // Grouper les indices par usage : supports investissables vs indicateurs.
+  // Grouper les indices par catégorie
   const CATEGORY_ORDER = [
-    {
-      id: 'investable-savings',
-      label: 'Investissables - Épargne',
-      icon: 'EUR',
-      color: '#164194',
-      keys: ['livreta', 'pel', 'fondsEuros', 'scpi'],
-    },
-    {
-      id: 'investable-stocks',
-      label: 'Investissables - Marchés actions',
-      icon: 'EQ',
-      color: '#2563eb',
-      keys: ['cac40', 'cacmid', 'stoxx50', 'stoxx600', 'dax', 'ftse', 'nikkei', 'sp500', 'nasdaq', 'world', 'emerging'],
-    },
-    {
-      id: 'investable-alt',
-      label: 'Investissables - Matières premières & crypto',
-      icon: 'ALT',
-      color: '#f59e0b',
-      keys: ['brent', 'gold', 'gaz', 'btc', 'eth', 'sol', 'xrp'],
-    },
-    {
-      id: 'indicator-rates',
-      label: 'Indicateurs - Taux & macro',
-      icon: 'IND',
-      color: '#10b981',
-      keys: ['oat', 'tec10', 'estr', 'tauxDepotBCE', 'inflation', 'tauxImmo', 'prixImmo', 'us10y', 'bund', 'jgb', 'gilt'],
-    },
-    {
-      id: 'indicator-forex',
-      label: 'Indicateurs - Devises',
-      icon: 'FX',
-      color: '#8b5cf6',
-      keys: ['eurusd', 'eurgbp', 'eurjpy', 'eurchf', 'eurcny'],
-    },
+    { id: 'savings',      label: 'Épargne',             icon: '💰' },
+    { id: 'stocks',       label: 'Actions',             icon: '📈' },
+    { id: 'crypto',       label: 'Crypto',              icon: '₿'  },
+    { id: 'rates',        label: 'Taux',                icon: '📊' },
+    { id: 'forex',        label: 'Devises',             icon: '💱' },
+    { id: 'commodities',  label: 'Matières premières',  icon: '🛢️' },
   ];
 
   const indicesByCategory = useMemo(() => {
     const groups: Record<string, string[]> = {};
-    for (const group of CATEGORY_ORDER) {
-      groups[group.id] = group.keys.filter(key => indices[key]);
+    for (const key of Object.keys(indices)) {
+      const cat = INDEX_EDUCATION[key]?.category ?? 'rates';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(key);
     }
     return groups;
   }, [indices]);
@@ -584,7 +576,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             const keys = indicesByCategory[cat.id];
             if (!keys || keys.length === 0) return null;
 
-            const catColor = cat.color;
+            const catColor = CATEGORY_CONFIG[cat.id as keyof typeof CATEGORY_CONFIG]?.color ?? '#164194';
             return (
               <div
                 key={cat.id}
@@ -603,6 +595,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                     const education = INDEX_EDUCATION[key];
                     const isSelected = selectedKeys.includes(key);
                     const isDisabled = !isSelected && selectedKeys.length >= 5;
+                    const isNonInvestable = NON_INVESTABLE_INDEX_KEYS.has(key);
 
                     return (
                       <TooltipProvider key={key}>
@@ -624,12 +617,25 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                               } : {}}
                             >
                               {index.titre}
+                              {isNonInvestable && (
+                                <BadgeInfo
+                                  className={cn(
+                                    'h-3 w-3',
+                                    isSelected ? 'text-white/80' : 'text-primary/70'
+                                  )}
+                                />
+                              )}
                               {isSelected && <X className="h-2.5 w-2.5 ml-0.5 opacity-80" />}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="max-w-xs">
                             <p className="text-xs font-medium mb-0.5">{index.titre}</p>
                             <p className="text-xs text-muted-foreground">{education?.shortDescription || ''}</p>
+                            {isNonInvestable && (
+                              <p className="text-xs text-primary mt-1">
+                                Indicateur de marché, non investissable directement.
+                              </p>
+                            )}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

@@ -337,20 +337,41 @@ const CRISES_DATA: Crisis[] = [
     period: '2025',
     startYear: 2025,
     endYear: 2025,
-    title: 'Guerre Commerciale & Turbulences 2025',
-    shortDescription: 'Tarifs douaniers Trump, incertitudes géopolitiques et correction des marchés tech',
-    fullDescription: 'Le retour de Donald Trump à la présidence américaine en janvier 2025 relance les craintes de guerre commerciale mondiale. L\'annonce de tarifs douaniers massifs (10 à 145% selon les pays) provoque des chocs sur les marchés et des inquiétudes sur la croissance mondiale. L\'Europe lance un plan de réarmement massif (800 milliards €), soutenant les valeurs de défense. Les marchés alternent entre corrections et rebonds au gré des annonces, dans un contexte d\'incertitude élevée.',
+    title: 'Choc Tarifaire Américain',
+    shortDescription: 'Droits de douane réciproques, forte volatilité et retour du risque de guerre commerciale',
+    fullDescription: 'Le 2 avril 2025, les États-Unis annoncent un socle de droits de douane de 10% sur les importations, accompagné de surtaxes réciproques par pays. La mesure ravive le risque de guerre commerciale mondiale, pèse sur les anticipations de croissance et déclenche une forte correction des actifs risqués. Les marchés intègrent aussi le risque d\'inflation importée : des droits de douane plus élevés peuvent augmenter les prix, limiter les marges des entreprises et compliquer le travail des banques centrales.',
     severity: 'major',
     impacts: [
       { index: 'S&P 500', change: '-15%', positive: false },
-      { index: 'EUR/USD', change: '+5%', positive: true },
-      { index: 'Défense européenne', change: '+40%', positive: true },
-      { index: 'Or', change: '+15%', positive: true },
+      { index: 'NASDAQ', change: '-20%', positive: false },
+      { index: 'Dollar', change: 'volatil', positive: false },
+      { index: 'Or', change: 'record', positive: true },
     ],
     keyFacts: [
-      'Tarifs douaniers US jusqu\'à 145% sur les produits chinois',
-      'Plan de réarmement européen de 800 milliards €',
-      'Or atteint 3 100$/once (record historique, mars 2025)',
+      'Annonce américaine du 2 avril 2025 : socle tarifaire de 10% et surtaxes réciproques',
+      'Wall Street enregistre ses plus fortes baisses quotidiennes depuis 2020',
+      'L\'or joue son rôle de valeur refuge et inscrit de nouveaux records',
+    ]
+  },
+  {
+    id: 'energy-inflation-2026',
+    period: '2026',
+    startYear: 2026,
+    endYear: 2026,
+    title: 'Choc Énergie & Risque de Hausse des Taux',
+    shortDescription: 'Tensions au Moyen-Orient, hausse de l\'énergie, inflation plus élevée et banques centrales plus prudentes',
+    fullDescription: 'En 2026, les tensions au Moyen-Orient provoquent une forte hausse des prix de l\'énergie. La désinflation, qui semblait installée fin 2024 et début 2025, devient moins linéaire : les prix de l\'énergie poussent l\'inflation à la hausse et pèsent sur le pouvoir d\'achat. La BCE maintient ses taux en avril 2026, mais signale que les risques d\'inflation ont augmenté et que la trajectoire monétaire dépendra de la durée du choc énergétique et de ses effets de second tour.',
+    severity: 'major',
+    impacts: [
+      { index: 'Pétrole Brent', change: '+', positive: false },
+      { index: 'Gaz naturel', change: '+', positive: false },
+      { index: 'Inflation', change: '+', positive: false },
+      { index: 'OAT / TEC10', change: 'tension', positive: false },
+    ],
+    keyFacts: [
+      'La BCE maintient le taux de dépôt à 2,00% le 30 avril 2026',
+      'L\'énergie redevient le principal facteur de risque sur l\'inflation',
+      'Les marchés réévaluent le scénario de baisse des taux au profit d\'une pause prolongée, voire d\'un risque de hausse',
     ]
   },
 ];
@@ -425,180 +446,182 @@ export function TimelineCrises() {
 
         {/* Crisis items */}
         <div className="space-y-4">
-          {CRISES_DATA.map((crisis, index) => {
-            const severity = severityConfig[crisis.severity];
-            const isExpanded = expandedCrisis === crisis.id;
+          {[...CRISES_DATA]
+            .sort((a, b) => a.startYear - b.startYear || a.endYear - b.endYear)
+            .map((crisis, index) => {
+              const severity = severityConfig[crisis.severity];
+              const isExpanded = expandedCrisis === crisis.id;
 
-            return (
-              <Collapsible
-                key={crisis.id}
-                open={isExpanded}
-                onOpenChange={() => setExpandedCrisis(isExpanded ? null : crisis.id)}
-              >
-                <div className={cn(
-                  'relative pl-0 md:pl-16 transition-all duration-200',
-                  isExpanded && 'mb-2'
-                )}>
-                  {/* Timeline dot */}
+              return (
+                <Collapsible
+                  key={crisis.id}
+                  open={isExpanded}
+                  onOpenChange={() => setExpandedCrisis(isExpanded ? null : crisis.id)}
+                >
                   <div className={cn(
-                    'hidden md:flex absolute left-4 top-4 w-5 h-5 rounded-full items-center justify-center ring-4 ring-background',
-                    severity.color
+                    'relative pl-0 md:pl-16 transition-all duration-200',
+                    isExpanded && 'mb-2'
                   )}>
-                    <AlertTriangle className="w-3 h-3 text-white" />
-                  </div>
-
-                  {/* Card */}
-                  <CollapsibleTrigger asChild>
+                    {/* Timeline dot */}
                     <div className={cn(
-                      'cursor-pointer rounded-xl border transition-all duration-200',
-                      severity.borderColor,
-                      isExpanded ? severity.bgColor : 'bg-card hover:bg-muted/50'
+                      'hidden md:flex absolute left-4 top-4 w-5 h-5 rounded-full items-center justify-center ring-4 ring-background',
+                      severity.color
                     )}>
-                      <div className="p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            {/* Period & badges */}
-                            <div className="flex flex-wrap items-center gap-2 mb-2">
-                              <Badge variant="outline" className="font-mono text-xs">
-                                <Calendar className="w-3 h-3 mr-1" />
-                                {crisis.period}
-                              </Badge>
-                              <Badge className={cn(
-                                'text-xs',
-                                crisis.severity === 'critical' && 'bg-red-500 hover:bg-red-600',
-                                crisis.severity === 'major' && 'bg-orange-500 hover:bg-orange-600',
-                                crisis.severity === 'moderate' && 'bg-yellow-500 hover:bg-yellow-600',
-                              )}>
-                                {severity.label}
-                              </Badge>
-                            </div>
-
-                            {/* Title */}
-                            <h3 className={cn(
-                              'font-bold text-lg mb-1',
-                              severity.textColor
-                            )}>
-                              {crisis.title}
-                            </h3>
-
-                            {/* Short description */}
-                            <p className="text-sm text-muted-foreground">
-                              {crisis.shortDescription}
-                            </p>
-
-                            {/* Quick impacts */}
-                            {!isExpanded && (
-                              <div className="flex flex-wrap gap-2 mt-3">
-                                {crisis.impacts.slice(0, 3).map((impact, i) => (
-                                  <span
-                                    key={i}
-                                    className={cn(
-                                      'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
-                                      impact.positive 
-                                        ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
-                                        : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
-                                    )}
-                                  >
-                                    {impact.positive ? (
-                                      <TrendingUp className="w-3 h-3" />
-                                    ) : (
-                                      <TrendingDown className="w-3 h-3" />
-                                    )}
-                                    {impact.index}: {impact.change}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Expand icon */}
-                          <div className="flex-shrink-0 p-2">
-                            {isExpanded ? (
-                              <ChevronUp className="w-5 h-5 text-muted-foreground" />
-                            ) : (
-                              <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <AlertTriangle className="w-3 h-3 text-white" />
                     </div>
-                  </CollapsibleTrigger>
 
-                  {/* Expanded content */}
-                  <CollapsibleContent>
-                    <div className={cn(
-                      'mt-2 rounded-xl border p-5 space-y-5',
-                      severity.borderColor,
-                      severity.bgColor
-                    )}>
-                      {/* Full description */}
-                      <div>
-                        <h4 className="font-semibold text-foreground mb-2">
-                          Contexte et explications
-                        </h4>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          {crisis.fullDescription}
-                        </p>
-                      </div>
+                    {/* Card */}
+                    <CollapsibleTrigger asChild>
+                      <div className={cn(
+                        'cursor-pointer rounded-xl border transition-all duration-200',
+                        severity.borderColor,
+                        isExpanded ? severity.bgColor : 'bg-card hover:bg-muted/50'
+                      )}>
+                        <div className="p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              {/* Period & badges */}
+                              <div className="flex flex-wrap items-center gap-2 mb-2">
+                                <Badge variant="outline" className="font-mono text-xs">
+                                  <Calendar className="w-3 h-3 mr-1" />
+                                  {crisis.period}
+                                </Badge>
+                                <Badge className={cn(
+                                  'text-xs',
+                                  crisis.severity === 'critical' && 'bg-red-500 hover:bg-red-600',
+                                  crisis.severity === 'major' && 'bg-orange-500 hover:bg-orange-600',
+                                  crisis.severity === 'moderate' && 'bg-yellow-500 hover:bg-yellow-600',
+                                )}>
+                                  {severity.label}
+                                </Badge>
+                              </div>
 
-                      {/* Impacts grid */}
-                      <div>
-                        <h4 className="font-semibold text-foreground mb-3">
-                          Impact sur les indices
-                        </h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {crisis.impacts.map((impact, i) => (
-                            <div
-                              key={i}
-                              className={cn(
-                                'rounded-lg p-3 text-center border',
-                                impact.positive 
-                                  ? 'bg-green-50 border-green-200 dark:bg-green-950/50 dark:border-green-900'
-                                  : 'bg-red-50 border-red-200 dark:bg-red-950/50 dark:border-red-900'
+                              {/* Title */}
+                              <h3 className={cn(
+                                'font-bold text-lg mb-1',
+                                severity.textColor
+                              )}>
+                                {crisis.title}
+                              </h3>
+
+                              {/* Short description */}
+                              <p className="text-sm text-muted-foreground">
+                                {crisis.shortDescription}
+                              </p>
+
+                              {/* Quick impacts */}
+                              {!isExpanded && (
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                  {crisis.impacts.slice(0, 3).map((impact, i) => (
+                                    <span
+                                      key={i}
+                                      className={cn(
+                                        'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
+                                        impact.positive
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                                          : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
+                                      )}
+                                    >
+                                      {impact.positive ? (
+                                        <TrendingUp className="w-3 h-3" />
+                                      ) : (
+                                        <TrendingDown className="w-3 h-3" />
+                                      )}
+                                      {impact.index}: {impact.change}
+                                    </span>
+                                  ))}
+                                </div>
                               )}
-                            >
-                              <div className="text-xs text-muted-foreground mb-1">
-                                {impact.index}
-                              </div>
-                              <div className={cn(
-                                'text-lg font-bold flex items-center justify-center gap-1',
-                                impact.positive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                              )}>
-                                {impact.positive ? (
-                                  <TrendingUp className="w-4 h-4" />
-                                ) : (
-                                  <TrendingDown className="w-4 h-4" />
-                                )}
-                                {impact.change}
-                              </div>
                             </div>
-                          ))}
+
+                            {/* Expand icon */}
+                            <div className="flex-shrink-0 p-2">
+                              {isExpanded ? (
+                                <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
+                    </CollapsibleTrigger>
 
-                      {/* Key facts */}
-                      <div>
-                        <h4 className="font-semibold text-foreground mb-2">
-                          Faits marquants
-                        </h4>
-                        <ul className="space-y-2">
-                          {crisis.keyFacts.map((fact, i) => (
-                            <li 
-                              key={i}
-                              className="flex items-start gap-2 text-sm text-muted-foreground"
-                            >
-                              <span className={cn('mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0', severity.color)} />
-                              {fact}
-                            </li>
-                          ))}
-                        </ul>
+                    {/* Expanded content */}
+                    <CollapsibleContent>
+                      <div className={cn(
+                        'mt-2 rounded-xl border p-5 space-y-5',
+                        severity.borderColor,
+                        severity.bgColor
+                      )}>
+                        {/* Full description */}
+                        <div>
+                          <h4 className="font-semibold text-foreground mb-2">
+                            Contexte et explications
+                          </h4>
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            {crisis.fullDescription}
+                          </p>
+                        </div>
+
+                        {/* Impacts grid */}
+                        <div>
+                          <h4 className="font-semibold text-foreground mb-3">
+                            Impact sur les indices
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {crisis.impacts.map((impact, i) => (
+                              <div
+                                key={i}
+                                className={cn(
+                                  'rounded-lg p-3 text-center border',
+                                  impact.positive
+                                    ? 'bg-green-50 border-green-200 dark:bg-green-950/50 dark:border-green-900'
+                                    : 'bg-red-50 border-red-200 dark:bg-red-950/50 dark:border-red-900'
+                                )}
+                              >
+                                <div className="text-xs text-muted-foreground mb-1">
+                                  {impact.index}
+                                </div>
+                                <div className={cn(
+                                  'text-lg font-bold flex items-center justify-center gap-1',
+                                  impact.positive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                )}>
+                                  {impact.positive ? (
+                                    <TrendingUp className="w-4 h-4" />
+                                  ) : (
+                                    <TrendingDown className="w-4 h-4" />
+                                  )}
+                                  {impact.change}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Key facts */}
+                        <div>
+                          <h4 className="font-semibold text-foreground mb-2">
+                            Faits marquants
+                          </h4>
+                          <ul className="space-y-2">
+                            {crisis.keyFacts.map((fact, i) => (
+                              <li
+                                key={i}
+                                className="flex items-start gap-2 text-sm text-muted-foreground"
+                              >
+                                <span className={cn('mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0', severity.color)} />
+                                {fact}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
-                    </div>
-                  </CollapsibleContent>
-                </div>
-              </Collapsible>
-            );
-          })}
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              );
+            })}
         </div>
       </div>
 
