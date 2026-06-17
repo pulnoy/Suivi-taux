@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 // --- CONFIGURATION ---
 const FRED_API_KEY = process.env.FRED_API_KEY;
@@ -512,6 +513,145 @@ async function fetchYahooHistoryWithFallback(ticker) {
   }
 
   return history;
+}
+
+function mergeHistoryByDate(...series) {
+  const byDate = new Map();
+  for (const history of series) {
+    for (const point of history || []) {
+      if (!point?.date || point.value == null || isNaN(point.value)) continue;
+      byDate.set(point.date, {
+        date: point.date,
+        value: parseFloat(Number(point.value).toFixed(2)),
+        timestamp: point.timestamp ?? new Date(point.date).getTime(),
+      });
+    }
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function deriveCryptoJsAesKey(password, salt, keyLength = 32, ivLength = 16) {
+  let previous = Buffer.alloc(0);
+  let derived = Buffer.alloc(0);
+
+  while (derived.length < keyLength + ivLength) {
+    previous = crypto
+      .createHash('md5')
+      .update(previous)
+      .update(Buffer.from(password, 'utf8'))
+      .update(salt)
+      .digest();
+    derived = Buffer.concat([derived, previous]);
+  }
+
+  return {
+    key: derived.subarray(0, keyLength),
+    iv: derived.subarray(keyLength, keyLength + ivLength),
+  };
+}
+
+function decryptEuronextPayload(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload?.ct || !payload?.s) return [];
+
+  const salt = Buffer.from(payload.s, 'hex');
+  const { key, iv } = deriveCryptoJsAesKey('24ayqVo7yJma', salt);
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  let decrypted = decipher.update(payload.ct, 'base64', 'utf8');
+  decrypted += decipher.final('utf8');
+  return JSON.parse(decrypted);
+}
+
+async function fetchEuronextChartHistory(instrument, label) {
+  const url = `https://live.euronext.com/intraday_chart/getChartData/${instrument}/max`;
+  try {
+    console.log(`  Fetching ${label} (Euronext graphique max)...`);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json,*/*',
+        'Referer': `https://live.euronext.com/en/product/indices/${instrument}`,
+      },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      console.log(`  ⚠️ Euronext chart ${label}: HTTP ${response.status}`);
+      return [];
+    }
+
+    const encrypted = await response.json();
+    const decrypted = decryptEuronextPayload(encrypted);
+    const history = decrypted.map(point => {
+      const date = String(point.time ?? '').slice(0, 10);
+      const value = Number(point.price);
+      return {
+        date,
+        value: parseFloat(value.toFixed(2)),
+        timestamp: new Date(date).getTime(),
+      };
+    }).filter(point => /^\d{4}-\d{2}-\d{2}$/.test(point.date) && !isNaN(point.value));
+
+    const sorted = mergeHistoryByDate(history);
+    const last = sorted[sorted.length - 1];
+    console.log(`  ✓ Euronext chart ${label}: ${sorted.length} points, dernier: ${last?.date} = ${last?.value}`);
+    return sorted;
+  } catch (error) {
+    console.log(`  ⚠️ Euronext chart ${label}: ${error.message}`);
+    return [];
+  }
+}
+
+async function fetchEuronextHistoricalCsv(instrument, label) {
+  const url = `https://live.euronext.com/en/ajax/AwlHistoricalPrice/getFullDownloadAjax/${instrument}?format=csv&decimal_separator=.&date_form=d%2Fm%2FY`;
+  try {
+    console.log(`  Fetching ${label} (Euronext CSV récent)...`);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/csv,*/*',
+        'Referer': `https://live.euronext.com/en/product/indices/${instrument}`,
+      },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      console.log(`  ⚠️ Euronext ${label}: HTTP ${response.status}`);
+      return [];
+    }
+
+    const csv = await response.text();
+    const rows = csv.split(/\r?\n/).filter(line => /^\d{2}\/\d{2}\/\d{4};/.test(line));
+    const history = rows.map(line => {
+      const columns = line.split(';');
+      const [day, month, year] = columns[0].split('/');
+      const close = Number(columns[5]);
+      const date = `${year}-${month}-${day}`;
+      return {
+        date,
+        value: parseFloat(close.toFixed(2)),
+        timestamp: new Date(date).getTime(),
+      };
+    }).filter(point => !isNaN(point.value));
+
+    const sorted = history.sort((a, b) => a.date.localeCompare(b.date));
+    const last = sorted[sorted.length - 1];
+    console.log(`  ✓ Euronext ${label}: ${sorted.length} points, dernier: ${last?.date} = ${last?.value}`);
+    return sorted;
+  } catch (error) {
+    console.log(`  ⚠️ Euronext ${label}: ${error.message}`);
+    return [];
+  }
+}
+
+async function fetchCac40GrHistory() {
+  const yahooHistory = await fetchYahooHistoryWithFallback('PX1GR.PA');
+  const euronextChart = await fetchEuronextChartHistory('QS0011131834-XPAR', 'CAC 40 GR');
+  const euronextRecent = await fetchEuronextHistoricalCsv('QS0011131834-XPAR', 'CAC 40 GR');
+  const existing = existingData?.indices?.cac40gr?.historique ?? [];
+  const base = yahooHistory.length > 0 ? yahooHistory : existing;
+  const merged = mergeHistoryByDate(base, euronextChart, euronextRecent);
+  const last = merged[merged.length - 1];
+  console.log(`  ✓ CAC 40 GR fusionné: ${merged.length} points, dernier: ${last?.date} = ${last?.value}`);
+  return merged;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1060,7 +1200,7 @@ async function main() {
   // Indices boursiers
   console.log("\n📊 Récupération des indices boursiers...");
   const historyCac40    = await yahooWithFallback('%5EFCHI', 'cac40');
-  const historyCac40Gr  = await yahooWithFallback('PX1GR.PA', 'cac40gr');
+  const historyCac40Gr  = await fetchCac40GrHistory();
   const historyCacMid   = await yahooWithFallback('C6E.PA', 'cacmid');
   const historyStoxx50  = await yahooWithFallback('%5ESTOXX50E', 'stoxx50');
   const historyStoxx600 = await yahooWithFallback('%5ESTOXX', 'stoxx600');
