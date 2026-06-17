@@ -32,6 +32,7 @@ export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   eurcny:       { label: 'Quotidien',       maxDays: 5  },
   // Actions — quotidien (jours ouvrés)
   cac40:        { label: 'Quotidien',       maxDays: 5  },
+  cac40gr:      { label: 'Quotidien',       maxDays: 5  },
   cacmid:       { label: 'Quotidien',       maxDays: 5  },
   stoxx50:      { label: 'Quotidien',       maxDays: 5  },
   stoxx600:     { label: 'Quotidien',       maxDays: 5  },
