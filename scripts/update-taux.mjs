@@ -514,6 +514,73 @@ async function fetchYahooHistoryWithFallback(ticker) {
   return history;
 }
 
+function mergeHistoryByDate(...series) {
+  const byDate = new Map();
+  for (const history of series) {
+    for (const point of history || []) {
+      if (!point?.date || point.value == null || isNaN(point.value)) continue;
+      byDate.set(point.date, {
+        date: point.date,
+        value: parseFloat(Number(point.value).toFixed(2)),
+        timestamp: point.timestamp ?? new Date(point.date).getTime(),
+      });
+    }
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function fetchEuronextHistoricalCsv(instrument, label) {
+  const url = `https://live.euronext.com/en/ajax/AwlHistoricalPrice/getFullDownloadAjax/${instrument}?format=csv&decimal_separator=.&date_form=d%2Fm%2FY`;
+  try {
+    console.log(`  Fetching ${label} (Euronext CSV récent)...`);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/csv,*/*',
+        'Referer': `https://live.euronext.com/en/product/indices/${instrument}`,
+      },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      console.log(`  ⚠️ Euronext ${label}: HTTP ${response.status}`);
+      return [];
+    }
+
+    const csv = await response.text();
+    const rows = csv.split(/\r?\n/).filter(line => /^\d{2}\/\d{2}\/\d{4};/.test(line));
+    const history = rows.map(line => {
+      const columns = line.split(';');
+      const [day, month, year] = columns[0].split('/');
+      const close = Number(columns[5]);
+      const date = `${year}-${month}-${day}`;
+      return {
+        date,
+        value: parseFloat(close.toFixed(2)),
+        timestamp: new Date(date).getTime(),
+      };
+    }).filter(point => !isNaN(point.value));
+
+    const sorted = history.sort((a, b) => a.date.localeCompare(b.date));
+    const last = sorted[sorted.length - 1];
+    console.log(`  ✓ Euronext ${label}: ${sorted.length} points, dernier: ${last?.date} = ${last?.value}`);
+    return sorted;
+  } catch (error) {
+    console.log(`  ⚠️ Euronext ${label}: ${error.message}`);
+    return [];
+  }
+}
+
+async function fetchCac40GrHistory() {
+  const yahooHistory = await fetchYahooHistoryWithFallback('PX1GR.PA');
+  const euronextRecent = await fetchEuronextHistoricalCsv('QS0011131834-XPAR', 'CAC 40 GR');
+  const existing = existingData?.indices?.cac40gr?.historique ?? [];
+  const base = yahooHistory.length > 0 ? yahooHistory : existing;
+  const merged = mergeHistoryByDate(base, euronextRecent);
+  const last = merged[merged.length - 1];
+  console.log(`  ✓ CAC 40 GR fusionné: ${merged.length} points, dernier: ${last?.date} = ${last?.value}`);
+  return merged;
+}
+
 // ─────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
 // 5. LIVRET A — Banque de France Webstat (source officielle)
@@ -1060,7 +1127,7 @@ async function main() {
   // Indices boursiers
   console.log("\n📊 Récupération des indices boursiers...");
   const historyCac40    = await yahooWithFallback('%5EFCHI', 'cac40');
-  const historyCac40Gr  = await yahooWithFallback('PX1GR.PA', 'cac40gr');
+  const historyCac40Gr  = await fetchCac40GrHistory();
   const historyCacMid   = await yahooWithFallback('C6E.PA', 'cacmid');
   const historyStoxx50  = await yahooWithFallback('%5ESTOXX50E', 'stoxx50');
   const historyStoxx600 = await yahooWithFallback('%5ESTOXX', 'stoxx600');

@@ -281,7 +281,13 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       const index = indices[key];
       if (!index) return null;
       
-      const filtered = filterDataByPeriod(index.historique, period === 'CUSTOM' ? 'MAX' : period);
+      const filtered = filterDataByPeriod(
+        index.historique,
+        period === 'CUSTOM' ? 'MAX' : period,
+        undefined,
+        undefined,
+        index.suffixe === '%'
+      );
       
       return {
         key,
