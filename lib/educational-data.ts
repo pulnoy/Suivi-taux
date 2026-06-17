@@ -143,7 +143,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     category: 'stocks',
     categoryLabel: 'Large Caps TR',
     source: 'Euronext Paris / Yahoo Finance',
-    sourceUrl: 'https://finance.yahoo.com/quote/PX1GR.PA'
+    sourceUrl: 'https://live.euronext.com/en/product/indices/QS0011131834-XPAR'
   },
   
   cacmid: {
