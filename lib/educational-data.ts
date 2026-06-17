@@ -119,6 +119,32 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     source: 'Euronext Paris',
     sourceUrl: 'https://finance.yahoo.com/quote/%5EFCHI'
   },
+
+  cac40gr: {
+    title: 'CAC 40 GR',
+    shortDescription: 'Version Gross Return du CAC 40, avec dividendes bruts réinvestis.',
+    fullDescription: `Le CAC 40 GR reprend les mêmes 40 grandes capitalisations françaises que le CAC 40 classique, mais il intègre les dividendes bruts réinvestis. Il mesure donc la performance totale théorique de l'indice, contrairement au CAC 40 prix qui ignore les dividendes.`,
+    importance: `Cet indice est plus pertinent pour analyser la performance longue durée d'un placement actions françaises, car une part importante du rendement provient des dividendes réinvestis. Il permet aussi des comparaisons plus justes avec les indices total return comme le DAX de référence.`,
+    factors: [
+      'Évolution des cours des sociétés du CAC 40',
+      'Dividendes distribués par les grandes capitalisations françaises',
+      'Contexte économique français et européen',
+      'Politique monétaire de la BCE',
+      'Flux d\'investissement vers les actions européennes'
+    ],
+    insights: [
+      'Code Euronext : PX1GR',
+      'ISIN : QS0011131834',
+      'Inclut les dividendes bruts réinvestis'
+    ],
+    color: '#0f766e',
+    bgColor: '#ccfbf1',
+    darkBgColor: '#134e4a',
+    category: 'stocks',
+    categoryLabel: 'Large Caps TR',
+    source: 'Euronext Paris / Yahoo Finance',
+    sourceUrl: 'https://finance.yahoo.com/quote/PX1GR.PA'
+  },
   
   cacmid: {
     title: 'CAC Mid 60',

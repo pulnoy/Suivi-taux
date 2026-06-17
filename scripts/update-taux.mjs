@@ -1060,6 +1060,7 @@ async function main() {
   // Indices boursiers
   console.log("\n📊 Récupération des indices boursiers...");
   const historyCac40    = await yahooWithFallback('%5EFCHI', 'cac40');
+  const historyCac40Gr  = await yahooWithFallback('PX1GR.PA', 'cac40gr');
   const historyCacMid   = await yahooWithFallback('C6E.PA', 'cacmid');
   const historyStoxx50  = await yahooWithFallback('%5ESTOXX50E', 'stoxx50');
   const historyStoxx600 = await yahooWithFallback('%5ESTOXX', 'stoxx600');
@@ -1180,6 +1181,7 @@ async function main() {
 
       // Actions
       cac40:    createIndexData("CAC 40",        getLast(historyCac40),    "pts", historyCac40),
+      cac40gr:  createIndexData("CAC 40 GR",     getLast(historyCac40Gr),  "pts", historyCac40Gr),
       cacmid:   createIndexData("CAC Mid 60",    getLast(historyCacMid),   "pts", historyCacMid),
       stoxx50:  createIndexData("Euro Stoxx 50",   getLast(historyStoxx50),  "pts", historyStoxx50),
       stoxx600: createIndexData("Stoxx Europe 600",getLast(historyStoxx600), "pts", historyStoxx600),
