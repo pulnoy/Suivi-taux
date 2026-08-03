@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { EnhancedChart } from './enhanced-chart';
+import dynamic from 'next/dynamic';
 import { INDEX_EDUCATION, CATEGORY_CONFIG } from '@/lib/educational-data';
 import {
   calculateAllStats,
@@ -9,13 +9,21 @@ import {
   formatNumber,
   FinancialStats,
   computeCapitalizedSeries,
+  convertPriceSeriesToEuro,
   calculateMonthlyIRR,
   SAVINGS_KEYS,
   FIXED_RATE_AT_OPENING_KEYS,
-  COMPOUNDING_RULES
+  COMPOUNDING_RULES,
+  getApplicableRate
 } from '@/lib/financial-utils';
+import {
+  getFxKeyForAsset,
+  getInstrumentKind,
+  getInstrumentKindLabel,
+  getRequiredFxKeys,
+  isPerformanceSeries,
+} from '@/lib/instrument-config';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Table, 
   TableBody, 
@@ -33,18 +41,12 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { TrendingUp, BarChart3, X, HelpCircle, AlertTriangle, Lightbulb, ChevronDown, ChevronUp, Play, Euro, Check, BadgeInfo } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { DataPoint, Indicateur } from '@/lib/taux-types';
 
-interface DataPoint {
-  date: string;
-  value: number;
-}
-
-interface Indicateur {
-  titre: string;
-  valeur: number;
-  suffixe: string;
-  historique: DataPoint[];
-}
+const EnhancedChart = dynamic(() => import('./enhanced-chart').then(mod => mod.EnhancedChart), {
+  loading: () => <div className="h-[420px] animate-pulse rounded-lg bg-muted" role="status" aria-label="Chargement du graphique" />,
+  ssr: false,
+});
 
 interface ComparatorProps {
   indices: Record<string, Indicateur>;
@@ -56,25 +58,6 @@ type Period = '1M' | '3M' | '6M' | '1A' | '5A' | '10A' | '18A' | '20A' | 'YTD' |
 
 // Couleurs fixes par slot de sélection (1er sélectionné → slot 0, etc.)
 const SELECTION_PALETTE = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
-
-const NON_INVESTABLE_INDEX_KEYS = new Set([
-  'oat',
-  'tec10',
-  'estr',
-  'tauxDepotBCE',
-  'inflation',
-  'tauxImmo',
-  'prixImmo',
-  'us10y',
-  'bund',
-  'jgb',
-  'gilt',
-  'eurusd',
-  'eurgbp',
-  'eurjpy',
-  'eurchf',
-  'eurcny',
-]);
 
 // Types pour l'analyse de compatibilité des modes
 type ModeRecommendation = 'real' | 'percent' | 'both';
@@ -90,7 +73,7 @@ interface ModeAnalysis {
 // Fonction pour analyser la compatibilité des indices sélectionnés
 function analyzeModeCompatibility(
   selectedKeys: string[],
-  indices: Record<string, { valeur: number; suffixe: string }>
+  indices: Record<string, Pick<Indicateur, 'valeur' | 'suffixe'>>
 ): ModeAnalysis {
   if (selectedKeys.length === 0) {
     return {
@@ -108,6 +91,15 @@ function analyzeModeCompatibility(
     suffix: indices[key]?.suffixe || ''
   }));
 
+  if (selectedKeys.some(key => !isPerformanceSeries(key))) {
+    return {
+      recommendation: 'real',
+      compatibilityLevel: 'warning',
+      message: 'Les indicateurs de taux, de variation et de change restent en valeur brute : leur normalisation ne constitue pas un rendement.',
+      forceBase100: false
+    };
+  }
+
   const categories = new Set(selectedData.map(d => d.category));
   const values = selectedData.map(d => Math.abs(d.value));
   
@@ -119,10 +111,6 @@ function analyzeModeCompatibility(
   const hasSmallValues = selectedData.some(d => 
     d.suffix === '%' || Math.abs(d.value) < 100
   );
-  const hasLargeValues = selectedData.some(d => 
-    Math.abs(d.value) > 10000
-  );
-
   if (hasBitcoin && hasSmallValues) {
     return {
       recommendation: 'percent',
@@ -138,6 +126,15 @@ function analyzeModeCompatibility(
       compatibilityLevel: 'incompatible',
       message: '⚠️ Attention: les échelles des indices sélectionnés sont très différentes. La Base 100 est fortement recommandée.',
       forceBase100: true
+    };
+  }
+
+  if (selectedKeys.some(key => SAVINGS_KEYS.includes(key))) {
+    return {
+      recommendation: 'percent',
+      compatibilityLevel: 'compatible',
+      message: 'Les placements à taux servi sont capitalisés en Base 100 pour comparer la croissance du capital.',
+      forceBase100: false
     };
   }
 
@@ -178,6 +175,8 @@ function parseDisplayDate(display: string): string | null {
   if (!m) return null;
   const day = parseInt(m[1], 10), mo = parseInt(m[2], 10), y = parseInt(m[3], 10);
   if (mo < 1 || mo > 12 || day < 1 || day > 31) return null;
+  const parsed = new Date(Date.UTC(y, mo - 1, day));
+  if (parsed.getUTCFullYear() !== y || parsed.getUTCMonth() !== mo - 1 || parsed.getUTCDate() !== day) return null;
   return `${y}-${mo.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
 }
 
@@ -188,6 +187,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const [showMA200, setShowMA200] = useState(false);
   const [userOverrodeMode, setUserOverrodeMode] = useState(false);
   const [showIndicesSection, setShowIndicesSection] = useState(true);
+  const [currencyView, setCurrencyView] = useState<'local' | 'eur'>('local');
   
   // Brush date range from slider
   const [brushStartDate, setBrushStartDate] = useState<string | null>(null);
@@ -205,6 +205,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   // Date input fields (dd/mm/yyyy) displayed in the stats section
   const [startDateInput, setStartDateInput] = useState<string>('');
   const [endDateInput, setEndDateInput] = useState<string>('');
+  const [dateInputError, setDateInputError] = useState<string | null>(null);
 
   // Placement simulation state
   const [placementAmount, setPlacementAmount] = useState<string>('1000');
@@ -215,7 +216,25 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const [showSimPanel, setShowSimPanel] = useState(false);
 
   // Available indices for selection
-  const availableIndices = Object.keys(indices);
+  const hasNonSimulatableSelection = selectedKeys.some(key => !isPerformanceSeries(key));
+  const requiredFxKeys = useMemo(() => getRequiredFxKeys(selectedKeys), [selectedKeys]);
+  const hasForeignAssetSelection = requiredFxKeys.length > 0;
+  const fxHistoriesReady = requiredFxKeys.every(key => {
+    const indicator = indices[key];
+    const expectedPoints = indicator?.nombre_points ?? indicator?.historique.length ?? 0;
+    return (indicator?.historique.length ?? 0) >= expectedPoints && expectedPoints > 1;
+  });
+
+  useEffect(() => {
+    if (!hasNonSimulatableSelection) return;
+    setMode('real');
+    setSimulationActive(false);
+    setShowSimPanel(false);
+  }, [hasNonSimulatableSelection]);
+
+  useEffect(() => {
+    if (!hasForeignAssetSelection) setCurrencyView('local');
+  }, [hasForeignAssetSelection]);
 
   // Analyse de compatibilité des modes
   const modeAnalysis = useMemo(() => 
@@ -261,9 +280,18 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const handleDateInputSubmit = useCallback(() => {
     const startISO = parseDisplayDate(startDateInput);
     const endISO = parseDisplayDate(endDateInput);
+    if ((startDateInput && !startISO) || (endDateInput && !endISO)) {
+      setDateInputError('Saisissez une date valide au format jj/mm/aaaa.');
+      return;
+    }
     // Fallback sur les dates courantes du brush si un champ est vide
     const effectiveStart = startISO ?? brushStartDate;
     const effectiveEnd = endISO ?? brushEndDate;
+    if (effectiveStart && effectiveEnd && effectiveStart > effectiveEnd) {
+      setDateInputError('La date de début doit précéder la date de fin.');
+      return;
+    }
+    setDateInputError(null);
     if (effectiveStart) {
       setBrushStartDate(effectiveStart);
       setNormalizeFromDate(effectiveStart);
@@ -281,8 +309,13 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       const index = indices[key];
       if (!index) return null;
       
+      const fxKey = getFxKeyForAsset(key);
+      const convertToEuro = currencyView === 'eur' && fxKey;
+      const history = convertToEuro
+        ? convertPriceSeriesToEuro(index.historique, indices[fxKey]?.historique ?? [])
+        : index.historique;
       const filtered = filterDataByPeriod(
-        index.historique,
+        history,
         period === 'CUSTOM' ? 'MAX' : period,
         undefined,
         undefined,
@@ -293,11 +326,11 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         key,
         data: filtered,
         color: SELECTION_PALETTE[selectedKeys.indexOf(key)] ?? '#64748b',
-        title: index.titre,
-        suffix: index.suffixe
+        title: convertToEuro ? `${index.titre} (€)` : index.titre,
+        suffix: convertToEuro ? '€' : index.suffixe
       };
     }).filter(Boolean) as { key: string; data: DataPoint[]; color: string; title: string; suffix: string }[];
-  }, [indices, selectedKeys, period]);
+  }, [indices, selectedKeys, period, currencyView]);
 
   // Data filtered by brush range (for statistics recalculation)
   const brushFilteredData = useMemo(() => {
@@ -333,6 +366,28 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
 
     return brushFilteredData.map(ds => {
       const isSavings = ds.suffix === '%' && SAVINGS_KEYS.includes(ds.key);
+      const metricsAvailable = isPerformanceSeries(ds.key);
+      const riskMetricsAvailable = ds.key !== 'scpi';
+      const applyMetricAvailability = (stats: FinancialStats): FinancialStats => metricsAvailable
+        ? stats
+        : {
+            ...stats,
+            totalReturn: Number.NaN,
+            annualizedReturn: Number.NaN,
+            volatility: Number.NaN,
+            maxDrawdown: Number.NaN,
+            sharpeRatio: Number.NaN,
+          };
+      const applyRiskMetricAvailability = (stats: FinancialStats): FinancialStats => riskMetricsAvailable
+        ? stats
+        : {
+            ...stats,
+            volatility: Number.NaN,
+            maxDrawdown: Number.NaN,
+            sharpeRatio: Number.NaN,
+          };
+
+      if (simulationActive && !metricsAvailable) return null;
 
       // ── DCA mode: compute portfolio with monthly contributions ──
       if (hasDCA && mode === 'percent') {
@@ -348,13 +403,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           if (FIXED_RATE_AT_OPENING_KEYS.includes(ds.key)) {
             return sortedData[0].value;
           }
-
-          let val = sortedData[0].value;
-          for (const pt of sortedData) {
-            if (pt.date <= dateStr) val = pt.value;
-            else break;
-          }
-          return val;
+          return getApplicableRate(sortedData, ds.key, dateStr);
         };
 
         // Build DCA portfolio value series
@@ -453,7 +502,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         cashFlows.push(finalValue);
         const irr = calculateMonthlyIRR(cashFlows);
 
-        const portfolioStats = calculateAllStats(dcaSeries);
+        const portfolioStats = applyRiskMetricAvailability(calculateAllStats(dcaSeries));
 
         return {
           key: ds.key,
@@ -477,8 +526,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         if (isSavings) {
           const capSeries = computeCapitalizedSeries(ds.data, ds.key, baseAmt);
           if (capSeries.length >= 2) {
-            const stats = calculateAllStats(capSeries);
-            return { key: ds.key, title: ds.title, suffix: '€', color: ds.color, isSavings: true, ...stats };
+            const stats = applyRiskMetricAvailability(calculateAllStats(capSeries));
+            return { key: ds.key, title: ds.title, suffix: '€', color: ds.color, isSavings: true, metricsAvailable, riskMetricsAvailable, ...stats };
           }
         } else if (ds.data.length >= 2) {
           const startVal = ds.data[0].value;
@@ -487,14 +536,22 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               ...d,
               value: baseAmt * (1 + (d.value - startVal) / Math.abs(startVal))
             }));
-            const stats = calculateAllStats(normalizedData);
-            return { key: ds.key, title: ds.title, suffix: '€', color: ds.color, isSavings: false, ...stats };
+            const stats = applyMetricAvailability(calculateAllStats(normalizedData));
+            return {
+              key: ds.key,
+              title: ds.title,
+              suffix: simulationActive ? '€' : 'base 100',
+              color: ds.color,
+              isSavings: false,
+              metricsAvailable,
+              ...stats,
+            };
           }
         }
       }
 
-      const stats = calculateAllStats(ds.data);
-      return { key: ds.key, title: ds.title, suffix: ds.suffix, color: ds.color, isSavings: false, ...stats };
+      const stats = applyMetricAvailability(calculateAllStats(ds.data));
+      return { key: ds.key, title: ds.title, suffix: ds.suffix, color: ds.color, isSavings: false, metricsAvailable, ...stats };
     }).filter(Boolean) as any[];
   }, [brushFilteredData, mode, simulationActive, effectivePlacementAmount, effectiveMonthlyPayment]);
 
@@ -601,15 +658,20 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                     const education = INDEX_EDUCATION[key];
                     const isSelected = selectedKeys.includes(key);
                     const isDisabled = !isSelected && selectedKeys.length >= 5;
-                    const isNonInvestable = NON_INVESTABLE_INDEX_KEYS.has(key);
+                    const instrumentKind = getInstrumentKind(key);
+                    const instrumentKindLabel = getInstrumentKindLabel(key);
+                    const isNonSimulatable = instrumentKind === 'indicator';
+                    const hasSimulationCaveat = key === 'scpi';
 
                     return (
                       <TooltipProvider key={key}>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
+                              type="button"
                               onClick={() => toggleIndex(key)}
                               disabled={isDisabled}
+                              aria-pressed={isSelected}
                               className={cn(
                                 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all border',
                                 isSelected
@@ -623,25 +685,34 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                               } : {}}
                             >
                               {index.titre}
-                              {isNonInvestable && (
-                                <BadgeInfo
-                                  className={cn(
-                                    'h-3 w-3',
-                                    isSelected ? 'text-white/80' : 'text-primary/70'
-                                  )}
-                                />
-                              )}
+                              <BadgeInfo
+                                className={cn(
+                                  'h-3 w-3',
+                                  isSelected ? 'text-white/80' : 'text-primary/70'
+                                )}
+                              />
                               {isSelected && <X className="h-2.5 w-2.5 ml-0.5 opacity-80" />}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="max-w-xs">
                             <p className="text-xs font-medium mb-0.5">{index.titre}</p>
+                            <span className="inline-flex rounded-sm border border-border px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
+                              {instrumentKindLabel}
+                            </span>
                             <p className="text-xs text-muted-foreground">{education?.shortDescription || ''}</p>
-                            {isNonInvestable && (
+                            {hasSimulationCaveat ? (
                               <p className="text-xs text-primary mt-1">
-                                Indicateur de marché, non investissable directement.
+                                Simulation sur distributions réinvesties, hors prix de part, frais et fiscalité.
                               </p>
-                            )}
+                            ) : isNonSimulatable ? (
+                              <p className="text-xs text-primary mt-1">
+                                Affichage en valeur brute uniquement : Base 100, rendements et simulation désactivés.
+                              </p>
+                            ) : key === 'estrCapitalise' ? (
+                              <p className="text-xs text-primary mt-1">Benchmark brut théorique, hors frais, fiscalité et écart de suivi d’un OPC monétaire.</p>
+                            ) : key === 'inflationCumulee' ? (
+                              <p className="text-xs text-primary mt-1">Benchmark de pouvoir d’achat, pas un support d’investissement.</p>
+                            ) : null}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -659,7 +730,6 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           <div className="mt-3 pt-3 border-t border-border flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-muted-foreground">Sélectionnés :</span>
             {selectedKeys.map(key => {
-              const edu = INDEX_EDUCATION[key];
               return (
                 <span
                   key={key}
@@ -667,13 +737,19 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                   style={{ backgroundColor: SELECTION_PALETTE[selectedKeys.indexOf(key)] ?? '#3b82f6' }}
                 >
                   {indices[key]?.titre}
-                  <button onClick={() => toggleIndex(key)} className="ml-0.5 hover:opacity-70">
+                  <button
+                    type="button"
+                    onClick={() => toggleIndex(key)}
+                    className="ml-0.5 hover:opacity-70"
+                    aria-label={`Retirer ${indices[key]?.titre ?? key}`}
+                  >
                     <X className="h-2.5 w-2.5" />
                   </button>
                 </span>
               );
             })}
             <button
+              type="button"
               onClick={() => onKeysChange([])}
               className="text-xs text-muted-foreground hover:text-destructive transition-colors ml-1"
             >
@@ -688,8 +764,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       {/* Toolbar : Mode | Périodes | Simulation de placement — une seule ligne */}
       <div className="flex flex-wrap items-center gap-3">
         {/* À gauche : Toggle Mode (Valeur absolue / Base 100) */}
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+        <div className="flex max-w-full items-start gap-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 bg-muted rounded-lg p-1">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -760,15 +836,17 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                       setShowSimPanel(false);
                       setSimulationActive(false);
                     }}
-                    className="h-8"
+                    disabled={hasNonSimulatableSelection}
+                    className={cn('h-8', hasNonSimulatableSelection && 'opacity-50 cursor-not-allowed')}
                   >
                     Base 100
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-xs">
                   <p className="text-sm">
-                    <strong>Base 100 :</strong> Normalise tous les indices à 100 au début de la période
-                    pour comparer les performances relatives (ex: +15% vs +8%)
+                    {hasNonSimulatableSelection
+                      ? 'La Base 100 est indisponible lorsqu’un indicateur brut est sélectionné.'
+                      : <><strong>Base 100 :</strong> Normalise les placements et benchmarks à 100 au début de la période pour comparer leurs performances relatives.</>}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -785,6 +863,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                       setMode('percent');
                       setUserOverrodeMode(true);
                     }}
+                    disabled={hasNonSimulatableSelection}
                     className={cn(
                       "h-8",
                       showSimPanel && simulationActive && "bg-green-600 hover:bg-green-700 text-white"
@@ -795,19 +874,58 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-xs">
                   <p className="text-sm">
-                    <strong>Base personnalisée :</strong> Simule l'évolution d'un placement avec un montant initial
-                    et des versements mensuels optionnels.
+                    {hasNonSimulatableSelection
+                      ? 'La simulation est indisponible pour cette sélection.'
+                      : "Simule l'évolution d'un placement avec un montant initial et des versements mensuels."}
                   </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
 
+          {hasForeignAssetSelection && (
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1" role="group" aria-label="Devise de comparaison">
+              <Button
+                variant={currencyView === 'local' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setCurrencyView('local')}
+                aria-pressed={currencyView === 'local'}
+                className="h-8"
+              >
+                Devise locale
+              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={currencyView === 'eur' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setCurrencyView('eur')}
+                      disabled={!fxHistoriesReady}
+                      aria-pressed={currencyView === 'eur'}
+                      className="h-8 gap-1"
+                    >
+                      <Euro className="h-3.5 w-3.5" />
+                      Investisseur euro
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <p className="text-sm">
+                      {fxHistoriesReady
+                        ? 'Convertit chaque valeur étrangère en euros avec le dernier taux de change connu à cette date.'
+                        : 'Chargement de l’historique de change nécessaire à la conversion.'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
+
           {/* Icône d'aide */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button className="p-1 rounded-full hover:bg-muted transition-colors">
+                <button type="button" className="p-1 rounded-full hover:bg-muted transition-colors" aria-label="Aide sur les modes d'affichage">
                   <HelpCircle className="h-4 w-4 text-muted-foreground" />
                 </button>
               </TooltipTrigger>
@@ -820,7 +938,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                   </p>
                   <p>
                     <strong>Base 100 :</strong> Pour comparer des indices d'échelles différentes 
-                    (ex: CAC 40 vs Bitcoin vs Inflation)
+                    (ex: CAC 40 vs Bitcoin vs inflation cumulée)
                   </p>
                   <p className="text-muted-foreground italic">
                     💡 Le mode est présélectionné automatiquement selon vos indices.
@@ -835,7 +953,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         <div className="h-8 w-px bg-border hidden sm:block" />
 
         {/* Au centre : Boutons de périodes prédéfinies */}
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+        <div className="flex max-w-full flex-wrap items-center gap-1 bg-muted rounded-lg p-1">
           {periodButtons.map(btn => (
             <Button
               key={btn.value}
@@ -869,14 +987,14 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Apport initial</span>
+            <label htmlFor="placement-amount" className="text-xs text-muted-foreground whitespace-nowrap">Apport initial</label>
             <input
+              id="placement-amount"
               type="number"
               value={localPlacementAmount}
               onChange={(e) => setLocalPlacementAmount(e.target.value)}
               onBlur={() => setPlacementAmount(localPlacementAmount)}
               onKeyDown={(e) => { if (e.key === 'Enter') setPlacementAmount(localPlacementAmount); }}
-              placeholder="1000"
               min="1"
               className="h-8 w-24 px-2 text-sm rounded-md border border-border bg-background text-foreground text-right"
             />
@@ -885,12 +1003,13 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             <span className="text-xs text-muted-foreground">+</span>
 
             <input
+              id="monthly-payment"
+              aria-label="Versement mensuel"
               type="number"
               value={localMonthlyPayment}
               onChange={(e) => setLocalMonthlyPayment(e.target.value)}
               onBlur={() => setMonthlyPayment(localMonthlyPayment)}
               onKeyDown={(e) => { if (e.key === 'Enter') setMonthlyPayment(localMonthlyPayment); }}
-              placeholder="0"
               min="0"
               className="h-8 w-20 px-2 text-sm rounded-md border border-border bg-background text-foreground text-right"
             />
@@ -908,6 +1027,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 setPlacementAmount(localPlacementAmount);
                 setMonthlyPayment(localMonthlyPayment);
               }}
+              disabled={selectedKeys.length === 0 || hasNonSimulatableSelection}
               className={cn(
                 "h-8 gap-1",
                 simulationActive && "border-green-600 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30"
@@ -917,12 +1037,13 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               Simuler
             </Button>
             <button
+              type="button"
               onClick={() => {
                 setShowSimPanel(false);
                 setSimulationActive(false);
               }}
               className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              title="Fermer la simulation"
+              aria-label="Fermer la simulation"
             >
               <X className="h-4 w-4" />
             </button>
@@ -961,7 +1082,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           <AlertDescription className="flex items-center gap-2 text-sm text-green-800 dark:text-green-300">
             <Euro className="h-4 w-4 flex-shrink-0 text-green-600" />
             <span>
-              <strong>Simulation active :</strong> Évolution de <strong>{effectivePlacementAmount.toLocaleString('fr-FR')} €</strong>
+              <strong>Projection active :</strong> Évolution de <strong>{effectivePlacementAmount.toLocaleString('fr-FR')} €</strong>
               {effectiveMonthlyPayment && effectiveMonthlyPayment > 0 && (
                 <> + <strong>{effectiveMonthlyPayment.toLocaleString('fr-FR')} €/mois</strong> (versements programmés — méthode DCA)</>
               )}{' '}depuis le début de la période.
@@ -969,29 +1090,49 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 <> Plage depuis le <strong>{new Date(brushStartDate).toLocaleDateString('fr-FR')}</strong>.</>
               )}
               {' '}Slider disponible sous le graphique.
+              {selectedKeys.includes('scpi') && (
+                <> Pour la SCPI, les distributions moyennes sont réinvesties ; prix de part, frais et fiscalité sont exclus.</>
+              )}
+              {selectedKeys.includes('estrCapitalise') && (
+                <> Pour le benchmark €STR, la capitalisation ACT/360 est brute de frais et de fiscalité.</>
+              )}
+              {selectedKeys.includes('inflationCumulee') && (
+                <> Pour l’inflation cumulée, le montant représente le capital nécessaire pour préserver le pouvoir d’achat, pas un placement réalisable.</>
+              )}
             </span>
           </AlertDescription>
         </Alert>
       )}
       
-      {mode === 'percent' && !simulationActive && selectedKeys.some(k => ['livreta', 'pel', 'fondsEuros', 'scpi', 'estr', 'tauxDepotBCE', 'oat', 'tec10', 'tauxImmo'].includes(k)) && (
+      {mode === 'percent' && !simulationActive && selectedKeys.some(key => SAVINGS_KEYS.includes(key)) && (
         <Alert className="py-2 border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-900">
           <AlertDescription className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
             <Lightbulb className="h-4 w-4 flex-shrink-0 text-blue-600" />
             <span>
-              <strong>Simulation de placement :</strong> Les supports investissables sont convertis en performance cumulée de <strong>100€ investis</strong> selon leurs règles officielles. Le PEL conserve le taux fixé à l'ouverture de la période sélectionnée. Les indicateurs de taux restent des repères de marché, pas des supports investissables directs.
-              {' '}<strong>💡 Activez la simulation de placement pour un montant personnalisé.</strong>
+              <strong>Capitalisation théorique :</strong> Livret A, PEL, fonds euros et SCPI sont convertis en évolution de 100 € selon leur taux servi. Le PEL conserve le taux applicable à l'ouverture de la période. Pour la SCPI, les distributions sont réinvesties, hors variation du prix de part, frais et fiscalité.
             </span>
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Info about slider usage */}
-      {selectedKeys.length > 0 && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
-          <span>💡</span>
-          <span>Utilisez le <strong>slider</strong> sous le graphique ou les <strong>champs de date</strong> dans les statistiques pour sélectionner une plage précise. Les montants et statistiques se recalculent automatiquement depuis la date de début. Boutons <strong>+</strong> / <strong>−</strong> pour zoomer.</span>
-        </div>
+      {mode === 'percent' && !simulationActive && selectedKeys.some(key => key === 'estrCapitalise' || key === 'inflationCumulee') && (
+        <Alert className="py-2 border-teal-200 bg-teal-50 dark:bg-teal-950/30 dark:border-teal-900">
+          <AlertDescription className="flex items-center gap-2 text-sm text-teal-900 dark:text-teal-200">
+            <BadgeInfo className="h-4 w-4 flex-shrink-0 text-teal-700" />
+            <span>
+              <strong>Benchmarks théoriques :</strong> l’€STR est capitalisé en ACT/360, brut de frais et de fiscalité ; l’IPC cumulé mesure le capital requis pour conserver le pouvoir d’achat.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {currencyView === 'eur' && (
+        <Alert className="py-2 border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-900">
+          <AlertDescription className="flex items-center gap-2 text-sm text-blue-900 dark:text-blue-200">
+            <Euro className="h-4 w-4 flex-shrink-0 text-blue-700" />
+            <span><strong>Lecture investisseur euro :</strong> les actifs étrangers sont convertis au change historique, sans couverture de change, frais ni fiscalité.</span>
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Chart */}
@@ -1016,32 +1157,44 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
 
       {/* Champs de date — centrés sous le slider */}
       {selectedKeys.length > 0 && (
-        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-          <span className="whitespace-nowrap">Du</span>
-          <input
-            type="text"
-            value={startDateInput}
-            onChange={(e) => setStartDateInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
-            placeholder="jj/mm/aaaa"
-            className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-center"
-          />
-          <span className="whitespace-nowrap">au</span>
-          <input
-            type="text"
-            value={endDateInput}
-            onChange={(e) => setEndDateInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
-            placeholder="jj/mm/aaaa"
-            className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-center"
-          />
-          <button
-            onClick={handleDateInputSubmit}
-            className="h-7 w-7 flex items-center justify-center rounded-md border border-border bg-background hover:bg-primary hover:text-primary-foreground transition-colors"
-            title="Valider les dates"
-          >
-            <Check className="h-3.5 w-3.5" />
-          </button>
+        <div className="flex flex-col items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center justify-center gap-2">
+            <label htmlFor="start-date" className="whitespace-nowrap">Du</label>
+            <input
+              id="start-date"
+              type="text"
+              inputMode="numeric"
+              value={startDateInput}
+              onChange={(e) => setStartDateInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
+              aria-label="Date de début au format jour mois année"
+              aria-invalid={dateInputError !== null}
+              aria-describedby={dateInputError ? 'date-input-error' : undefined}
+              className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-center"
+            />
+            <label htmlFor="end-date" className="whitespace-nowrap">au</label>
+            <input
+              id="end-date"
+              type="text"
+              inputMode="numeric"
+              value={endDateInput}
+              onChange={(e) => setEndDateInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleDateInputSubmit()}
+              aria-label="Date de fin au format jour mois année"
+              aria-invalid={dateInputError !== null}
+              aria-describedby={dateInputError ? 'date-input-error' : undefined}
+              className="h-7 w-28 px-2 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-center"
+            />
+            <button
+              type="button"
+              onClick={handleDateInputSubmit}
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-border bg-background hover:bg-primary hover:text-primary-foreground transition-colors"
+              aria-label="Valider les dates"
+            >
+              <Check className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {dateInputError ? <p id="date-input-error" className="text-destructive" role="alert">{dateInputError}</p> : null}
         </div>
       )}
 
@@ -1168,26 +1321,26 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                     </TableCell>
                     <TableCell className={cn(
                       "text-right font-semibold",
-                      stat.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'
+                      Number.isFinite(stat.totalReturn) && (stat.totalReturn >= 0 ? 'text-green-600' : 'text-red-600')
                     )}>
-                      {stat.totalReturn >= 0 ? '+' : ''}{formatNumber(stat.totalReturn)}%
+                      {Number.isFinite(stat.totalReturn) ? `${stat.totalReturn >= 0 ? '+' : ''}${formatNumber(stat.totalReturn)} %` : '—'}
                     </TableCell>
                     <TableCell className={cn(
                       "text-right",
-                      stat.annualizedReturn >= 0 ? 'text-green-600' : 'text-red-600'
+                      Number.isFinite(stat.annualizedReturn) && (stat.annualizedReturn >= 0 ? 'text-green-600' : 'text-red-600')
                     )}>
-                      {stat.annualizedReturn >= 0 ? '+' : ''}{formatNumber(stat.annualizedReturn)}%
+                      {Number.isFinite(stat.annualizedReturn) ? `${stat.annualizedReturn >= 0 ? '+' : ''}${formatNumber(stat.annualizedReturn)} %` : '—'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatNumber(stat.volatility)}%
+                      {Number.isFinite(stat.volatility) ? `${formatNumber(stat.volatility)} %` : '—'}
                     </TableCell>
                     <TableCell className="text-right text-red-600">
-                      -{formatNumber(stat.maxDrawdown)}%
+                      {Number.isFinite(stat.maxDrawdown) ? `-${formatNumber(stat.maxDrawdown)} %` : '—'}
                     </TableCell>
                     <TableCell className={cn(
                       "text-right font-medium",
-                      stat.sharpeRatio >= 1 ? 'text-green-600' : 
-                      stat.sharpeRatio >= 0 ? 'text-yellow-600' : 'text-red-600'
+                      Number.isFinite(stat.sharpeRatio) && (stat.sharpeRatio >= 1 ? 'text-green-600' :
+                      stat.sharpeRatio >= 0 ? 'text-yellow-600' : 'text-red-600')
                     )}>
                       {formatNumber(stat.sharpeRatio)}
                     </TableCell>

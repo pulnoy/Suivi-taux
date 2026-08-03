@@ -30,7 +30,6 @@ export function IndexInfoModal({
   indexKey,
   value,
   suffix,
-  historique,
   isOpen,
   onClose
 }: IndexInfoModalProps) {

@@ -7,7 +7,10 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+
+concurrency:
+  group: update-taux-main
+  cancel-in-progress: false
 
 jobs:
   update:
@@ -19,9 +22,6 @@ jobs:
           ref: main
           fetch-depth: 0
           persist-credentials: true
-
-      - name: Basculer sur la branche de prod
-        run: git checkout -B main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,14 +36,19 @@ jobs:
           OILPRICEAPI_API_KEY: ${{ secrets.OILPRICEAPI_API_KEY }}
         run: node scripts/update-taux.mjs
 
-      # --- Push direct sur main si des modifications ont été générées ---
-      - name: Commit & push direct sur main (si modifs)
+      - name: Valider, committer et publier
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [[ -n "$(git status --porcelain)" ]]; then
+          if [[ -n "$(git status --porcelain -- public/taux.json)" ]]; then
+            BASE_SHA="$(git rev-parse HEAD)"
             git add public/taux.json
             git commit -m "chore: maj taux $(TZ='Europe/Paris' date +'%Y-%m-%d %H:%M:%S')"
+            git fetch origin main
+            if [[ "$(git rev-parse origin/main)" != "$BASE_SHA" ]]; then
+              echo "main a changé pendant la collecte; publication annulée sans écrasement."
+              exit 1
+            fi
             git push origin HEAD:main
           else
             echo "Pas de changement à committer."

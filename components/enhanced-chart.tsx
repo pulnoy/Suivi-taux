@@ -2,22 +2,24 @@
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend,
-  ResponsiveContainer, ReferenceLine, Brush, Area, ComposedChart
+  Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend,
+  ResponsiveContainer, ReferenceLine, Brush, ComposedChart
 } from 'recharts';
-import { Download, ZoomIn, ZoomOut, RotateCcw, Image as ImageIcon, Info, HelpCircle, Plus, Minus } from 'lucide-react';
+import { Download, RotateCcw, Image as ImageIcon, Info, HelpCircle, Plus, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { INDEX_EDUCATION } from '@/lib/educational-data';
-import { calculateMovingAverage, normalizeToBase100, formatNumber } from '@/lib/financial-utils';
+import {
+  ANNUAL_DISTRIBUTION_KEYS,
+  COMPOUNDING_RULES,
+  SAVINGS_KEYS,
+  formatNumber,
+  getApplicableRate,
+} from '@/lib/financial-utils';
 import { cn } from '@/lib/utils';
+import { UPDATE_FREQUENCY } from '@/lib/staleness';
+import type { DataPoint } from '@/lib/taux-types';
 import html2canvas from 'html2canvas';
-
-interface DataPoint {
-  date: string;
-  value: number;
-}
 
 interface DatasetConfig {
   key: string;
@@ -69,31 +71,16 @@ const formatXAxisDate = (dateString: string, period: string): string => {
 };
 
 // Fonction pour calculer l'intervalle optimal de ticks
-const getTickInterval = (dataLength: number, period: string): number | 'preserveStartEnd' => {
+const getTickInterval = (dataLength: number, _period: string): number | 'preserveStartEnd' => {
   const targetTicks = 8;
   if (dataLength <= targetTicks) return 0;
   return Math.ceil(dataLength / targetTicks);
 };
 
-// Determine date ranges for each dataset
-interface DateRange {
-  key: string;
-  start: string;
-  end: string;
-}
-
-function getDatasetDateRanges(datasets: DatasetConfig[]): DateRange[] {
-  return datasets.map(ds => ({
-    key: ds.key,
-    start: ds.data[0]?.date || '',
-    end: ds.data[ds.data.length - 1]?.date || ''
-  }));
-}
-
 // Tooltips explicatifs pour les moyennes mobiles
 const MA_TOOLTIPS = {
-  ma50: "Moyenne Mobile 50 jours : Lisse les variations à court terme et identifie la tendance récente. Utile pour détecter les changements de direction à moyen terme.",
-  ma200: "Moyenne Mobile 200 jours : Lisse les variations à long terme et identifie la tendance de fond. Souvent utilisée comme support/résistance majeur. Un indice au-dessus de sa MM 200j est considéré en tendance haussière."
+  ma50: "Moyenne mobile sur 50 observations : lisse les variations à court terme.",
+  ma200: "Moyenne mobile sur 200 observations : lisse les variations à long terme."
 };
 
 export function EnhancedChart({
@@ -120,9 +107,6 @@ export function EnhancedChart({
   const [brushInitialStart, setBrushInitialStart] = useState<number | undefined>(undefined);
   const [brushInitialEnd, setBrushInitialEnd] = useState<number | undefined>(undefined);
 
-  // Get date ranges for each dataset (for showing in legend)
-  const dateRanges = useMemo(() => getDatasetDateRanges(datasets), [datasets]);
-
   // ─── Pass 1 : raw chart data + capitalized values for savings ───
   const rawChartData = useMemo(() => {
     if (!datasets || datasets.length === 0) return [];
@@ -133,55 +117,48 @@ export function EnhancedChart({
     
     if (sortedDates.length === 0) return [];
 
-    const MAX_GAP_MS = 45 * 24 * 60 * 60 * 1000;
     const indexedDatasets = datasets.map(ds => ({
       ...ds,
       sorted: [...ds.data].sort((a, b) => a.date.localeCompare(b.date))
     }));
 
-    const findClosest = (sorted: typeof indexedDatasets[0]['sorted'], targetDate: string): number | undefined => {
+    const findLastKnown = (sorted: typeof indexedDatasets[0]['sorted'], targetDate: string, key: string): number | undefined => {
       const targetTs = new Date(targetDate).getTime();
-      let best: { value: number; gap: number } | null = null;
+      let last: DataPoint | undefined;
       for (const pt of sorted) {
-        const gap = Math.abs(new Date(pt.date).getTime() - targetTs);
-        if (gap > MAX_GAP_MS) continue;
-        if (!best || gap < best.gap) best = { value: pt.value, gap };
-        else if (gap > best.gap) break;
+        if (pt.date > targetDate) break;
+        last = pt;
       }
-      return best?.value;
+      if (!last) return undefined;
+      const maxGapDays = UPDATE_FREQUENCY[key]?.maxDays ?? 45;
+      const gapDays = (targetTs - new Date(last.date).getTime()) / 86_400_000;
+      return gapDays <= maxGapDays ? last.value : undefined;
     };
 
     // ─── Capitalisation pour produits d'épargne (toujours calculée) ───
-    type CompoundingRule = 'annual' | 'quarterly' | 'monthly';
-    const COMPOUNDING_RULES: Record<string, CompoundingRule> = {
-      livreta: 'annual',
-      pel: 'annual',
-      fondsEuros: 'annual',
-      scpi: 'quarterly',
-      oat: 'monthly',
-      tec10: 'monthly',
-      tauxImmo: 'monthly',
-      tauxDepotBCE: 'monthly',
-      estr: 'monthly',
-    };
     const FIXED_RATE_AT_OPENING = new Set(['pel']);
 
     const baseAmount = placementAmount || 100;
     const capitalizedCache: Record<string, Record<string, number>> = {};
 
-    const findClosestSnapshot = (snapshots: Record<string, number>, targetDate: string): number | undefined => {
+    const findLastKnownSnapshot = (snapshots: Record<string, number>, targetDate: string, key: string): number | undefined => {
       const targetTs = new Date(targetDate).getTime();
-      let best: { value: number; gap: number } | null = null;
+      let lastDate: string | undefined;
+      let lastValue: number | undefined;
       for (const [date, value] of Object.entries(snapshots)) {
-        const gap = Math.abs(new Date(date).getTime() - targetTs);
-        if (!best || gap < best.gap) best = { value, gap };
+        if (date <= targetDate && (!lastDate || date > lastDate)) {
+          lastDate = date;
+          lastValue = value;
+        }
       }
-      return best?.value;
+      if (!lastDate) return undefined;
+      const maxGapDays = UPDATE_FREQUENCY[key]?.maxDays ?? 45;
+      return (targetTs - new Date(lastDate).getTime()) / 86_400_000 <= maxGapDays ? lastValue : undefined;
     };
 
     // Always compute capitalization (needed for percent mode + stats)
     indexedDatasets.forEach(ds => {
-      if (ds.suffix !== '%') return;
+      if (ds.suffix !== '%' || !SAVINGS_KEYS.includes(ds.key)) return;
       const rule = COMPOUNDING_RULES[ds.key];
       if (!rule) return;
 
@@ -192,21 +169,28 @@ export function EnhancedChart({
       const openingEntry = isFixedRateAtOpening && normalizeFromDate
         ? (rateChanges.find(p => p.date >= normalizeFromDate) ?? rateChanges[0])
         : rateChanges[0];
+
+      if (ANNUAL_DISTRIBUTION_KEYS.includes(ds.key)) {
+        let capital = baseAmount;
+        const snapshots: Record<string, number> = { [openingEntry.date]: baseAmount };
+        const openingIndex = rateChanges.indexOf(openingEntry);
+        for (let index = openingIndex + 1; index < rateChanges.length; index++) {
+          capital *= 1 + rateChanges[index].value / 100;
+          snapshots[rateChanges[index].date] = parseFloat(capital.toFixed(4));
+        }
+        capitalizedCache[ds.key] = snapshots;
+        return;
+      }
+
       const startDate = new Date(openingEntry.date);
-      const endDate = new Date();
+      const endDate = new Date(rateChanges[rateChanges.length - 1].date);
 
       const getRateAt = (date: Date): number => {
         if (isFixedRateAtOpening) {
           return openingEntry.value;
         }
 
-        const dateStr = date.toISOString().split('T')[0];
-        let rate = rateChanges[0].value;
-        for (const pt of rateChanges) {
-          if (pt.date <= dateStr) rate = pt.value;
-          else break;
-        }
-        return rate;
+        return getApplicableRate(rateChanges, ds.key, date.toISOString().split('T')[0]);
       };
 
       let capital = baseAmount;
@@ -272,7 +256,7 @@ export function EnhancedChart({
     // ─── DCA (versements programmés mensuels) ───
     const dcaCache: Record<string, Record<string, number>> = {};
     if (monthlyPayment && monthlyPayment > 0) {
-      const SAVINGS_DCA = new Set(['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr']);
+      const SAVINGS_DCA = new Set(SAVINGS_KEYS);
 
       indexedDatasets.forEach(ds => {
         const isSav = ds.suffix === '%' && SAVINGS_DCA.has(ds.key);
@@ -287,7 +271,7 @@ export function EnhancedChart({
         const startDate2 = new Date(dcaStartEntry.date);
 
         // Use today as end so sparse-data products (Livret A, SCPI…) extend to the full period
-        const endDate2 = new Date();
+        const endDate2 = new Date(sorted2[sorted2.length - 1].date);
         const snapshots2: Record<string, number> = {};
 
         const getValAt2 = (dateStr: string): number => {
@@ -295,21 +279,11 @@ export function EnhancedChart({
             return dcaStartEntry.value;
           }
 
-          let val = sorted2[0].value;
-          for (const pt of sorted2) {
-            if (pt.date <= dateStr) val = pt.value;
-            else break;
-          }
-          return val;
+          return getApplicableRate(sorted2, ds.key, dateStr);
         };
 
         if (isSav) {
-          const COMPOUND_RULES: Record<string, string> = {
-            livreta: 'annual', pel: 'annual', fondsEuros: 'annual',
-            scpi: 'quarterly',
-            oat: 'monthly', tec10: 'monthly', tauxImmo: 'monthly', tauxDepotBCE: 'monthly', estr: 'monthly',
-          };
-          const rule = COMPOUND_RULES[ds.key] || 'monthly';
+          const rule = COMPOUNDING_RULES[ds.key] || 'monthly';
           let capital = baseAmount;
           snapshots2[dcaStartEntry.date] = capital;
           const cursor = new Date(startDate2);
@@ -389,7 +363,7 @@ export function EnhancedChart({
 
       indexedDatasets.forEach(ds => {
         const exactPoint = ds.data.find(d => d.date === date);
-        const rawValue = exactPoint ? exactPoint.value : findClosest(ds.sorted, date);
+        const rawValue = exactPoint ? exactPoint.value : findLastKnown(ds.sorted, date, ds.key);
 
         if (rawValue !== undefined) {
           point[ds.key] = rawValue;
@@ -398,7 +372,7 @@ export function EnhancedChart({
         // Store capitalized value alongside raw value
         if (capitalizedCache[ds.key]) {
           const capVal = capitalizedCache[ds.key][date]
-            ?? findClosestSnapshot(capitalizedCache[ds.key], date);
+            ?? findLastKnownSnapshot(capitalizedCache[ds.key], date, ds.key);
           if (capVal !== undefined) {
             point[`${ds.key}_cap`] = capVal;
           }
@@ -407,7 +381,7 @@ export function EnhancedChart({
         // Store DCA portfolio value
         if (dcaCache[ds.key]) {
           const dcaVal = dcaCache[ds.key][date]
-            ?? findClosestSnapshot(dcaCache[ds.key], date);
+            ?? findLastKnownSnapshot(dcaCache[ds.key], date, ds.key);
           if (dcaVal !== undefined) {
             point[`${ds.key}_dca`] = dcaVal;
           }
@@ -442,7 +416,7 @@ export function EnhancedChart({
       if (idx >= 0) baseIdx = idx;
     }
 
-    const SAVINGS_SET = new Set(['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr']);
+    const SAVINGS_SET = new Set(SAVINGS_KEYS);
     const baseAmount = placementAmount || 100;
     const isDCA = !!(monthlyPayment && monthlyPayment > 0);
 
@@ -711,7 +685,7 @@ export function EnhancedChart({
   const baseAmount = placementAmount || 100;
 
   // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, label }: any) => {
     if (!active || !label) return null;
 
     const dataPoint = maData.find(d => d.date === label);
@@ -791,18 +765,6 @@ export function EnhancedChart({
     );
   };
 
-  if (!datasets || datasets.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[350px] text-muted-foreground bg-muted/30 rounded-xl border border-dashed border-border">
-        <p className="text-lg font-medium">Aucun indice sélectionné</p>
-        <p className="text-sm mt-2">Sélectionnez au moins 2 indices pour commencer la comparaison</p>
-      </div>
-    );
-  }
-
-  // Determine if we need dual axis
-  const needsDualAxis = mode === 'real' && datasets.length === 2;
-  
   // Calculate Y axis domains
   const yDomains = useMemo(() => {
     if (mode !== 'real') return null;
@@ -820,8 +782,12 @@ export function EnhancedChart({
     if (mode === 'real' && datasets.length <= 2) {
       return dsIndex === 0 ? 'left' : 'right';
     }
-    return undefined;
+    return 'shared';
   };
+
+  const axisLayoutKey = mode === 'real' && datasets.length <= 2
+    ? `split-${datasets.length}`
+    : 'shared';
 
   // Compute visible date range for display
   const visibleRange = useMemo(() => {
@@ -833,6 +799,14 @@ export function EnhancedChart({
       endDate: maData[end]?.date
     };
   }, [maData]);
+
+  if (datasets.length === 0) {
+    return (
+      <div className="flex h-[350px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground">
+        <p className="text-sm font-medium">Aucun indice sélectionné</p>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider>
@@ -914,7 +888,7 @@ export function EnhancedChart({
             )}
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex max-w-full flex-wrap items-center gap-2">
             {/* Zoom +/- buttons */}
             <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
               <Tooltip>
@@ -949,28 +923,31 @@ export function EnhancedChart({
               variant="outline" 
               size="sm" 
               onClick={resetZoom}
-              className="h-8"
+              className="h-8 w-8 p-0 sm:w-auto sm:px-3"
+              aria-label="Réinitialiser le zoom"
             >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Réinitialiser
+              <RotateCcw className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Réinitialiser</span>
             </Button>
             <Button 
               variant="outline" 
               size="sm" 
               onClick={exportCSV}
-              className="h-8"
+              className="h-8 w-8 p-0 sm:w-auto sm:px-3"
+              aria-label="Exporter en CSV"
             >
-              <Download className="h-4 w-4 mr-1" />
-              CSV
+              <Download className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">CSV</span>
             </Button>
             <Button 
               variant="outline" 
               size="sm" 
               onClick={exportPNG}
-              className="h-8"
+              className="h-8 w-8 p-0 sm:w-auto sm:px-3"
+              aria-label="Exporter en PNG"
             >
-              <ImageIcon className="h-4 w-4 mr-1" />
-              PNG
+              <ImageIcon className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">PNG</span>
             </Button>
           </div>
         </div>
@@ -991,7 +968,11 @@ export function EnhancedChart({
         {/* Chart */}
         <div ref={chartRef} className="bg-card rounded-xl p-4">
           <ResponsiveContainer width="100%" height={350}>
-            <ComposedChart data={maData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <ComposedChart
+              key={axisLayoutKey}
+              data={maData}
+              margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+            >
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.3} />
               <XAxis 
                 dataKey="date" 
@@ -1021,6 +1002,7 @@ export function EnhancedChart({
                 ))
               ) : (
                 <YAxis
+                  yAxisId="shared"
                   tickFormatter={(v) => mode === 'percent' ? `${formatNumber(v, 0)}€` : formatNumber(v, 2)}
                   className="text-xs"
                   tick={{ fill: 'currentColor' }}
@@ -1041,7 +1023,7 @@ export function EnhancedChart({
 
               {/* Reference line at baseAmount for percent mode */}
               {mode === 'percent' && (
-                <ReferenceLine y={baseAmount} stroke="#94a3b8" strokeDasharray="5 5" />
+                <ReferenceLine yAxisId="shared" y={baseAmount} stroke="#94a3b8" strokeDasharray="5 5" />
               )}
 
               {/* Data lines */}
@@ -1120,7 +1102,7 @@ export function EnhancedChart({
                 <div className="w-6 h-0.5 bg-current" style={{ 
                   background: 'repeating-linear-gradient(90deg, currentColor 0, currentColor 3px, transparent 3px, transparent 6px)' 
                 }} />
-                <span>MM 50 jours</span>
+                <span>MM 50 observations</span>
               </div>
             )}
             {showMA200 && (
@@ -1128,7 +1110,7 @@ export function EnhancedChart({
                 <div className="w-6 h-0.5 bg-current" style={{ 
                   background: 'repeating-linear-gradient(90deg, currentColor 0, currentColor 6px, transparent 6px, transparent 10px)' 
                 }} />
-                <span>MM 200 jours</span>
+                <span>MM 200 observations</span>
               </div>
             )}
           </div>

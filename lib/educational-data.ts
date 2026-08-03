@@ -68,6 +68,32 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     source: 'INSEE — IPC France, base 2025',
     sourceUrl: 'https://www.insee.fr/fr/statistiques/serie/011814630'
   },
+
+  inflationCumulee: {
+    title: 'Inflation cumulée (IPC)',
+    shortDescription: 'Évolution cumulée des prix à la consommation en France, rebasée à 100 au début de l’historique.',
+    fullDescription: `Ce benchmark reprend l'IPC brut publié par l'INSEE et le rebascule à 100. Contrairement au taux d'inflation sur un an, il mesure directement la hausse cumulée du niveau général des prix sans additionner ni capitaliser des glissements annuels qui se recouvrent.`,
+    importance: `Il représente le capital théorique nécessaire pour conserver le même pouvoir d'achat. Une épargne qui progresse moins vite que cet indice perd de la valeur en euros constants.`,
+    factors: [
+      'Prix de l’énergie et des matières premières',
+      'Prix des services et des biens manufacturés',
+      'Évolution des loyers et de l’alimentation',
+      'Fiscalité indirecte et politiques publiques',
+      'Dynamique des salaires et de la demande'
+    ],
+    insights: [
+      'Benchmark de maintien du pouvoir d’achat',
+      'Construit à partir de l’IPC brut, sans double comptage',
+      'Comparable aux placements en Base 100'
+    ],
+    color: '#dc2626',
+    bgColor: '#fef2f2',
+    darkBgColor: '#450a0a',
+    category: 'rates',
+    categoryLabel: 'Pouvoir d’achat',
+    source: 'INSEE — IPC France, base 2025',
+    sourceUrl: 'https://www.insee.fr/fr/statistiques/serie/011814630'
+  },
   
   estr: {
     title: '€STR',
@@ -92,6 +118,32 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     categoryLabel: 'Monétaire',
     source: 'BCE (via FRED)',
     sourceUrl: 'https://fred.stlouisfed.org/series/ECBESTRVOLWGTTRMDMNRT'
+  },
+
+  estrCapitalise: {
+    title: 'Monétaire €STR capitalisé',
+    shortDescription: 'Benchmark théorique d’un placement monétaire capitalisant quotidiennement l’€STR selon la convention ACT/360.',
+    fullDescription: `Cette série transforme le taux overnight €STR en indice de capital. Le taux publié pour un jour ouvré s'applique jusqu'à l'observation suivante, week-ends compris, selon la convention monétaire ACT/360. Elle permet de comparer un placement monétaire théorique aux autres placements.`,
+    importance: `Ce benchmark approche la rémunération brute d'une exposition monétaire indexée sur l'€STR. Un OPC monétaire réel peut s'en écarter en raison des frais, de sa stratégie, de ses liquidités et de son risque propre.`,
+    factors: [
+      'Niveau quotidien de l’€STR',
+      'Décisions de politique monétaire de la BCE',
+      'Convention de calcul ACT/360',
+      'Durée exacte entre deux observations',
+      'Frais et tracking error d’un support réel'
+    ],
+    insights: [
+      'Capitalisation quotidienne théorique',
+      'Benchmark brut, sans frais ni fiscalité',
+      'Un OPC monétaire réel n’est pas garanti de suivre exactement l’€STR'
+    ],
+    color: '#0f766e',
+    bgColor: '#ecfdf5',
+    darkBgColor: '#042f2e',
+    category: 'savings',
+    categoryLabel: 'Monétaire',
+    source: 'BCE — €STR, calcul ACT/360',
+    sourceUrl: 'https://www.ecb.europa.eu/stats/financial_markets_and_interest_rates/euro_short-term_rate/html/eurostr_overview.en.html'
   },
   
   cac40: {
@@ -391,7 +443,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
   scpi: {
     title: 'SCPI (Moyenne)',
     shortDescription: 'Sociétés Civiles de Placement Immobilier. Investissement immobilier mutualisé.',
-    fullDescription: `Les SCPI (Sociétés Civiles de Placement Immobilier) permettent d'investir dans l'immobilier professionnel (bureaux, commerces, entrepôts) sans les contraintes de la gestion directe. Le taux de distribution est le rendement annuel versé aux associés.`,
+    fullDescription: `Les SCPI (Sociétés Civiles de Placement Immobilier) permettent d'investir dans l'immobilier professionnel (bureaux, commerces, entrepôts) sans les contraintes de la gestion directe. Le taux de distribution est le rendement annuel versé aux associés. La simulation du site suppose ces distributions réinvesties ; elle n'intègre pas l'évolution du prix des parts, les frais ni la fiscalité et ne représente donc pas la performance globale réelle d'une SCPI.`,
     importance: `Les SCPI offrent un rendement régulier (loyers) avec une faible corrélation aux marchés boursiers. Elles constituent une alternative de diversification pour les portefeuilles patrimoniaux.`,
     factors: [
       'Taux d\'occupation des immeubles',

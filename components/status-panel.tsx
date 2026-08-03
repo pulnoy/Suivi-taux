@@ -2,9 +2,7 @@
 
 import { INDEX_EDUCATION } from '@/lib/educational-data';
 import { UPDATE_FREQUENCY, getIndexStatus, type IndexStatus } from '@/lib/staleness';
-
-type DataPoint = { date: string; value: number };
-type Indicateur = { titre: string; valeur: number; suffixe: string; historique: DataPoint[] };
+import type { Indicateur } from '@/lib/taux-types';
 
 interface StatusPanelProps {
   indices: Record<string, Indicateur>;
@@ -26,8 +24,9 @@ const LABEL: Record<IndexStatus, string> = {
 export function StatusPanel({ indices, dateMiseAJour }: StatusPanelProps) {
   const rows = Object.entries(indices).map(([key, idx]) => {
     const h = idx.historique ?? [];
-    const lastValueDate = h.length > 0 ? h[h.length - 1].date : null;
-    const status = getIndexStatus(key, h.length, idx.valeur, lastValueDate);
+    const lastValueDate = idx.metadata?.lastObservationDate ?? h.at(-1)?.date ?? null;
+    const pointCount = idx.nombre_points ?? h.length;
+    const status = getIndexStatus(key, pointCount, idx.valeur, lastValueDate);
     const edu = INDEX_EDUCATION[key];
     const freq = UPDATE_FREQUENCY[key];
     return {
@@ -35,11 +34,13 @@ export function StatusPanel({ indices, dateMiseAJour }: StatusPanelProps) {
       titre: idx.titre,
       lastValueDate,
       status,
-      pts: h.length,
-      source: edu?.source ?? '—',
+      pts: pointCount,
+      source: idx.metadata?.source ?? edu?.source ?? '—',
       sourceUrl: edu?.sourceUrl,
       freqLabel: freq?.label ?? '—',
       maxDays: freq?.maxDays,
+      collectionStatus: idx.metadata?.status,
+      fallbackUsed: idx.metadata?.fallbackUsed ?? false,
     };
   });
 
@@ -59,7 +60,7 @@ export function StatusPanel({ indices, dateMiseAJour }: StatusPanelProps) {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h2 className="text-lg font-bold text-foreground">Statut des indices</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Dernière mise à jour : {updateStr}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Dernier contrôle : {updateStr}</p>
         </div>
         <div className="flex items-center gap-3 text-sm flex-wrap justify-end">
           <span className="flex items-center gap-1.5">
@@ -90,6 +91,7 @@ export function StatusPanel({ indices, dateMiseAJour }: StatusPanelProps) {
               <th className="pb-2 pr-4 font-medium">Source</th>
               <th className="pb-2 pr-4 font-medium">Fréquence cible</th>
               <th className="pb-2 pr-4 font-medium">Dernière valeur</th>
+              <th className="pb-2 pr-4 font-medium">Collecte</th>
               <th className="pb-2 font-medium">Points</th>
             </tr>
           </thead>
@@ -99,7 +101,8 @@ export function StatusPanel({ indices, dateMiseAJour }: StatusPanelProps) {
                 <td className="py-2 pr-3">
                   <span
                     className={`h-2.5 w-2.5 rounded-full inline-block ${DOT[r.status]}`}
-                    title={LABEL[r.status]}
+                    role="img"
+                    aria-label={LABEL[r.status]}
                   />
                 </td>
                 <td className="py-2 pr-4 font-medium text-foreground">{r.titre}</td>
@@ -127,6 +130,17 @@ export function StatusPanel({ indices, dateMiseAJour }: StatusPanelProps) {
                     </span>
                   ) : (
                     <span className="text-destructive">—</span>
+                  )}
+                </td>
+                <td className="py-2 pr-4 text-xs text-muted-foreground">
+                  {r.fallbackUsed || r.collectionStatus === 'fallback' ? (
+                    <span className="font-medium text-orange-500">Secours</span>
+                  ) : r.collectionStatus === 'error' ? (
+                    <span className="font-medium text-destructive">Échec</span>
+                  ) : r.collectionStatus === 'stale' ? (
+                    <span className="font-medium text-orange-500">Périmée</span>
+                  ) : (
+                    <span>Directe</span>
                   )}
                 </td>
                 <td className="py-2 text-muted-foreground">{r.pts}</td>

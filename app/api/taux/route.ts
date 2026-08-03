@@ -1,36 +1,18 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { HISTORICAL_DATA } from '@/lib/historical-data';
+import { readTauxData, selectTauxData, summarizeTauxData } from '@/lib/taux-data';
 
-export async function GET() {
-  const filePath = path.join(process.cwd(), 'public', 'taux.json');
-
+export async function GET(request: Request) {
   try {
-    const fileContents = await fs.readFile(filePath, 'utf8');
-    const data = JSON.parse(fileContents);
+    const url = new URL(request.url);
+    const data = await readTauxData();
+    const keys = (url.searchParams.get('keys') ?? '').split(',').filter(Boolean);
+    const responseData = url.searchParams.get('summary') === '1'
+      ? summarizeTauxData(data)
+      : keys.length > 0
+        ? selectTauxData(data, keys, url.searchParams.get('from'), url.searchParams.get('to'))
+        : data;
 
-    // Merge hard-coded historical data for indices lacking early history.
-    for (const key of Object.keys(HISTORICAL_DATA)) {
-      if (data.indices[key]) {
-        const existingDates = new Set(
-          data.indices[key].historique.map((p: { date: string }) => p.date)
-        );
-        const newPoints = HISTORICAL_DATA[key]
-          .filter(p => !existingDates.has(p.date))
-          .map(p => ({ date: p.date, value: p.value }));
-        if (newPoints.length > 0) {
-          data.indices[key].historique = [
-            ...newPoints,
-            ...data.indices[key].historique,
-          ].sort((a: { date: string }, b: { date: string }) =>
-            a.date.localeCompare(b.date)
-          );
-        }
-      }
-    }
-
-    return NextResponse.json(data, {
+    return NextResponse.json(responseData, {
       status: 200,
       headers: {
         'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',

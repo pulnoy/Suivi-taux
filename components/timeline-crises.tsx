@@ -9,7 +9,8 @@ import {
   TrendingDown, 
   TrendingUp,
   Calendar,
-  Info
+  Info,
+  ExternalLink
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -376,6 +377,25 @@ const CRISES_DATA: Crisis[] = [
   },
 ];
 
+const TIMELINE_SOURCES: Record<string, { label: string; url: string }[]> = {
+  ltcm: [{ label: 'Federal Reserve History', url: 'https://www.federalreservehistory.org/essays/near-failure-of-long-term-capital-management' }],
+  'bullmarket-2003-2007': [{ label: 'FMI - archives WEO', url: 'https://www.imf.org/en/Publications/WEO' }],
+  dotcom: [{ label: 'FRED - S&P 500', url: 'https://fred.stlouisfed.org/series/SP500' }],
+  subprimes: [{ label: 'Federal Reserve History', url: 'https://www.federalreservehistory.org/essays/great-recession-and-its-aftermath' }],
+  'euro-debt': [{ label: 'BCE - crise de la dette', url: 'https://www.ecb.europa.eu/press/key/date/2012/html/sp120726.en.html' }],
+  'bullmarket-2012-2021': [{ label: 'FRED - S&P 500', url: 'https://fred.stlouisfed.org/series/SP500' }],
+  'taper-tantrum': [{ label: 'Federal Reserve', url: 'https://www.federalreserve.gov/monetarypolicy/fomcminutes20130619.htm' }],
+  'emerging-oil': [{ label: 'FMI - archives WEO', url: 'https://www.imf.org/en/Publications/WEO' }],
+  brexit: [{ label: 'Bank of England - Brexit', url: 'https://www.bankofengland.co.uk/eu-withdrawal' }],
+  covid: [{ label: 'FMI - WEO avril 2020', url: 'https://www.imf.org/en/Publications/WEO/Issues/2020/04/14/weo-april-2020' }],
+  'rebond-covid': [{ label: 'FMI - WEO', url: 'https://www.imf.org/en/Publications/WEO' }],
+  'inflation-ukraine': [{ label: 'BCE - Bulletin économique', url: 'https://www.ecb.europa.eu/press/economic-bulletin/html/index.en.html' }],
+  'banking-2023': [{ label: 'Federal Reserve - revue SVB', url: 'https://www.federalreserve.gov/publications/review-of-the-federal-reserves-supervision-and-regulation-of-silicon-valley-bank.htm' }],
+  'desinflation-pivot': [{ label: 'BCE - décisions de politique monétaire', url: 'https://www.ecb.europa.eu/press/govcdec/mopo/html/index.en.html' }],
+  'turbulences-2025': [{ label: 'FMI - WEO', url: 'https://www.imf.org/en/Publications/WEO' }],
+  'energy-inflation-2026': [{ label: 'AIE - Oil Market Report', url: 'https://www.iea.org/reports/oil-market-report-july-2026' }],
+};
+
 const severityConfig = {
   critical: {
     color: 'bg-red-500',
@@ -448,7 +468,7 @@ export function TimelineCrises() {
         <div className="space-y-4">
           {[...CRISES_DATA]
             .sort((a, b) => a.startYear - b.startYear || a.endYear - b.endYear)
-            .map((crisis, index) => {
+            .map((crisis) => {
               const severity = severityConfig[crisis.severity];
               const isExpanded = expandedCrisis === crisis.id;
 
@@ -472,8 +492,8 @@ export function TimelineCrises() {
 
                     {/* Card */}
                     <CollapsibleTrigger asChild>
-                      <div className={cn(
-                        'cursor-pointer rounded-xl border transition-all duration-200',
+                      <button type="button" className={cn(
+                        'w-full text-left cursor-pointer rounded-xl border transition-all duration-200',
                         severity.borderColor,
                         isExpanded ? severity.bgColor : 'bg-card hover:bg-muted/50'
                       )}>
@@ -544,7 +564,7 @@ export function TimelineCrises() {
                             </div>
                           </div>
                         </div>
-                      </div>
+                      </button>
                     </CollapsibleTrigger>
 
                     {/* Expanded content */}
@@ -616,6 +636,26 @@ export function TimelineCrises() {
                             ))}
                           </ul>
                         </div>
+
+                        {TIMELINE_SOURCES[crisis.id]?.length ? (
+                          <div>
+                            <h4 className="font-semibold text-foreground mb-2">Sources</h4>
+                            <div className="flex flex-wrap gap-3">
+                              {TIMELINE_SOURCES[crisis.id].map(source => (
+                                <a
+                                  key={source.url}
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                >
+                                  {source.label}
+                                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     </CollapsibleContent>
                   </div>
