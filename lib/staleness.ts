@@ -6,7 +6,7 @@ export type UpdateFreq = {
 // Fréquence cible + délai de tolérance par indice
 export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   // Taux — quotidien (jours ouvrés, tolérance weekend+1j)
-  oat:          { label: 'Mensuel',         maxDays: 60 },
+  oat:          { label: 'Mensuel',         maxDays: 90 },
   tec10:        { label: 'Quotidien',       maxDays: 5  },
   estr:         { label: 'Quotidien',       maxDays: 5  },
   // BCE — par réunion (~8×/an soit toutes les 6 semaines)
@@ -14,14 +14,14 @@ export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   // Mensuel — inflation et PEL (délai ~6 semaines)
   inflation:    { label: 'Mensuel',         maxDays: 45 },
   pel:          { label: 'Mensuel',         maxDays: 45 },
-  // Mensuel — taux immo BdF publié avec ~2 mois de délai structurel
-  tauxImmo:     { label: 'Mensuel',         maxDays: 75 },
+  // Mensuel — taux immo BdF publié avec ~3 mois de délai structurel
+  tauxImmo:     { label: 'Mensuel',         maxDays: 120 },
   // Semestriel — réglementé (1er fév. et 1er août)
   livreta:      { label: 'Semestriel',      maxDays: 200 },
   // Annuel — publié en jan.-mars avec 1 an de décalage
   fondsEuros:   { label: 'Annuel',          maxDays: 400 },
-  // Trimestriel — SCPI
-  scpi:         { label: 'Trimestriel',     maxDays: 120 },
+  // Annuel — taux de distribution ASPIM publié en début d'année suivante
+  scpi:         { label: 'Annuel',          maxDays: 400 },
   // Trimestriel — prix immo INSEE/Notaires publiés avec ~4 mois de délai structurel
   prixImmo:     { label: 'Trimestriel',     maxDays: 150 },
   // Devises — quotidien (jours ouvrés)
@@ -49,9 +49,9 @@ export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   gaz:          { label: 'Quotidien',       maxDays: 5  },
   // Obligations d'État étrangères 10 ans
   us10y:        { label: 'Quotidien',       maxDays: 5  },
-  bund:         { label: 'Mensuel',         maxDays: 60 },
-  jgb:          { label: 'Mensuel',         maxDays: 60 },
-  gilt:         { label: 'Mensuel',         maxDays: 60 },
+  bund:         { label: 'Mensuel',         maxDays: 90 },
+  jgb:          { label: 'Mensuel',         maxDays: 90 },
+  gilt:         { label: 'Mensuel',         maxDays: 90 },
   // Crypto — quotidien (24/7, tolérance plus courte)
   btc:          { label: 'Quotidien',       maxDays: 3  },
   eth:          { label: 'Quotidien',       maxDays: 3  },
