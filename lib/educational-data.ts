@@ -45,7 +45,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
   
   inflation: {
     title: 'Inflation France',
-    shortDescription: 'Indice des Prix à la Consommation (IPC) en France. Mesure l\'évolution des prix sur 1 an glissant (source: INSEE/OECD).',
+    shortDescription: 'Indice des Prix à la Consommation (IPC) en France. Mesure l\'évolution des prix sur 1 an glissant (source : INSEE).',
     fullDescription: `L'Indice des Prix à la Consommation (IPC) mesure l'évolution moyenne des prix des biens et services consommés par les ménages en France. Il est calculé par l'INSEE et permet de suivre l'inflation sur 1 an glissant.`,
     importance: `L'inflation érode le pouvoir d'achat et la valeur de l'épargne. La BCE vise une inflation de 2% pour maintenir la stabilité des prix tout en permettant une croissance économique saine.`,
     factors: [
@@ -65,8 +65,8 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     darkBgColor: '#450a0a',
     category: 'rates',
     categoryLabel: 'Prix Conso',
-    source: 'INSEE / Eurostat (HICP)',
-    sourceUrl: 'https://fred.stlouisfed.org/series/CP0000FRM086NEST'
+    source: 'INSEE — IPC France, base 2025',
+    sourceUrl: 'https://www.insee.fr/fr/statistiques/serie/011814630'
   },
   
   estr: {
@@ -411,7 +411,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     category: 'savings',
     categoryLabel: 'Pierre Papier',
     source: 'ASPIM (Association des SCPI)',
-    sourceUrl: 'https://www.aspim.fr/'
+    sourceUrl: 'https://www.aspim.fr/scpi-en-chiffres/'
   },
   
   gold: {
@@ -625,7 +625,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
 
   prixImmo: {
     title: 'Prix immo (var. annuelle)',
-    shortDescription: 'Variation annuelle des prix des logements anciens en France métropolitaine. Source officielle : Banque de France / INSEE.',
+    shortDescription: 'Variation annuelle des prix des logements anciens en France métropolitaine. Source officielle : INSEE-Notaires.',
     fullDescription: `L'indice des prix des logements anciens est calculé conjointement par l'INSEE et les notaires de France à partir des actes de vente. Il couvre l'ensemble des logements anciens (appartements et maisons) en France métropolitaine, avec une base 100 en 2015. La variation annuelle mesure l'évolution sur 4 trimestres glissants.`,
     importance: `C'est l'indicateur de référence pour suivre le marché immobilier résidentiel. Il est directement lié aux taux de crédit immobilier, à l'inflation et aux politiques monétaires. Essentiel pour évaluer la performance des SCPI et l'immobilier en portefeuille.`,
     factors: [
@@ -645,8 +645,8 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
     darkBgColor: '#2e1065',
     category: 'rates',
     categoryLabel: 'Immobilier',
-    source: 'Banque de France / INSEE-Notaires',
-    sourceUrl: 'https://webstat.banque-france.fr/fr/catalogue/rpp/RPP.Q.FR.N.ED.00.1.00'
+    source: 'INSEE-Notaires',
+    sourceUrl: 'https://www.insee.fr/fr/statistiques/serie/010567059'
   },
 
   btc: {

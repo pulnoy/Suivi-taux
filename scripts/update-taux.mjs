@@ -178,18 +178,32 @@ async function getOatHistory() {
 //
 //  Stratégie :
 //   A) Base 2025 (actuelle depuis fév. 2026) — série indice brut → glissement calculé
-//      011812231 : IPC ensemble des ménages, France entière, base 2025
+//      011814630 : IPC ensemble des ménages, France entière, base 2025
 //   B) Base 2015 (archivée, jusqu'à déc. 2025) — série glissement annuel direct
 //      001761313 / 001763852
 //   C) Fallback FRED FRACPIALLMINMEI
 // ─────────────────────────────────────────────────────────────
+
+function normalizeINSEEPeriod(period) {
+  if (/^\d{4}-\d{2}$/.test(period)) return `${period}-01`;
+
+  const quarter = period.match(/^(\d{4})-Q([1-4])$/);
+  if (quarter) {
+    const year = Number(quarter[1]);
+    const quarterEndMonth = Number(quarter[2]) * 3;
+    return new Date(Date.UTC(year, quarterEndMonth, 0)).toISOString().split('T')[0];
+  }
+
+  if (/^\d{4}$/.test(period)) return `${period}-12-31`;
+  return period;
+}
 
 // Récupère une série INSEE BDM brute (retourne les valeurs telles quelles)
 async function fetchINSEESerie(serieId) {
   try {
     // On remonte jusqu'à 1999 pour avoir 13 mois avant HISTORY_START_DATE
     // et pouvoir calculer le glissement annuel dès janvier 2000
-    const url = `https://www.bdm.insee.fr/series/sdmx/data/SERIES_BDM/${serieId}?startPeriod=1999`;
+    const url = `https://api.insee.fr/series/BDM/V1/data/SERIES_BDM/${serieId}?startPeriod=1999`;
     console.log(`  Fetching INSEE BDM série ${serieId}...`);
 
     const response = await fetch(url, {
@@ -212,7 +226,7 @@ async function fetchINSEESerie(serieId) {
     let match;
     while ((match = obsRegex.exec(xmlText)) !== null) {
       const [_, period, value] = match;
-      const date = period.length === 7 ? `${period}-01` : period;
+      const date = normalizeINSEEPeriod(period);
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
         observations.push({
@@ -233,7 +247,7 @@ async function fetchINSEESerie(serieId) {
       while ((m = valueRegex.exec(xmlText)) !== null) values.push(m[1]);
       for (let i = 0; i < Math.min(times.length, values.length); i++) {
         const period = times[i];
-        const date = period.length === 7 ? `${period}-01` : period;
+        const date = normalizeINSEEPeriod(period);
         const numValue = parseFloat(values[i]);
         if (!isNaN(numValue)) {
           observations.push({
@@ -301,7 +315,7 @@ function computeGlissementAnnuel(rawSeries) {
 // Récupère la série IPC base 2025 et calcule le glissement annuel
 async function getInflationBase2025() {
   // Série IPC ensemble des ménages, France entière, base 2025
-  const raw = await fetchINSEESerie('011812231');
+  const raw = await fetchINSEESerie('011814630');
   if (raw.length === 0) return [];
   return computeGlissementAnnuel(raw);
 }
@@ -751,12 +765,20 @@ async function getLivretAHistory() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 6. PRIX IMMOBILIER — Banque de France Webstat
-//    Série RPP.Q.FR.N.ED.00.1.00
+// 6. PRIX IMMOBILIER — INSEE, puis Banque de France Webstat en secours
+//    Série INSEE 010567059 / Webstat RPP.Q.FR.N.ED.00.1.00
 //    Indice des prix des logements anciens, France entière, base 100 = 2015
 //    Données trimestrielles, glissement annuel calculé
 // ─────────────────────────────────────────────────────────────
 async function getPrixImmobilierHistory() {
+  const inseeRaw = await fetchINSEESerie('010567059');
+  const inseeGlissement = computeGlissementAnnuel(inseeRaw);
+  if (inseeGlissement.length > 0) {
+    const last = inseeGlissement[inseeGlissement.length - 1];
+    console.log(`  ✓ Prix immo INSEE: ${inseeGlissement.length} points, dernier: ${last.date} = ${last.value}%`);
+    return inseeGlissement;
+  }
+
   const WEBSTAT_API_KEY = process.env.WEBSTAT_API_KEY;
 
   if (WEBSTAT_API_KEY) {
@@ -1070,7 +1092,7 @@ async function getTauxDepotBCEHistory() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 12. SCPI — Données historiques approximatives ASPIM/IEIF
+// 12. SCPI — Taux de distribution annuel moyen ASPIM/IEIF
 // ─────────────────────────────────────────────────────────────
 function getScpiHistory() {
   return [
@@ -1098,9 +1120,8 @@ function getScpiHistory() {
     { date: "2021-01-01", value: 4.49 },
     { date: "2022-01-01", value: 4.53 },
     { date: "2023-01-01", value: 4.52 },
-    { date: "2024-01-01", value: 4.52 },
-    { date: "2025-01-01", value: 4.55 },
-    { date: "2026-01-01", value: 4.67 },
+    { date: "2024-12-31", value: 4.72 },
+    { date: "2025-12-31", value: 4.91 },
   ];
 }
 
