@@ -9,7 +9,13 @@ import { Download, RotateCcw, Image as ImageIcon, Info, HelpCircle, Plus, Minus 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { formatNumber, COMPOUNDING_RULES, SAVINGS_KEYS } from '@/lib/financial-utils';
+import {
+  ANNUAL_DISTRIBUTION_KEYS,
+  COMPOUNDING_RULES,
+  SAVINGS_KEYS,
+  formatNumber,
+  getApplicableRate,
+} from '@/lib/financial-utils';
 import { cn } from '@/lib/utils';
 import { UPDATE_FREQUENCY } from '@/lib/staleness';
 import type { DataPoint } from '@/lib/taux-types';
@@ -163,6 +169,19 @@ export function EnhancedChart({
       const openingEntry = isFixedRateAtOpening && normalizeFromDate
         ? (rateChanges.find(p => p.date >= normalizeFromDate) ?? rateChanges[0])
         : rateChanges[0];
+
+      if (ANNUAL_DISTRIBUTION_KEYS.includes(ds.key)) {
+        let capital = baseAmount;
+        const snapshots: Record<string, number> = { [openingEntry.date]: baseAmount };
+        const openingIndex = rateChanges.indexOf(openingEntry);
+        for (let index = openingIndex + 1; index < rateChanges.length; index++) {
+          capital *= 1 + rateChanges[index].value / 100;
+          snapshots[rateChanges[index].date] = parseFloat(capital.toFixed(4));
+        }
+        capitalizedCache[ds.key] = snapshots;
+        return;
+      }
+
       const startDate = new Date(openingEntry.date);
       const endDate = new Date(rateChanges[rateChanges.length - 1].date);
 
@@ -171,13 +190,7 @@ export function EnhancedChart({
           return openingEntry.value;
         }
 
-        const dateStr = date.toISOString().split('T')[0];
-        let rate = rateChanges[0].value;
-        for (const pt of rateChanges) {
-          if (pt.date <= dateStr) rate = pt.value;
-          else break;
-        }
-        return rate;
+        return getApplicableRate(rateChanges, ds.key, date.toISOString().split('T')[0]);
       };
 
       let capital = baseAmount;
@@ -266,12 +279,7 @@ export function EnhancedChart({
             return dcaStartEntry.value;
           }
 
-          let val = sorted2[0].value;
-          for (const pt of sorted2) {
-            if (pt.date <= dateStr) val = pt.value;
-            else break;
-          }
-          return val;
+          return getApplicableRate(sorted2, ds.key, dateStr);
         };
 
         if (isSav) {
@@ -408,7 +416,7 @@ export function EnhancedChart({
       if (idx >= 0) baseIdx = idx;
     }
 
-    const SAVINGS_SET = new Set(['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr']);
+    const SAVINGS_SET = new Set(SAVINGS_KEYS);
     const baseAmount = placementAmount || 100;
     const isDCA = !!(monthlyPayment && monthlyPayment > 0);
 

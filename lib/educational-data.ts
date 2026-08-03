@@ -391,7 +391,7 @@ export const INDEX_EDUCATION: Record<string, IndexEducation> = {
   scpi: {
     title: 'SCPI (Moyenne)',
     shortDescription: 'Sociétés Civiles de Placement Immobilier. Investissement immobilier mutualisé.',
-    fullDescription: `Les SCPI (Sociétés Civiles de Placement Immobilier) permettent d'investir dans l'immobilier professionnel (bureaux, commerces, entrepôts) sans les contraintes de la gestion directe. Le taux de distribution est le rendement annuel versé aux associés.`,
+    fullDescription: `Les SCPI (Sociétés Civiles de Placement Immobilier) permettent d'investir dans l'immobilier professionnel (bureaux, commerces, entrepôts) sans les contraintes de la gestion directe. Le taux de distribution est le rendement annuel versé aux associés. La simulation du site suppose ces distributions réinvesties ; elle n'intègre pas l'évolution du prix des parts, les frais ni la fiscalité et ne représente donc pas la performance globale réelle d'une SCPI.`,
     importance: `Les SCPI offrent un rendement régulier (loyers) avec une faible corrélation aux marchés boursiers. Elles constituent une alternative de diversification pour les portefeuilles patrimoniaux.`,
     factors: [
       'Taux d\'occupation des immeubles',

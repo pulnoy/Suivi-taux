@@ -428,15 +428,38 @@ export function calculateLinearRegression(points: { x: number; y: number }[]): {
 
 // ─── Constants for savings products ───
 
-export const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros'];
+export const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros', 'scpi'];
 
 export const FIXED_RATE_AT_OPENING_KEYS = ['pel'];
+
+export const ANNUAL_DISTRIBUTION_KEYS = ['scpi'];
 
 export const COMPOUNDING_RULES: Record<string, 'annual' | 'quarterly' | 'monthly'> = {
   livreta: 'annual',
   pel: 'annual',
   fondsEuros: 'annual',
+  scpi: 'annual',
 };
+
+export function getApplicableRate(
+  sortedRateHistory: DataPoint[],
+  productKey: string,
+  dateStr: string
+): number {
+  if (sortedRateHistory.length === 0) return 0;
+
+  if (ANNUAL_DISTRIBUTION_KEYS.includes(productKey)) {
+    const yearRate = sortedRateHistory.find(point => point.date.slice(0, 4) === dateStr.slice(0, 4));
+    if (yearRate) return yearRate.value;
+  }
+
+  let rate = sortedRateHistory[0].value;
+  for (const point of sortedRateHistory) {
+    if (point.date <= dateStr) rate = point.value;
+    else break;
+  }
+  return rate;
+}
 
 /**
  * Compute capitalized series for savings products.
@@ -451,6 +474,15 @@ export function computeCapitalizedSeries(
   if (!rule || rateHistory.length === 0) return [];
 
   const sorted = [...rateHistory].sort((a, b) => a.date.localeCompare(b.date));
+
+  if (ANNUAL_DISTRIBUTION_KEYS.includes(productKey)) {
+    let capital = baseAmount;
+    return sorted.map((point, index) => {
+      if (index > 0) capital *= 1 + point.value / 100;
+      return { date: point.date, value: parseFloat(capital.toFixed(4)) };
+    });
+  }
+
   const startDate = new Date(sorted[0].date);
   const endDate = new Date(sorted[sorted.length - 1].date);
 
@@ -459,13 +491,7 @@ export function computeCapitalizedSeries(
       return sorted[0].value;
     }
 
-    const dateStr = date.toISOString().split('T')[0];
-    let rate = sorted[0].value;
-    for (const pt of sorted) {
-      if (pt.date <= dateStr) rate = pt.value;
-      else break;
-    }
-    return rate;
+    return getApplicableRate(sorted, productKey, date.toISOString().split('T')[0]);
   };
 
   let capital = baseAmount;

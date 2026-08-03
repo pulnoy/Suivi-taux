@@ -12,7 +12,8 @@ import {
   calculateMonthlyIRR,
   SAVINGS_KEYS,
   FIXED_RATE_AT_OPENING_KEYS,
-  COMPOUNDING_RULES
+  COMPOUNDING_RULES,
+  getApplicableRate
 } from '@/lib/financial-utils';
 import { Button } from '@/components/ui/button';
 import { 
@@ -67,7 +68,6 @@ const NON_SIMULATABLE_INDEX_KEYS = new Set([
   'eurjpy',
   'eurchf',
   'eurcny',
-  'scpi',
 ]);
 
 // Types pour l'analyse de compatibilité des modes
@@ -128,6 +128,15 @@ function analyzeModeCompatibility(
       compatibilityLevel: 'incompatible',
       message: '⚠️ Attention: les échelles des indices sélectionnés sont très différentes. La Base 100 est fortement recommandée.',
       forceBase100: true
+    };
+  }
+
+  if (selectedKeys.some(key => SAVINGS_KEYS.includes(key))) {
+    return {
+      recommendation: 'percent',
+      compatibilityLevel: 'compatible',
+      message: 'Les placements à taux servi sont capitalisés en Base 100 pour comparer la croissance du capital.',
+      forceBase100: false
     };
   }
 
@@ -342,12 +351,21 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
     return brushFilteredData.map(ds => {
       const isSavings = ds.suffix === '%' && SAVINGS_KEYS.includes(ds.key);
       const metricsAvailable = !NON_SIMULATABLE_INDEX_KEYS.has(ds.key);
+      const riskMetricsAvailable = ds.key !== 'scpi';
       const applyMetricAvailability = (stats: FinancialStats): FinancialStats => metricsAvailable
         ? stats
         : {
             ...stats,
             totalReturn: Number.NaN,
             annualizedReturn: Number.NaN,
+            volatility: Number.NaN,
+            maxDrawdown: Number.NaN,
+            sharpeRatio: Number.NaN,
+          };
+      const applyRiskMetricAvailability = (stats: FinancialStats): FinancialStats => riskMetricsAvailable
+        ? stats
+        : {
+            ...stats,
             volatility: Number.NaN,
             maxDrawdown: Number.NaN,
             sharpeRatio: Number.NaN,
@@ -369,13 +387,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           if (FIXED_RATE_AT_OPENING_KEYS.includes(ds.key)) {
             return sortedData[0].value;
           }
-
-          let val = sortedData[0].value;
-          for (const pt of sortedData) {
-            if (pt.date <= dateStr) val = pt.value;
-            else break;
-          }
-          return val;
+          return getApplicableRate(sortedData, ds.key, dateStr);
         };
 
         // Build DCA portfolio value series
@@ -474,7 +486,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         cashFlows.push(finalValue);
         const irr = calculateMonthlyIRR(cashFlows);
 
-        const portfolioStats = calculateAllStats(dcaSeries);
+        const portfolioStats = applyRiskMetricAvailability(calculateAllStats(dcaSeries));
 
         return {
           key: ds.key,
@@ -498,8 +510,8 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         if (isSavings) {
           const capSeries = computeCapitalizedSeries(ds.data, ds.key, baseAmt);
           if (capSeries.length >= 2) {
-            const stats = calculateAllStats(capSeries);
-            return { key: ds.key, title: ds.title, suffix: '€', color: ds.color, isSavings: true, metricsAvailable, ...stats };
+            const stats = applyRiskMetricAvailability(calculateAllStats(capSeries));
+            return { key: ds.key, title: ds.title, suffix: '€', color: ds.color, isSavings: true, metricsAvailable, riskMetricsAvailable, ...stats };
           }
         } else if (ds.data.length >= 2) {
           const startVal = ds.data[0].value;
@@ -631,6 +643,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                     const isSelected = selectedKeys.includes(key);
                     const isDisabled = !isSelected && selectedKeys.length >= 5;
                     const isNonSimulatable = NON_SIMULATABLE_INDEX_KEYS.has(key);
+                    const hasSimulationCaveat = key === 'scpi';
 
                     return (
                       <TooltipProvider key={key}>
@@ -654,7 +667,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                               } : {}}
                             >
                               {index.titre}
-                              {isNonSimulatable && (
+                              {(isNonSimulatable || hasSimulationCaveat) && (
                                 <BadgeInfo
                                   className={cn(
                                     'h-3 w-3',
@@ -668,13 +681,15 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                           <TooltipContent side="bottom" className="max-w-xs">
                             <p className="text-xs font-medium mb-0.5">{index.titre}</p>
                             <p className="text-xs text-muted-foreground">{education?.shortDescription || ''}</p>
-                            {isNonSimulatable && (
+                            {hasSimulationCaveat ? (
                               <p className="text-xs text-primary mt-1">
-                                {key === 'scpi'
-                                  ? "Taux de distribution, hors évolution du prix de part."
-                                  : 'Indicateur de marché, non simulable comme un placement.'}
+                                Simulation sur distributions réinvesties, hors prix de part, frais et fiscalité.
                               </p>
-                            )}
+                            ) : isNonSimulatable ? (
+                              <p className="text-xs text-primary mt-1">
+                                Indicateur de marché, non simulable comme un placement.
+                              </p>
+                            ) : null}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -1012,6 +1027,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                 <> Plage depuis le <strong>{new Date(brushStartDate).toLocaleDateString('fr-FR')}</strong>.</>
               )}
               {' '}Slider disponible sous le graphique.
+              {selectedKeys.includes('scpi') && (
+                <> Pour la SCPI, les distributions moyennes sont réinvesties ; prix de part, frais et fiscalité sont exclus.</>
+              )}
             </span>
           </AlertDescription>
         </Alert>
@@ -1022,7 +1040,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           <AlertDescription className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
             <Lightbulb className="h-4 w-4 flex-shrink-0 text-blue-600" />
             <span>
-              <strong>Capitalisation théorique :</strong> Livret A, PEL et fonds euros sont convertis en évolution de 100 € selon leur taux servi. Le PEL conserve le taux applicable à l'ouverture de la période.
+              <strong>Capitalisation théorique :</strong> Livret A, PEL, fonds euros et SCPI sont convertis en évolution de 100 € selon leur taux servi. Le PEL conserve le taux applicable à l'ouverture de la période. Pour la SCPI, les distributions sont réinvesties, hors variation du prix de part, frais et fiscalité.
             </span>
           </AlertDescription>
         </Alert>

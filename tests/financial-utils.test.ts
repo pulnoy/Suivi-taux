@@ -54,7 +54,21 @@ test('exclut les points interpolés des statistiques', () => {
   assert.ok(Math.abs(stats.totalReturn - 10) < 1e-10);
 });
 
-test('ne capitalise que les taux réellement servis', () => {
-  assert.deepEqual(SAVINGS_KEYS, ['livreta', 'pel', 'fondsEuros']);
+test('ne capitalise que les placements réellement simulables', () => {
+  assert.deepEqual(SAVINGS_KEYS, ['livreta', 'pel', 'fondsEuros', 'scpi']);
   assert.deepEqual(computeCapitalizedSeries(weekly, 'oat', 100), []);
+});
+
+test('capitalise les distributions annuelles des SCPI sur le bon exercice', () => {
+  const capitalized = computeCapitalizedSeries([
+    { date: '2023-12-31', value: 4.52 },
+    { date: '2024-12-31', value: 4.72 },
+    { date: '2025-12-31', value: 4.91 },
+  ], 'scpi', 100);
+
+  assert.deepEqual(capitalized, [
+    { date: '2023-12-31', value: 100 },
+    { date: '2024-12-31', value: 104.72 },
+    { date: '2025-12-31', value: 109.8618 },
+  ]);
 });
