@@ -1,10 +1,7 @@
 import type { Metadata } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
-import Script from 'next/script';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
-
-export const dynamic = 'force-dynamic';
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -56,7 +53,6 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <body className={`${jakarta.variable} font-sans antialiased`}>
-        <Script src="https://apps.abacus.ai/chatllm/appllm-lib.js" strategy="lazyOnload" />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

@@ -13,7 +13,43 @@ try {
   if (fs.existsSync(FILE_PATH)) {
     existingData = JSON.parse(fs.readFileSync(FILE_PATH, 'utf-8'));
   }
-} catch (e) { /* ignore */ }
+} catch { /* ignore */ }
+
+const RUN_AT = new Date().toISOString();
+const fallbackReasons = new Map();
+
+function getExistingHistory(key, reason) {
+  fallbackReasons.set(key, reason);
+  return existingData?.indices?.[key]?.historique ?? [];
+}
+
+const SOURCE_GROUPS = [
+  { keys: ['oat', 'bund', 'jgb', 'gilt', 'estr', 'tauxDepotBCE'], source: 'BCE / FRED' },
+  { keys: ['tec10', 'tauxImmo', 'pel'], source: 'Banque de France Webstat' },
+  { keys: ['inflation', 'prixImmo'], source: 'INSEE' },
+  { keys: ['livreta'], source: 'Banque de France' },
+  { keys: ['fondsEuros'], source: 'France Assureurs' },
+  { keys: ['scpi'], source: 'ASPIM' },
+  { keys: ['cac40gr'], source: 'Euronext / Yahoo Finance' },
+  { keys: ['brent', 'gaz'], source: 'OilPriceAPI / Yahoo Finance' },
+  { keys: ['eurusd', 'eurgbp', 'eurjpy', 'eurchf', 'eurcny', 'cac40', 'cac40gr', 'cacmid', 'stoxx50', 'stoxx600', 'dax', 'ftse', 'nikkei', 'sp500', 'nasdaq', 'world', 'emerging', 'gold', 'btc', 'eth', 'sol', 'xrp', 'us10y'], source: 'Yahoo Finance' },
+];
+
+function sourceForIndex(key) {
+  return SOURCE_GROUPS.find(group => group.keys.includes(key))?.source ?? 'Source institutionnelle';
+}
+
+function maxAgeDaysForIndex(key) {
+  if (['btc', 'eth', 'sol', 'xrp'].includes(key)) return 3;
+  if (['tec10', 'estr', 'eurusd', 'eurgbp', 'eurjpy', 'eurchf', 'eurcny', 'cac40', 'cac40gr', 'cacmid', 'stoxx50', 'stoxx600', 'dax', 'ftse', 'nikkei', 'sp500', 'nasdaq', 'world', 'emerging', 'brent', 'gold', 'gaz', 'us10y'].includes(key)) return 5;
+  if (['inflation', 'pel'].includes(key)) return 45;
+  if (key === 'tauxDepotBCE') return 60;
+  if (['oat', 'bund', 'jgb', 'gilt'].includes(key)) return 90;
+  if (key === 'tauxImmo') return 120;
+  if (key === 'prixImmo') return 150;
+  if (key === 'livreta') return 200;
+  return 400;
+}
 
 // Date de début pour maximiser l'historique (20 ans de données)
 const HISTORY_START_DATE = '2000-01-01';
@@ -33,7 +69,7 @@ async function fetchFredSeries(seriesId) {
     const indiceKey = FRED_SERIES_MAP[seriesId];
     if (existingData?.indices?.[indiceKey]?.historique?.length > 0) {
       console.log(`  ⚠️ FRED ${seriesId}: utilisation des données existantes (pas de clé API)`);
-      return existingData.indices[indiceKey].historique;
+      return getExistingHistory(indiceKey, `FRED ${seriesId} indisponible ou sans clé`);
     }
     console.log(`  ❌ FRED ${seriesId}: pas de clé API et pas de données existantes`);
     return [];
@@ -71,7 +107,7 @@ async function fetchEcbBondMonthly(countryCode, label, existingKey) {
     const response = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
     if (!response.ok) {
       console.log(`  ⚠️ BCE ${label} HTTP ${response.status}`);
-      return existingData?.indices?.[existingKey]?.historique ?? [];
+      return getExistingHistory(existingKey, `BCE ${label} HTTP ${response.status}`);
     }
     const json = await response.json();
     const points = parseEcbSdmxJson(json);
@@ -80,10 +116,10 @@ async function fetchEcbBondMonthly(countryCode, label, existingKey) {
       console.log(`  ✓ BCE ${label}: ${points.length} pts, dernier: ${last.date} = ${last.value}%`);
       return points;
     }
-    return existingData?.indices?.[existingKey]?.historique ?? [];
+    return getExistingHistory(existingKey, `BCE ${label} sans observation`);
   } catch (err) {
     console.log(`  ⚠️ BCE ${label} erreur: ${err.message}`);
-    return existingData?.indices?.[existingKey]?.historique ?? [];
+    return getExistingHistory(existingKey, `BCE ${label}: ${err.message}`);
   }
 }
 
@@ -152,7 +188,7 @@ async function getOatHistory() {
   if (fredData.length === 0 && ecbData.length === 0) {
     if (existingData?.indices?.oat?.historique?.length > 0) {
       console.log(`  ⚠️ OAT: conservation données existantes`);
-      return existingData.indices.oat.historique;
+      return getExistingHistory('oat', 'FRED et BCE indisponibles');
     }
     return [];
   }
@@ -225,7 +261,7 @@ async function fetchINSEESerie(serieId) {
     const obsRegex = /TIME_PERIOD="([^"]+)"[^>]*OBS_VALUE="([^"]+)"/g;
     let match;
     while ((match = obsRegex.exec(xmlText)) !== null) {
-      const [_, period, value] = match;
+      const [, period, value] = match;
       const date = normalizeINSEEPeriod(period);
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
@@ -372,7 +408,7 @@ async function getInflationFromIndex() {
   // 4. Fallback données existantes
   if (existingData?.indices?.inflation?.historique?.length > 0) {
     console.log(`  ⚠️ Inflation France: utilisation des données existantes`);
-    return existingData.indices.inflation.historique;
+    return getExistingHistory('inflation', 'INSEE et FRED indisponibles');
   }
 
   console.log(`  ❌ Inflation France: aucune source disponible`);
@@ -466,7 +502,7 @@ async function fetchYahooRecentDaily(ticker) {
       }
       return history;
     }
-  } catch (error) {
+  } catch {
     // Silently fail for recent data
   }
   return [];
@@ -609,7 +645,7 @@ async function fetchEuronextChartHistory(instrument, label) {
     const last = sorted[sorted.length - 1];
     console.log(`  ✓ Euronext chart ${label}: ${sorted.length} points, dernier: ${last?.date} = ${last?.value}`);
     return sorted;
-  } catch (error) {
+  } catch {
     console.log(`  ⚠️ Euronext chart ${label}: ${error.message}`);
     return [];
   }
@@ -650,7 +686,7 @@ async function fetchEuronextHistoricalCsv(instrument, label) {
     const last = sorted[sorted.length - 1];
     console.log(`  ✓ Euronext ${label}: ${sorted.length} points, dernier: ${last?.date} = ${last?.value}`);
     return sorted;
-  } catch (error) {
+  } catch {
     console.log(`  ⚠️ Euronext ${label}: ${error.message}`);
     return [];
   }
@@ -661,6 +697,9 @@ async function fetchCac40GrHistory() {
   const euronextChart = await fetchEuronextChartHistory('QS0011131834-XPAR', 'CAC 40 GR');
   const euronextRecent = await fetchEuronextHistoricalCsv('QS0011131834-XPAR', 'CAC 40 GR');
   const existing = existingData?.indices?.cac40gr?.historique ?? [];
+  if (yahooHistory.length === 0 && euronextChart.length === 0 && euronextRecent.length === 0 && existing.length > 0) {
+    fallbackReasons.set('cac40gr', 'Euronext et Yahoo Finance indisponibles');
+  }
   const base = yahooHistory.length > 0 ? yahooHistory : existing;
   const merged = mergeHistoryByDate(base, euronextChart, euronextRecent);
   const last = merged[merged.length - 1];
@@ -682,8 +721,6 @@ async function getLivretAHistory() {
     try {
       console.log(`  Fetching Livret A (Webstat BdF)...`);
       // 723 observations depuis 1966 — on les récupère toutes en une passe
-      const url = `https://webstat.banque-france.fr/api/explore/v2.1/catalog/datasets/observations/records?where=series_key='MIR1.M.FR.B.L23FRLA.D.R.A.2230U6.EUR.O'&order_by=time_period_start ASC&limit=100&offset=0&apikey=${WEBSTAT_API_KEY}`;
-
       // L'API limite à 100 par page — on pagine pour tout récupérer
       const WEBSTAT_HEADERS = {
         'Authorization': `Apikey ${WEBSTAT_API_KEY}`,
@@ -850,7 +887,7 @@ async function getPrixImmobilierHistory() {
   // Fallback données existantes
   if (existingData?.indices?.prixImmo?.historique?.length > 0) {
     console.log(`  ⚠️ Prix immo: utilisation données existantes`);
-    return existingData.indices.prixImmo.historique;
+    return getExistingHistory('prixImmo', 'INSEE prix immobilier indisponible');
   }
 
   // Fallback historique minimal
@@ -926,7 +963,7 @@ async function getTec10History() {
   // Fallback sur données existantes
   if (data.length === 0 && existingData?.indices?.tec10?.historique?.length > 0) {
     console.log(`  ⚠️ TEC 10: utilisation données existantes`);
-    return existingData.indices.tec10.historique;
+    return getExistingHistory('tec10', 'Banque de France Webstat indisponible');
   }
   return data;
 }
@@ -944,7 +981,7 @@ async function getTauxCreditImmoHistory() {
   );
   if (data.length === 0 && existingData?.indices?.tauxImmo?.historique?.length > 0) {
     console.log(`  ⚠️ Taux crédit immo: utilisation données existantes`);
-    return existingData.indices.tauxImmo.historique;
+    return getExistingHistory('tauxImmo', 'Banque de France Webstat indisponible');
   }
   return data;
 }
@@ -961,7 +998,7 @@ async function getTauxPelHistory() {
   );
   if (data.length === 0 && existingData?.indices?.pel?.historique?.length > 0) {
     console.log(`  ⚠️ Taux PEL: utilisation données existantes`);
-    return existingData.indices.pel.historique;
+    return getExistingHistory('pel', 'Banque de France Webstat indisponible');
   }
   return data;
 }
@@ -994,7 +1031,7 @@ async function getEstrHistory() {
     const fred = await fetchFredSeries('ECBESTRVOLWGTTRMDMNRT');
     if (fred.length > 0) return fred;
     console.log('  ⚠️ €STR: utilisation données existantes');
-    return existingData?.indices?.estr?.historique ?? [];
+    return getExistingHistory('estr', 'BCE et FRED indisponibles');
   }
 }
 
@@ -1033,6 +1070,7 @@ async function fetchBrentHistory() {
   const yahooHistory = await fetchYahooHistoryWithFallback('BZ=F');
   const latestPoint = await fetchOilPriceLatest('BRENT_CRUDE_USD', 'Brent');
   const base = yahooHistory.length > 0 ? yahooHistory : (existingData?.indices?.brent?.historique ?? []);
+  if (yahooHistory.length === 0 && !latestPoint && base.length > 0) fallbackReasons.set('brent', 'Yahoo Finance et OilPriceAPI indisponibles');
   if (!latestPoint) {
     console.log(`  ✓ Pétrole Brent: ${base.length} points (Yahoo uniquement)`);
     return base;
@@ -1061,6 +1099,7 @@ async function fetchGazTTFHistory() {
 
   // Dernier point OilPriceAPI (DUTCH_TTF_EUR) pour la valeur la plus fraîche
   const latestPoint = await fetchOilPriceLatest('DUTCH_TTF_EUR', 'Gaz TTF');
+  if (yahooTTF.length === 0 && !latestPoint && base.length > 0) fallbackReasons.set('gaz', 'Yahoo Finance et OilPriceAPI indisponibles');
 
   if (!latestPoint) {
     console.log(`  ✓ Gaz TTF: ${base.length} points (Yahoo uniquement)`);
@@ -1086,7 +1125,7 @@ async function getTauxDepotBCEHistory() {
   );
   if (data.length === 0 && existingData?.indices?.tauxDepotBCE?.historique?.length > 0) {
     console.log(`  ⚠️ Taux dépôt BCE: utilisation données existantes`);
-    return existingData.indices.tauxDepotBCE.historique;
+    return getExistingHistory('tauxDepotBCE', 'BCE indisponible');
   }
   return data;
 }
@@ -1207,7 +1246,7 @@ async function main() {
     const data = await fetchYahooHistoryWithFallback(ticker);
     if (data.length === 0 && existingData?.indices?.[existingKey]?.historique?.length > 0) {
       console.log(`  ⚠️ ${ticker}: Yahoo vide, conservation des ${existingData.indices[existingKey].historique.length} points existants`);
-      return existingData.indices[existingKey].historique;
+      return getExistingHistory(existingKey, `${ticker}: Yahoo Finance indisponible`);
     }
     return data;
   };
@@ -1310,7 +1349,7 @@ async function main() {
   };
 
   const nouvellesDonnees = {
-    date_mise_a_jour: new Date().toISOString(),
+    date_mise_a_jour: RUN_AT,
     indices: {
       // Taux de marché France
       oat:          { titre: "OAT 10 ans",        valeur: getLast(historyOat),          suffixe: "%", historique: historyOat },
@@ -1367,6 +1406,54 @@ async function main() {
     }
   };
 
+  const validationErrors = [];
+  for (const [key, indicator] of Object.entries(nouvellesDonnees.indices)) {
+    const rawHistory = Array.isArray(indicator.historique) ? indicator.historique : [];
+    const pointsByDate = new Map();
+    let invalidPointCount = 0;
+
+    for (const point of rawHistory) {
+      const value = Number(point?.value);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(point?.date ?? '') || !Number.isFinite(value)) {
+        invalidPointCount++;
+        continue;
+      }
+      pointsByDate.set(point.date, { ...point, value });
+    }
+
+    const historique = [...pointsByDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+    indicator.historique = historique;
+    indicator.nombre_points = historique.length;
+    indicator.valeur = getLast(historique);
+
+    const lastObservationDate = historique[historique.length - 1]?.date ?? null;
+    const ageDays = lastObservationDate
+      ? Math.floor((new Date(RUN_AT).getTime() - new Date(lastObservationDate).getTime()) / 86_400_000)
+      : Number.POSITIVE_INFINITY;
+    const fallbackReason = fallbackReasons.get(key);
+    const isStale = ageDays > maxAgeDaysForIndex(key);
+    const status = historique.length === 0 || indicator.valeur == null
+      ? 'error'
+      : isStale
+        ? 'stale'
+        : fallbackReason
+          ? 'fallback'
+          : 'ok';
+
+    indicator.metadata = {
+      source: sourceForIndex(key),
+      fetchedAt: RUN_AT,
+      lastObservationDate,
+      status,
+      fallbackUsed: Boolean(fallbackReason),
+      ...(fallbackReason ? { error: fallbackReason } : {}),
+    };
+
+    if (invalidPointCount > 0) validationErrors.push(`${key}: ${invalidPointCount} point(s) invalide(s)`);
+    if (historique.length === 0 || indicator.valeur == null) validationErrors.push(`${key}: historique vide`);
+    if (isStale) validationErrors.push(`${key}: dernière observation ${lastObservationDate ?? 'absente'} (${ageDays} jours)`);
+  }
+
   // Résumé final
   console.log("\n═══════════════════════════════════════════════════════════");
   console.log("  RÉSUMÉ DES DONNÉES");
@@ -1381,12 +1468,13 @@ async function main() {
   console.log(`  Prix immo    : ${nouvellesDonnees.indices.prixImmo.valeur}% var/an (dernier: ${historyPrixImmo[historyPrixImmo.length-1]?.date ?? 'N/A'})`);
   console.log(`  €STR         : ${nouvellesDonnees.indices.estr.valeur}% (dernier: ${historyEstr[historyEstr.length-1]?.date ?? 'N/A'})`);
 
-  // Validation : au moins 50% des indices doivent avoir des données
+  // Validation stricte avant publication.
   const allIndices = Object.values(nouvellesDonnees.indices);
   const withData = allIndices.filter(i => i.historique && i.historique.length > 0);
   console.log(`\n📋 Validation: ${withData.length}/${allIndices.length} indices avec données`);
-  if (withData.length < allIndices.length * 0.5) {
-    console.error(`\n❌ ABANDON: trop d'indices sans données (${withData.length}/${allIndices.length}). taux.json non écrasé.`);
+  if (validationErrors.length > 0) {
+    console.error('\n❌ ABANDON: contrôle qualité des données en échec.');
+    validationErrors.forEach(error => console.error(`  - ${error}`));
     process.exit(1);
   }
 

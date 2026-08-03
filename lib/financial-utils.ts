@@ -1,9 +1,44 @@
 // Financial calculation utilities
 
-export interface DataPoint {
-  date: string;
-  value: number;
-  timestamp?: number;
+import type { DataPoint } from './taux-types.ts';
+export type { DataPoint } from './taux-types.ts';
+
+const DAY_MS = 86_400_000;
+
+function cleanSeries(data: DataPoint[]): DataPoint[] {
+  return data
+    .filter(point => point.quality !== 'interpolated' && Number.isFinite(point.value))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function inferPeriodsPerYear(data: DataPoint[]): number {
+  const sorted = cleanSeries(data);
+  const gaps: number[] = [];
+  for (let index = 1; index < sorted.length; index++) {
+    const gap = (new Date(sorted[index].date).getTime() - new Date(sorted[index - 1].date).getTime()) / DAY_MS;
+    if (Number.isFinite(gap) && gap > 0) gaps.push(gap);
+  }
+  if (gaps.length === 0) return 1;
+
+  gaps.sort((a, b) => a - b);
+  const medianDays = gaps[Math.floor(gaps.length / 2)];
+  if (medianDays <= 2) return 252;
+  if (medianDays <= 10) return 52;
+  if (medianDays <= 45) return 12;
+  if (medianDays <= 120) return 4;
+  if (medianDays <= 400) return 1;
+  return Math.max(1, 365.25 / medianDays);
+}
+
+function periodicReturns(data: DataPoint[]): number[] {
+  const sorted = cleanSeries(data);
+  const returns: number[] = [];
+  for (let index = 1; index < sorted.length; index++) {
+    const previous = sorted[index - 1].value;
+    const current = sorted[index].value;
+    if (previous > 0 && current > 0) returns.push(current / previous - 1);
+  }
+  return returns;
 }
 
 export interface FinancialStats {
@@ -33,7 +68,7 @@ export function calculateAnnualizedReturn(
   endValue: number,
   days: number
 ): number {
-  if (startValue === 0 || days <= 0) return 0;
+  if (startValue <= 0 || endValue <= 0 || days <= 0) return Number.NaN;
   const totalReturn = endValue / startValue;
   const years = days / 365;
   return (Math.pow(totalReturn, 1 / years) - 1) * 100;
@@ -43,23 +78,13 @@ export function calculateAnnualizedReturn(
  * Calculate volatility (standard deviation of returns)
  */
 export function calculateVolatility(data: DataPoint[]): number {
-  if (data.length < 2) return 0;
-  
-  const returns: number[] = [];
-  for (let i = 1; i < data.length; i++) {
-    if (data[i - 1].value !== 0) {
-      returns.push((data[i].value - data[i - 1].value) / Math.abs(data[i - 1].value));
-    }
-  }
-  
-  if (returns.length === 0) return 0;
+  const returns = periodicReturns(data);
+  if (returns.length < 2) return Number.NaN;
   
   const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
   const squaredDiffs = returns.map(r => Math.pow(r - mean, 2));
-  const variance = squaredDiffs.reduce((a, b) => a + b, 0) / returns.length;
-  
-  // Annualized volatility (assuming daily data)
-  return Math.sqrt(variance) * Math.sqrt(252) * 100;
+  const variance = squaredDiffs.reduce((a, b) => a + b, 0) / (returns.length - 1);
+  return Math.sqrt(variance) * Math.sqrt(inferPeriodsPerYear(data)) * 100;
 }
 
 /**
@@ -88,26 +113,18 @@ export function calculateMaxDrawdown(data: DataPoint[]): number {
  * Calculate Sharpe Ratio (simplified, assuming 0% risk-free rate)
  */
 export function calculateSharpeRatio(data: DataPoint[]): number {
-  if (data.length < 2) return 0;
-  
-  const returns: number[] = [];
-  for (let i = 1; i < data.length; i++) {
-    if (data[i - 1].value !== 0) {
-      returns.push((data[i].value - data[i - 1].value) / Math.abs(data[i - 1].value));
-    }
-  }
-  
-  if (returns.length === 0) return 0;
+  const returns = periodicReturns(data);
+  if (returns.length < 2) return Number.NaN;
   
   const meanReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
   const stdDev = Math.sqrt(
-    returns.map(r => Math.pow(r - meanReturn, 2)).reduce((a, b) => a + b, 0) / returns.length
+    returns.map(r => Math.pow(r - meanReturn, 2)).reduce((a, b) => a + b, 0) / (returns.length - 1)
   );
   
-  if (stdDev === 0) return 0;
-  
-  // Annualized Sharpe ratio
-  return (meanReturn * 252) / (stdDev * Math.sqrt(252));
+  if (stdDev === 0) return Number.NaN;
+
+  const periodsPerYear = inferPeriodsPerYear(data);
+  return (meanReturn * periodsPerYear) / (stdDev * Math.sqrt(periodsPerYear));
 }
 
 /**
@@ -143,11 +160,15 @@ export function calculateMonthlyIRR(cashFlows: number[]): number {
  * Calculate correlation between two series
  */
 export function calculateCorrelation(data1: DataPoint[], data2: DataPoint[]): number {
-  // Align data by date
-  const map1 = new Map(data1.map(d => [d.date, d.value]));
-  const map2 = new Map(data2.map(d => [d.date, d.value]));
-  
-  const commonDates = [...map1.keys()].filter(date => map2.has(date));
+  const toMonthlyCloses = (data: DataPoint[]) => {
+    const closes = new Map<string, number>();
+    cleanSeries(data).forEach(point => closes.set(point.date.slice(0, 7), point.value));
+    return closes;
+  };
+
+  const map1 = toMonthlyCloses(data1);
+  const map2 = toMonthlyCloses(data2);
+  const commonDates = [...map1.keys()].filter(date => map2.has(date)).sort();
   
   if (commonDates.length < 2) return 0;
   
@@ -159,9 +180,9 @@ export function calculateCorrelation(data1: DataPoint[], data2: DataPoint[]): nu
   const returns2: number[] = [];
   
   for (let i = 1; i < values1.length; i++) {
-    if (values1[i - 1] !== 0 && values2[i - 1] !== 0) {
-      returns1.push((values1[i] - values1[i - 1]) / Math.abs(values1[i - 1]));
-      returns2.push((values2[i] - values2[i - 1]) / Math.abs(values2[i - 1]));
+    if (values1[i - 1] > 0 && values2[i - 1] > 0 && values1[i] > 0 && values2[i] > 0) {
+      returns1.push(values1[i] / values1[i - 1] - 1);
+      returns2.push(values2[i] / values2[i - 1] - 1);
     }
   }
   
@@ -191,23 +212,23 @@ export function calculateCorrelation(data1: DataPoint[], data2: DataPoint[]): nu
  * Calculate all financial statistics for a data series
  */
 export function calculateAllStats(data: DataPoint[]): FinancialStats {
-  if (data.length < 2) {
+  const cleaned = cleanSeries(data);
+  if (cleaned.length < 2) {
     return {
-      startValue: data[0]?.value ?? 0,
-      endValue: data[data.length - 1]?.value ?? 0,
+      startValue: cleaned[0]?.value ?? 0,
+      endValue: cleaned.at(-1)?.value ?? 0,
       totalReturn: 0,
-      annualizedReturn: 0,
-      volatility: 0,
+      annualizedReturn: Number.NaN,
+      volatility: Number.NaN,
       maxDrawdown: 0,
-      sharpeRatio: 0,
+      sharpeRatio: Number.NaN,
     };
   }
-  
-  const startValue = data[0].value;
-  const endValue = data[data.length - 1].value;
+
+  const startValue = cleaned[0].value;
+  const endValue = cleaned.at(-1)!.value;
   const days = Math.ceil(
-    (new Date(data[data.length - 1].date).getTime() - new Date(data[0].date).getTime()) / 
-    (1000 * 60 * 60 * 24)
+    (new Date(cleaned.at(-1)!.date).getTime() - new Date(cleaned[0].date).getTime()) / DAY_MS
   );
   
   return {
@@ -215,9 +236,9 @@ export function calculateAllStats(data: DataPoint[]): FinancialStats {
     endValue,
     totalReturn: calculateReturn(startValue, endValue),
     annualizedReturn: calculateAnnualizedReturn(startValue, endValue, days),
-    volatility: calculateVolatility(data),
-    maxDrawdown: calculateMaxDrawdown(data),
-    sharpeRatio: calculateSharpeRatio(data),
+    volatility: calculateVolatility(cleaned),
+    maxDrawdown: calculateMaxDrawdown(cleaned),
+    sharpeRatio: calculateSharpeRatio(cleaned),
   };
 }
 
@@ -336,6 +357,7 @@ export function normalizeToBase100(data: DataPoint[]): DataPoint[] {
  * Format number for display
  */
 export function formatNumber(value: number, decimals: number = 2): string {
+  if (!Number.isFinite(value)) return '—';
   return value.toLocaleString('fr-FR', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
@@ -375,14 +397,13 @@ export function calculateLinearRegression(points: { x: number; y: number }[]): {
   const n = points.length;
   if (n < 2) return { slope: 0, intercept: 0, rSquared: 0 };
   
-  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
   
   for (const p of points) {
     sumX += p.x;
     sumY += p.y;
     sumXY += p.x * p.y;
     sumX2 += p.x * p.x;
-    sumY2 += p.y * p.y;
   }
   
   const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
@@ -407,7 +428,7 @@ export function calculateLinearRegression(points: { x: number; y: number }[]): {
 
 // ─── Constants for savings products ───
 
-export const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros', 'scpi', 'oat', 'tec10', 'tauxImmo', 'tauxDepotBCE', 'estr'];
+export const SAVINGS_KEYS = ['livreta', 'pel', 'fondsEuros'];
 
 export const FIXED_RATE_AT_OPENING_KEYS = ['pel'];
 
@@ -415,12 +436,6 @@ export const COMPOUNDING_RULES: Record<string, 'annual' | 'quarterly' | 'monthly
   livreta: 'annual',
   pel: 'annual',
   fondsEuros: 'annual',
-  scpi: 'quarterly',
-  oat: 'monthly',
-  tec10: 'monthly',
-  tauxImmo: 'monthly',
-  tauxDepotBCE: 'monthly',
-  estr: 'monthly',
 };
 
 /**
