@@ -462,6 +462,64 @@ export function getApplicableRate(
 }
 
 /**
+ * Capitalise un taux overnight selon la convention monétaire ACT/360.
+ * Le taux d'une observation s'applique jusqu'à l'observation suivante.
+ */
+export function computeOvernightCompoundedIndex(
+  rateHistory: DataPoint[],
+  baseAmount: number = 100,
+  dayBasis: number = 360
+): DataPoint[] {
+  const sorted = cleanSeries(rateHistory);
+  if (sorted.length === 0 || baseAmount <= 0 || dayBasis <= 0) return [];
+
+  let capital = baseAmount;
+  const result: DataPoint[] = [{ date: sorted[0].date, value: parseFloat(capital.toFixed(6)) }];
+
+  for (let index = 1; index < sorted.length; index++) {
+    const previous = sorted[index - 1];
+    const current = sorted[index];
+    const elapsedDays = (new Date(current.date).getTime() - new Date(previous.date).getTime()) / DAY_MS;
+    if (!Number.isFinite(elapsedDays) || elapsedDays <= 0) continue;
+
+    capital *= 1 + (previous.value / 100) * (elapsedDays / dayBasis);
+    result.push({ date: current.date, value: parseFloat(capital.toFixed(6)) });
+  }
+
+  return result;
+}
+
+/** Convertit causalement une série cotée en devise étrangère vers l'euro. */
+export function convertPriceSeriesToEuro(
+  priceHistory: DataPoint[],
+  eurFxHistory: DataPoint[],
+  maxFxGapDays: number = 10
+): DataPoint[] {
+  const prices = cleanSeries(priceHistory);
+  const fxRates = cleanSeries(eurFxHistory).filter(point => point.value > 0);
+  if (prices.length === 0 || fxRates.length === 0) return [];
+
+  const converted: DataPoint[] = [];
+  let fxIndex = -1;
+
+  for (const point of prices) {
+    while (fxIndex + 1 < fxRates.length && fxRates[fxIndex + 1].date <= point.date) fxIndex++;
+    if (fxIndex < 0) continue;
+
+    const fxPoint = fxRates[fxIndex];
+    const gapDays = (new Date(point.date).getTime() - new Date(fxPoint.date).getTime()) / DAY_MS;
+    if (!Number.isFinite(gapDays) || gapDays < 0 || gapDays > maxFxGapDays) continue;
+
+    converted.push({
+      ...point,
+      value: parseFloat((point.value / fxPoint.value).toFixed(6)),
+    });
+  }
+
+  return converted;
+}
+
+/**
  * Compute capitalized series for savings products.
  * Takes a rate history and returns a DataPoint[] of capital values starting from baseAmount.
  */

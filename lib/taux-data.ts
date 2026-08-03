@@ -2,6 +2,7 @@ import 'server-only';
 
 import { promises as fs } from 'fs';
 import path from 'path';
+import { computeOvernightCompoundedIndex } from '@/lib/financial-utils';
 import type { DataPoint, Indicateur, TauxData } from '@/lib/taux-types';
 
 let cache: { mtimeMs: number; data: TauxData } | null = null;
@@ -13,9 +14,37 @@ export async function readTauxData(): Promise<TauxData> {
   if (cache?.mtimeMs === stat.mtimeMs) return cache.data;
 
   const fileContents = await fs.readFile(filePath, 'utf8');
-  const data = JSON.parse(fileContents) as TauxData;
+  const data = withDerivedIndices(JSON.parse(fileContents) as TauxData);
   cache = { mtimeMs: stat.mtimeMs, data };
   return data;
+}
+
+function withDerivedIndices(data: TauxData): TauxData {
+  const estr = data.indices.estr;
+  if (!estr) return data;
+
+  const historique = computeOvernightCompoundedIndex(estr.historique);
+  const lastPoint = historique.at(-1);
+  const estrCapitalise: Indicateur = {
+    titre: 'Monétaire €STR capitalisé',
+    valeur: lastPoint?.value ?? null,
+    suffixe: 'pts',
+    historique,
+    nombre_points: historique.length,
+    metadata: {
+      source: 'BCE, calcul ACT/360',
+      fetchedAt: estr.metadata?.fetchedAt ?? data.date_mise_a_jour,
+      lastObservationDate: lastPoint?.date ?? null,
+      status: estr.metadata?.status ?? (lastPoint ? 'ok' : 'error'),
+      fallbackUsed: estr.metadata?.fallbackUsed ?? false,
+      ...(estr.metadata?.error ? { error: estr.metadata.error } : {}),
+    },
+  };
+
+  return {
+    ...data,
+    indices: { ...data.indices, estrCapitalise },
+  };
 }
 
 function sortedHistory(indicator: Indicateur): DataPoint[] {

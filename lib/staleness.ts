@@ -9,10 +9,12 @@ export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   oat:          { label: 'Mensuel',         maxDays: 90 },
   tec10:        { label: 'Quotidien',       maxDays: 5  },
   estr:         { label: 'Quotidien',       maxDays: 5  },
+  estrCapitalise: { label: 'Quotidien',     maxDays: 5  },
   // BCE — par réunion (~8×/an soit toutes les 6 semaines)
   tauxDepotBCE: { label: 'Par réunion BCE', maxDays: 60 },
   // Mensuel — inflation et PEL (délai ~6 semaines)
   inflation:    { label: 'Mensuel',         maxDays: 45 },
+  inflationCumulee: { label: 'Mensuel',     maxDays: 45 },
   pel:          { label: 'Mensuel',         maxDays: 45 },
   // Mensuel — taux immo BdF publié avec ~3 mois de délai structurel
   tauxImmo:     { label: 'Mensuel',         maxDays: 120 },

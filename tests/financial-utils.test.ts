@@ -7,8 +7,15 @@ import {
   calculateCorrelation,
   calculateVolatility,
   computeCapitalizedSeries,
+  computeOvernightCompoundedIndex,
+  convertPriceSeriesToEuro,
   inferPeriodsPerYear,
 } from '../lib/financial-utils.ts';
+import {
+  getInstrumentKind,
+  getRequiredFxKeys,
+  isPerformanceSeries,
+} from '../lib/instrument-config.ts';
 
 const weekly = [
   { date: '2026-01-02', value: 100 },
@@ -71,4 +78,44 @@ test('capitalise les distributions annuelles des SCPI sur le bon exercice', () =
     { date: '2024-12-31', value: 104.72 },
     { date: '2025-12-31', value: 109.8618 },
   ]);
+});
+
+test('capitalise l’€STR en ACT/360, week-end compris', () => {
+  const compounded = computeOvernightCompoundedIndex([
+    { date: '2026-01-02', value: 3.6 },
+    { date: '2026-01-05', value: 3.6 },
+    { date: '2026-01-06', value: 3.6 },
+  ]);
+
+  assert.deepEqual(compounded, [
+    { date: '2026-01-02', value: 100 },
+    { date: '2026-01-05', value: 100.03 },
+    { date: '2026-01-06', value: 100.040003 },
+  ]);
+});
+
+test('convertit un actif en euros sans utiliser de change futur', () => {
+  const converted = convertPriceSeriesToEuro([
+    { date: '2026-01-02', value: 120 },
+    { date: '2026-01-03', value: 132 },
+    { date: '2026-01-06', value: 143 },
+  ], [
+    { date: '2026-01-02', value: 1.2 },
+    { date: '2026-01-05', value: 1.3 },
+  ]);
+
+  assert.deepEqual(converted, [
+    { date: '2026-01-02', value: 100 },
+    { date: '2026-01-03', value: 110 },
+    { date: '2026-01-06', value: 110 },
+  ]);
+});
+
+test('distingue placements, benchmarks et indicateurs', () => {
+  assert.equal(getInstrumentKind('livreta'), 'placement');
+  assert.equal(getInstrumentKind('estrCapitalise'), 'benchmark');
+  assert.equal(getInstrumentKind('estr'), 'indicator');
+  assert.equal(isPerformanceSeries('inflationCumulee'), true);
+  assert.equal(isPerformanceSeries('inflation'), false);
+  assert.deepEqual(getRequiredFxKeys(['cac40', 'sp500', 'gold', 'ftse']), ['eurusd', 'eurgbp']);
 });

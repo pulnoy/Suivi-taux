@@ -9,12 +9,20 @@ import {
   formatNumber,
   FinancialStats,
   computeCapitalizedSeries,
+  convertPriceSeriesToEuro,
   calculateMonthlyIRR,
   SAVINGS_KEYS,
   FIXED_RATE_AT_OPENING_KEYS,
   COMPOUNDING_RULES,
   getApplicableRate
 } from '@/lib/financial-utils';
+import {
+  getFxKeyForAsset,
+  getInstrumentKind,
+  getInstrumentKindLabel,
+  getRequiredFxKeys,
+  isPerformanceSeries,
+} from '@/lib/instrument-config';
 import { Button } from '@/components/ui/button';
 import { 
   Table, 
@@ -51,25 +59,6 @@ type Period = '1M' | '3M' | '6M' | '1A' | '5A' | '10A' | '18A' | '20A' | 'YTD' |
 // Couleurs fixes par slot de sélection (1er sélectionné → slot 0, etc.)
 const SELECTION_PALETTE = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
 
-const NON_SIMULATABLE_INDEX_KEYS = new Set([
-  'oat',
-  'tec10',
-  'estr',
-  'tauxDepotBCE',
-  'inflation',
-  'tauxImmo',
-  'prixImmo',
-  'us10y',
-  'bund',
-  'jgb',
-  'gilt',
-  'eurusd',
-  'eurgbp',
-  'eurjpy',
-  'eurchf',
-  'eurcny',
-]);
-
 // Types pour l'analyse de compatibilité des modes
 type ModeRecommendation = 'real' | 'percent' | 'both';
 type CompatibilityLevel = 'compatible' | 'warning' | 'incompatible';
@@ -101,6 +90,15 @@ function analyzeModeCompatibility(
     value: indices[key]?.valeur || 0,
     suffix: indices[key]?.suffixe || ''
   }));
+
+  if (selectedKeys.some(key => !isPerformanceSeries(key))) {
+    return {
+      recommendation: 'real',
+      compatibilityLevel: 'warning',
+      message: 'Les indicateurs de taux, de variation et de change restent en valeur brute : leur normalisation ne constitue pas un rendement.',
+      forceBase100: false
+    };
+  }
 
   const categories = new Set(selectedData.map(d => d.category));
   const values = selectedData.map(d => Math.abs(d.value));
@@ -189,6 +187,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const [showMA200, setShowMA200] = useState(false);
   const [userOverrodeMode, setUserOverrodeMode] = useState(false);
   const [showIndicesSection, setShowIndicesSection] = useState(true);
+  const [currencyView, setCurrencyView] = useState<'local' | 'eur'>('local');
   
   // Brush date range from slider
   const [brushStartDate, setBrushStartDate] = useState<string | null>(null);
@@ -217,13 +216,25 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
   const [showSimPanel, setShowSimPanel] = useState(false);
 
   // Available indices for selection
-  const hasNonSimulatableSelection = selectedKeys.some(key => NON_SIMULATABLE_INDEX_KEYS.has(key));
+  const hasNonSimulatableSelection = selectedKeys.some(key => !isPerformanceSeries(key));
+  const requiredFxKeys = useMemo(() => getRequiredFxKeys(selectedKeys), [selectedKeys]);
+  const hasForeignAssetSelection = requiredFxKeys.length > 0;
+  const fxHistoriesReady = requiredFxKeys.every(key => {
+    const indicator = indices[key];
+    const expectedPoints = indicator?.nombre_points ?? indicator?.historique.length ?? 0;
+    return (indicator?.historique.length ?? 0) >= expectedPoints && expectedPoints > 1;
+  });
 
   useEffect(() => {
     if (!hasNonSimulatableSelection) return;
+    setMode('real');
     setSimulationActive(false);
     setShowSimPanel(false);
   }, [hasNonSimulatableSelection]);
+
+  useEffect(() => {
+    if (!hasForeignAssetSelection) setCurrencyView('local');
+  }, [hasForeignAssetSelection]);
 
   // Analyse de compatibilité des modes
   const modeAnalysis = useMemo(() => 
@@ -298,8 +309,13 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
       const index = indices[key];
       if (!index) return null;
       
+      const fxKey = getFxKeyForAsset(key);
+      const convertToEuro = currencyView === 'eur' && fxKey;
+      const history = convertToEuro
+        ? convertPriceSeriesToEuro(index.historique, indices[fxKey]?.historique ?? [])
+        : index.historique;
       const filtered = filterDataByPeriod(
-        index.historique,
+        history,
         period === 'CUSTOM' ? 'MAX' : period,
         undefined,
         undefined,
@@ -310,11 +326,11 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
         key,
         data: filtered,
         color: SELECTION_PALETTE[selectedKeys.indexOf(key)] ?? '#64748b',
-        title: index.titre,
-        suffix: index.suffixe
+        title: convertToEuro ? `${index.titre} (€)` : index.titre,
+        suffix: convertToEuro ? '€' : index.suffixe
       };
     }).filter(Boolean) as { key: string; data: DataPoint[]; color: string; title: string; suffix: string }[];
-  }, [indices, selectedKeys, period]);
+  }, [indices, selectedKeys, period, currencyView]);
 
   // Data filtered by brush range (for statistics recalculation)
   const brushFilteredData = useMemo(() => {
@@ -350,7 +366,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
 
     return brushFilteredData.map(ds => {
       const isSavings = ds.suffix === '%' && SAVINGS_KEYS.includes(ds.key);
-      const metricsAvailable = !NON_SIMULATABLE_INDEX_KEYS.has(ds.key);
+      const metricsAvailable = isPerformanceSeries(ds.key);
       const riskMetricsAvailable = ds.key !== 'scpi';
       const applyMetricAvailability = (stats: FinancialStats): FinancialStats => metricsAvailable
         ? stats
@@ -642,7 +658,9 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                     const education = INDEX_EDUCATION[key];
                     const isSelected = selectedKeys.includes(key);
                     const isDisabled = !isSelected && selectedKeys.length >= 5;
-                    const isNonSimulatable = NON_SIMULATABLE_INDEX_KEYS.has(key);
+                    const instrumentKind = getInstrumentKind(key);
+                    const instrumentKindLabel = getInstrumentKindLabel(key);
+                    const isNonSimulatable = instrumentKind === 'indicator';
                     const hasSimulationCaveat = key === 'scpi';
 
                     return (
@@ -667,19 +685,20 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                               } : {}}
                             >
                               {index.titre}
-                              {(isNonSimulatable || hasSimulationCaveat) && (
-                                <BadgeInfo
-                                  className={cn(
-                                    'h-3 w-3',
-                                    isSelected ? 'text-white/80' : 'text-primary/70'
-                                  )}
-                                />
-                              )}
+                              <BadgeInfo
+                                className={cn(
+                                  'h-3 w-3',
+                                  isSelected ? 'text-white/80' : 'text-primary/70'
+                                )}
+                              />
                               {isSelected && <X className="h-2.5 w-2.5 ml-0.5 opacity-80" />}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="max-w-xs">
                             <p className="text-xs font-medium mb-0.5">{index.titre}</p>
+                            <span className="inline-flex rounded-sm border border-border px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
+                              {instrumentKindLabel}
+                            </span>
                             <p className="text-xs text-muted-foreground">{education?.shortDescription || ''}</p>
                             {hasSimulationCaveat ? (
                               <p className="text-xs text-primary mt-1">
@@ -687,8 +706,12 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                               </p>
                             ) : isNonSimulatable ? (
                               <p className="text-xs text-primary mt-1">
-                                Indicateur de marché, non simulable comme un placement.
+                                Affichage en valeur brute uniquement : Base 100, rendements et simulation désactivés.
                               </p>
+                            ) : key === 'estrCapitalise' ? (
+                              <p className="text-xs text-primary mt-1">Benchmark brut théorique, hors frais, fiscalité et écart de suivi d’un OPC monétaire.</p>
+                            ) : key === 'inflationCumulee' ? (
+                              <p className="text-xs text-primary mt-1">Benchmark de pouvoir d’achat, pas un support d’investissement.</p>
                             ) : null}
                           </TooltipContent>
                         </Tooltip>
@@ -813,15 +836,17 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                       setShowSimPanel(false);
                       setSimulationActive(false);
                     }}
-                    className="h-8"
+                    disabled={hasNonSimulatableSelection}
+                    className={cn('h-8', hasNonSimulatableSelection && 'opacity-50 cursor-not-allowed')}
                   >
                     Base 100
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-xs">
                   <p className="text-sm">
-                    <strong>Base 100 :</strong> Normalise tous les indices à 100 au début de la période
-                    pour comparer les performances relatives (ex: +15% vs +8%)
+                    {hasNonSimulatableSelection
+                      ? 'La Base 100 est indisponible lorsqu’un indicateur brut est sélectionné.'
+                      : <><strong>Base 100 :</strong> Normalise les placements et benchmarks à 100 au début de la période pour comparer leurs performances relatives.</>}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -858,6 +883,44 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             </TooltipProvider>
           </div>
 
+          {hasForeignAssetSelection && (
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1" role="group" aria-label="Devise de comparaison">
+              <Button
+                variant={currencyView === 'local' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setCurrencyView('local')}
+                aria-pressed={currencyView === 'local'}
+                className="h-8"
+              >
+                Devise locale
+              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={currencyView === 'eur' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setCurrencyView('eur')}
+                      disabled={!fxHistoriesReady}
+                      aria-pressed={currencyView === 'eur'}
+                      className="h-8 gap-1"
+                    >
+                      <Euro className="h-3.5 w-3.5" />
+                      Investisseur euro
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <p className="text-sm">
+                      {fxHistoriesReady
+                        ? 'Convertit chaque valeur étrangère en euros avec le dernier taux de change connu à cette date.'
+                        : 'Chargement de l’historique de change nécessaire à la conversion.'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
+
           {/* Icône d'aide */}
           <TooltipProvider>
             <Tooltip>
@@ -875,7 +938,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
                   </p>
                   <p>
                     <strong>Base 100 :</strong> Pour comparer des indices d'échelles différentes 
-                    (ex: CAC 40 vs Bitcoin vs Inflation)
+                    (ex: CAC 40 vs Bitcoin vs inflation cumulée)
                   </p>
                   <p className="text-muted-foreground italic">
                     💡 Le mode est présélectionné automatiquement selon vos indices.
@@ -1019,7 +1082,7 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
           <AlertDescription className="flex items-center gap-2 text-sm text-green-800 dark:text-green-300">
             <Euro className="h-4 w-4 flex-shrink-0 text-green-600" />
             <span>
-              <strong>Simulation active :</strong> Évolution de <strong>{effectivePlacementAmount.toLocaleString('fr-FR')} €</strong>
+              <strong>Projection active :</strong> Évolution de <strong>{effectivePlacementAmount.toLocaleString('fr-FR')} €</strong>
               {effectiveMonthlyPayment && effectiveMonthlyPayment > 0 && (
                 <> + <strong>{effectiveMonthlyPayment.toLocaleString('fr-FR')} €/mois</strong> (versements programmés — méthode DCA)</>
               )}{' '}depuis le début de la période.
@@ -1029,6 +1092,12 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
               {' '}Slider disponible sous le graphique.
               {selectedKeys.includes('scpi') && (
                 <> Pour la SCPI, les distributions moyennes sont réinvesties ; prix de part, frais et fiscalité sont exclus.</>
+              )}
+              {selectedKeys.includes('estrCapitalise') && (
+                <> Pour le benchmark €STR, la capitalisation ACT/360 est brute de frais et de fiscalité.</>
+              )}
+              {selectedKeys.includes('inflationCumulee') && (
+                <> Pour l’inflation cumulée, le montant représente le capital nécessaire pour préserver le pouvoir d’achat, pas un placement réalisable.</>
               )}
             </span>
           </AlertDescription>
@@ -1042,6 +1111,26 @@ export function Comparator({ indices, selectedKeys, onKeysChange }: ComparatorPr
             <span>
               <strong>Capitalisation théorique :</strong> Livret A, PEL, fonds euros et SCPI sont convertis en évolution de 100 € selon leur taux servi. Le PEL conserve le taux applicable à l'ouverture de la période. Pour la SCPI, les distributions sont réinvesties, hors variation du prix de part, frais et fiscalité.
             </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {mode === 'percent' && !simulationActive && selectedKeys.some(key => key === 'estrCapitalise' || key === 'inflationCumulee') && (
+        <Alert className="py-2 border-teal-200 bg-teal-50 dark:bg-teal-950/30 dark:border-teal-900">
+          <AlertDescription className="flex items-center gap-2 text-sm text-teal-900 dark:text-teal-200">
+            <BadgeInfo className="h-4 w-4 flex-shrink-0 text-teal-700" />
+            <span>
+              <strong>Benchmarks théoriques :</strong> l’€STR est capitalisé en ACT/360, brut de frais et de fiscalité ; l’IPC cumulé mesure le capital requis pour conserver le pouvoir d’achat.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {currencyView === 'eur' && (
+        <Alert className="py-2 border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-900">
+          <AlertDescription className="flex items-center gap-2 text-sm text-blue-900 dark:text-blue-200">
+            <Euro className="h-4 w-4 flex-shrink-0 text-blue-700" />
+            <span><strong>Lecture investisseur euro :</strong> les actifs étrangers sont convertis au change historique, sans couverture de change, frais ni fiscalité.</span>
           </AlertDescription>
         </Alert>
       )}

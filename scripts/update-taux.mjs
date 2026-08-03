@@ -26,7 +26,7 @@ function getExistingHistory(key, reason) {
 const SOURCE_GROUPS = [
   { keys: ['oat', 'bund', 'jgb', 'gilt', 'estr', 'tauxDepotBCE'], source: 'BCE / FRED' },
   { keys: ['tec10', 'tauxImmo', 'pel'], source: 'Banque de France Webstat' },
-  { keys: ['inflation', 'prixImmo'], source: 'INSEE' },
+  { keys: ['inflation', 'inflationCumulee', 'prixImmo'], source: 'INSEE' },
   { keys: ['livreta'], source: 'Banque de France' },
   { keys: ['fondsEuros'], source: 'France Assureurs' },
   { keys: ['scpi'], source: 'ASPIM' },
@@ -42,7 +42,7 @@ function sourceForIndex(key) {
 function maxAgeDaysForIndex(key) {
   if (['btc', 'eth', 'sol', 'xrp'].includes(key)) return 3;
   if (['tec10', 'estr', 'eurusd', 'eurgbp', 'eurjpy', 'eurchf', 'eurcny', 'cac40', 'cac40gr', 'cacmid', 'stoxx50', 'stoxx600', 'dax', 'ftse', 'nikkei', 'sp500', 'nasdaq', 'world', 'emerging', 'brent', 'gold', 'gaz', 'us10y'].includes(key)) return 5;
-  if (['inflation', 'pel'].includes(key)) return 45;
+  if (['inflation', 'inflationCumulee', 'pel'].includes(key)) return 45;
   if (key === 'tauxDepotBCE') return 60;
   if (['oat', 'bund', 'jgb', 'gilt'].includes(key)) return 90;
   if (key === 'tauxImmo') return 120;
@@ -348,12 +348,18 @@ function computeGlissementAnnuel(rawSeries) {
   return result;
 }
 
-// Récupère la série IPC base 2025 et calcule le glissement annuel
-async function getInflationBase2025() {
-  // Série IPC ensemble des ménages, France entière, base 2025
-  const raw = await fetchINSEESerie('011814630');
-  if (raw.length === 0) return [];
-  return computeGlissementAnnuel(raw);
+function computeRebasedIndex(rawSeries, baseAmount = 100) {
+  const filtered = rawSeries
+    .filter(point => point.date >= HISTORY_START_DATE && Number.isFinite(point.value) && point.value > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (filtered.length === 0) return [];
+
+  const baseValue = filtered[0].value;
+  return filtered.map(point => ({
+    date: point.date,
+    value: parseFloat((baseAmount * point.value / baseValue).toFixed(4)),
+    timestamp: point.timestamp,
+  }));
 }
 
 async function getInflationFromFRED() {
@@ -384,35 +390,48 @@ async function getInflationFromFRED() {
   return [];
 }
 
-async function getInflationFromIndex() {
+async function getInflationSeries() {
   // ⚠️ Depuis fév. 2026 : séries base 2015 arrêtées → utiliser base 2025
 
-  // 1. Base 2025 : indice brut → glissement annuel calculé (couvre 1996 → aujourd'hui)
-  let data = await getInflationBase2025();
-  if (data.length > 0) return data;
+  // 1. Base 2025 : l'indice brut alimente le glissement annuel et l'IPC cumulé.
+  const raw = await fetchINSEESerie('011814630');
+  if (raw.length > 0) {
+    return {
+      annual: computeGlissementAnnuel(raw),
+      cumulative: computeRebasedIndex(raw),
+    };
+  }
 
   // 2. Base 2015 glissement direct (dernier point = déc. 2025, pour fallback historique)
   console.log(`  ⚠️ Base 2025 indisponible, tentative base 2015 (001761313)...`);
-  data = await fetchINSEESerie('001761313');
-  if (data.length > 0) return data;
+  let annual = await fetchINSEESerie('001761313');
 
-  console.log(`  ⚠️ Tentative base 2015 secours (001763852)...`);
-  data = await fetchINSEESerie('001763852');
-  if (data.length > 0) return data;
-
-  // 3. Fallback FRED
-  console.log(`  ⚠️ INSEE indisponible, tentative FRED...`);
-  data = await getInflationFromFRED();
-  if (data.length > 0) return data;
-
-  // 4. Fallback données existantes
-  if (existingData?.indices?.inflation?.historique?.length > 0) {
-    console.log(`  ⚠️ Inflation France: utilisation des données existantes`);
-    return getExistingHistory('inflation', 'INSEE et FRED indisponibles');
+  if (annual.length === 0) {
+    console.log(`  ⚠️ Tentative base 2015 secours (001763852)...`);
+    annual = await fetchINSEESerie('001763852');
   }
 
-  console.log(`  ❌ Inflation France: aucune source disponible`);
-  return [];
+  // 3. Fallback FRED
+  if (annual.length === 0) {
+    console.log(`  ⚠️ INSEE indisponible, tentative FRED...`);
+    annual = await getInflationFromFRED();
+  }
+
+  // 4. Fallback données existantes
+  if (annual.length === 0 && existingData?.indices?.inflation?.historique?.length > 0) {
+    console.log(`  ⚠️ Inflation France: utilisation des données existantes`);
+    annual = getExistingHistory('inflation', 'INSEE et FRED indisponibles');
+  }
+
+  const cumulative = existingData?.indices?.inflationCumulee?.historique ?? [];
+  if (cumulative.length > 0) {
+    fallbackReasons.set('inflationCumulee', 'IPC brut INSEE indisponible');
+  } else {
+    console.log(`  ❌ Inflation cumulée: aucune source disponible`);
+  }
+
+  if (annual.length === 0) console.log(`  ❌ Inflation France: aucune source disponible`);
+  return { annual, cumulative };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1233,7 +1252,9 @@ async function main() {
 
   // Inflation : INSEE BDM (série principale + secours) puis FRED
   console.log("\n📊 Récupération Inflation France (INSEE BDM)...");
-  const historyInflation = await getInflationFromIndex();
+  const inflationSeries = await getInflationSeries();
+  const historyInflation = inflationSeries.annual;
+  const historyInflationCumulee = inflationSeries.cumulative;
 
   // €STR : ECB Data Portal (sans clé) avec fallback FRED
   console.log("\n📊 Récupération €STR (ECB)...");
@@ -1357,6 +1378,7 @@ async function main() {
       estr:         { titre: "€STR",               valeur: getLast(historyEstr),          suffixe: "%", historique: historyEstr },
       tauxDepotBCE: { titre: "Taux dépôt BCE",     valeur: getLast(historyTauxDepotBCE),  suffixe: "%", historique: historyTauxDepotBCE },
       inflation:    { titre: "Inflation France",   valeur: getLast(historyInflation),     suffixe: "%", historique: historyInflation },
+      inflationCumulee: createIndexData("Inflation cumulée (IPC)", getLast(historyInflationCumulee), "pts", historyInflationCumulee),
       tauxImmo:     { titre: "Taux crédit immo",   valeur: getLast(historyTauxImmo),      suffixe: "%", historique: historyTauxImmo },
       prixImmo:     { titre: "Prix immo (var.an.)",valeur: getLast(historyPrixImmo),      suffixe: "%", historique: historyPrixImmo },
 
@@ -1461,6 +1483,7 @@ async function main() {
   console.log(`  OAT 10 ans   : ${nouvellesDonnees.indices.oat.valeur}% (dernier: ${historyOat[historyOat.length-1]?.date ?? 'N/A'})`);
   console.log(`  TEC 10 ans   : ${nouvellesDonnees.indices.tec10.valeur}% (dernier: ${historyTec10[historyTec10.length-1]?.date ?? 'N/A'})`);
   console.log(`  Inflation    : ${nouvellesDonnees.indices.inflation.valeur}% (dernier: ${historyInflation[historyInflation.length-1]?.date ?? 'N/A'})`);
+  console.log(`  IPC cumulé   : ${nouvellesDonnees.indices.inflationCumulee.valeur} pts (dernier: ${historyInflationCumulee[historyInflationCumulee.length-1]?.date ?? 'N/A'})`);
   console.log(`  Taux dépôt   : ${nouvellesDonnees.indices.tauxDepotBCE.valeur}% (dernier: ${historyTauxDepotBCE[historyTauxDepotBCE.length-1]?.date ?? 'N/A'})`);
   console.log(`  Livret A     : ${nouvellesDonnees.indices.livreta.valeur}% (dernier: ${historyLivretA[historyLivretA.length-1]?.date ?? 'N/A'})`);
   console.log(`  PEL          : ${nouvellesDonnees.indices.pel.valeur}% (dernier: ${historyPel[historyPel.length-1]?.date ?? 'N/A'})`);

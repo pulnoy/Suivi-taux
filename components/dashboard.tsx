@@ -7,6 +7,7 @@ import { Comparator } from '@/components/comparator';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { cn } from '@/lib/utils';
 import { getIndexStatus } from '@/lib/staleness';
+import { getRequiredFxKeys } from '@/lib/instrument-config';
 import type { TauxData } from '@/lib/taux-types';
 
 const StatusPanel = dynamic(() => import('@/components/status-panel').then(mod => mod.StatusPanel));
@@ -65,7 +66,7 @@ export function Dashboard({ initialData }: { initialData: TauxData }) {
 
   const handleKeysChange = useCallback((keys: string[]) => {
     setComparatorKeys(keys);
-    void loadHistories(keys);
+    void loadHistories([...keys, ...getRequiredFxKeys(keys)]);
   }, [loadHistories]);
 
   const dotClass = statusSummary.hasFail
