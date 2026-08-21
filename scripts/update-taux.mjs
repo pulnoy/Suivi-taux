@@ -42,7 +42,9 @@ function sourceForIndex(key) {
 function maxAgeDaysForIndex(key) {
   if (['btc', 'eth', 'sol', 'xrp'].includes(key)) return 3;
   if (['tec10', 'estr', 'eurusd', 'eurgbp', 'eurjpy', 'eurchf', 'eurcny', 'cac40', 'cac40gr', 'cacmid', 'stoxx50', 'stoxx600', 'dax', 'ftse', 'nikkei', 'sp500', 'nasdaq', 'world', 'emerging', 'brent', 'gold', 'gaz', 'us10y'].includes(key)) return 5;
-  if (['inflation', 'inflationCumulee', 'pel'].includes(key)) return 45;
+  // L'IPC est daté du 1er du mois observé mais publié le mois suivant.
+  if (['inflation', 'inflationCumulee'].includes(key)) return 80;
+  if (key === 'pel') return 45;
   if (key === 'tauxDepotBCE') return 60;
   if (['oat', 'bund', 'jgb', 'gilt'].includes(key)) return 90;
   if (key === 'tauxImmo') return 120;
@@ -1429,6 +1431,7 @@ async function main() {
   };
 
   const validationErrors = [];
+  const validationWarnings = [];
   for (const [key, indicator] of Object.entries(nouvellesDonnees.indices)) {
     const rawHistory = Array.isArray(indicator.historique) ? indicator.historique : [];
     const pointsByDate = new Map();
@@ -1471,9 +1474,9 @@ async function main() {
       ...(fallbackReason ? { error: fallbackReason } : {}),
     };
 
-    if (invalidPointCount > 0) validationErrors.push(`${key}: ${invalidPointCount} point(s) invalide(s)`);
+    if (invalidPointCount > 0) validationWarnings.push(`${key}: ${invalidPointCount} point(s) invalide(s) ignoré(s)`);
     if (historique.length === 0 || indicator.valeur == null) validationErrors.push(`${key}: historique vide`);
-    if (isStale) validationErrors.push(`${key}: dernière observation ${lastObservationDate ?? 'absente'} (${ageDays} jours)`);
+    if (isStale) validationWarnings.push(`${key}: dernière observation ${lastObservationDate ?? 'absente'} (${ageDays} jours)`);
   }
 
   // Résumé final
@@ -1491,10 +1494,14 @@ async function main() {
   console.log(`  Prix immo    : ${nouvellesDonnees.indices.prixImmo.valeur}% var/an (dernier: ${historyPrixImmo[historyPrixImmo.length-1]?.date ?? 'N/A'})`);
   console.log(`  €STR         : ${nouvellesDonnees.indices.estr.valeur}% (dernier: ${historyEstr[historyEstr.length-1]?.date ?? 'N/A'})`);
 
-  // Validation stricte avant publication.
+  // Une série périmée reste publiée et signalée pour ne pas bloquer les autres indices.
   const allIndices = Object.values(nouvellesDonnees.indices);
   const withData = allIndices.filter(i => i.historique && i.historique.length > 0);
   console.log(`\n📋 Validation: ${withData.length}/${allIndices.length} indices avec données`);
+  if (validationWarnings.length > 0) {
+    console.warn('\n⚠️ Publication avec avertissement(s) de qualité.');
+    validationWarnings.forEach(warning => console.warn(`  - ${warning}`));
+  }
   if (validationErrors.length > 0) {
     console.error('\n❌ ABANDON: contrôle qualité des données en échec.');
     validationErrors.forEach(error => console.error(`  - ${error}`));

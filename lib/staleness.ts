@@ -12,9 +12,10 @@ export const UPDATE_FREQUENCY: Record<string, UpdateFreq> = {
   estrCapitalise: { label: 'Quotidien',     maxDays: 5  },
   // BCE — par réunion (~8×/an soit toutes les 6 semaines)
   tauxDepotBCE: { label: 'Par réunion BCE', maxDays: 60 },
-  // Mensuel — inflation et PEL (délai ~6 semaines)
-  inflation:    { label: 'Mensuel',         maxDays: 45 },
-  inflationCumulee: { label: 'Mensuel',     maxDays: 45 },
+  // IPC mensuel — observation datée du 1er, publiée le mois suivant
+  inflation:    { label: 'Mensuel',         maxDays: 80 },
+  inflationCumulee: { label: 'Mensuel',     maxDays: 80 },
+  // PEL — mise à jour mensuelle
   pel:          { label: 'Mensuel',         maxDays: 45 },
   // Mensuel — taux immo BdF publié avec ~3 mois de délai structurel
   tauxImmo:     { label: 'Mensuel',         maxDays: 120 },
